@@ -1,0 +1,35 @@
+# 빌드 산출물
+build/
+out/
+bin/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# Gradle
+.gradle/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# 로컬 데이터베이스 (embedded-postgres 데이터 디렉터리)
+.localdb/
+.localdb-test/
+
+# 환경 변수와 비밀
+.env
+*.local.yml
+src/main/resources/application-secret.yml
+
+# 로그
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

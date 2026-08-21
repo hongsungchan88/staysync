@@ -1,0 +1,109 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.4'
+    id 'io.spring.dependency-management' version '1.1.6'
+}
+
+group = 'com.staysync'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+configurations {
+    compileOnly { extendsFrom annotationProcessor }
+}
+
+repositories { mavenCentral() }
+
+ext {
+    set('springModulithVersion', '1.3.1')
+}
+
+dependencies {
+    // --- 웹 / 영속성 / 검증 -------------------------------------------------
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+
+    // --- 모듈 경계 검증 -----------------------------------------------------
+    implementation 'org.springframework.modulith:spring-modulith-starter-core'
+
+    // --- 스키마 마이그레이션 -------------------------------------------------
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+
+    // --- 데이터베이스 --------------------------------------------------------
+    runtimeOnly 'org.postgresql:postgresql'
+
+    // local 프로파일: Docker 없이 실제 PostgreSQL 바이너리를 띄운다.
+    // Windows 에서는 Microsoft Visual C++ 2013 재배포 패키지가 필요하다.
+    implementation 'io.zonky.test:embedded-postgres:2.2.2'
+    implementation platform('io.zonky.test.postgres:embedded-postgres-binaries-bom:16.4.0')
+
+    // --- 편의 --------------------------------------------------------------
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    // --- P3 이후 추가 예정 ---------------------------------------------------
+    // implementation 'org.springframework.boot:spring-boot-starter-security'
+    // implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // implementation 'org.redisson:redisson-spring-boot-starter:3.35.0'
+    // implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
+    // implementation 'org.mnode.ical4j:ical4j:4.0.6'
+    // implementation 'net.javacrumbs.shedlock:shedlock-spring:5.16.0'
+    // implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
+
+    // --- P4(AI) 에서 추가 예정 ------------------------------------------------
+    // implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+    // implementation 'org.springframework.ai:spring-ai-starter-vector-store-pgvector'
+
+    // --- 테스트 ------------------------------------------------------------
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.modulith:spring-modulith-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.modulith:spring-modulith-bom:${springModulithVersion}"
+    }
+}
+
+/**
+ * local 프로파일의 내장 PostgreSQL 데이터 디렉터리를 지운다.
+ *
+ * <p>평소에는 부를 일이 없다. application-local.yml 의 clean-on-start 가 켜져 있어
+ * 기동할 때마다 데이터베이스를 새로 만들기 때문이다. 그 설정을 끈 뒤 스키마를 바꿨거나,
+ * 디렉터리가 어중간한 상태로 남았을 때만 쓴다.
+ */
+tasks.register('resetLocalDb') {
+    group = 'application'
+    description = 'local 프로파일 데이터베이스를 초기화한다'
+    doLast {
+        ['.localdb', '.localdb-test'].each { name ->
+            def dir = file(name)
+            if (!dir.exists()) {
+                return
+            }
+            if (!dir.deleteDir()) {
+                throw new GradleException(
+                    "${name} 를 지우지 못했습니다. 내장 PostgreSQL 이 아직 실행 중입니다.\n" +
+                    "  1) IntelliJ 에서 실행 중인 애플리케이션을 정지하세요.\n" +
+                    "  2) 남은 프로세스를 정리하세요.\n" +
+                    "       Windows      Get-Process postgres -ErrorAction SilentlyContinue | Stop-Process -Force\n" +
+                    "       macOS/Linux  pkill -f 'bin/postgres'\n" +
+                    "  3) 다시 실행하세요.")
+            }
+            logger.lifecycle("${name} 삭제 완료")
+        }
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    // 동시성 테스트는 시간이 걸리므로 기본 실행에 포함하되 로그를 남긴다.
+    testLogging { events 'passed', 'skipped', 'failed' }
+}

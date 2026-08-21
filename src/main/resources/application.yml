@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: staysync
+  profiles:
+    default: local
+  jpa:
+    open-in-view: false          # 지연 로딩이 컨트롤러까지 새어나가지 않게 한다
+    hibernate:
+      ddl-auto: validate         # 스키마는 Flyway 가 관리한다
+    properties:
+      hibernate:
+        jdbc.time_zone: Asia/Seoul
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration/postgresql   # 두 프로파일 모두 PostgreSQL 이다
+    baseline-on-migrate: true
+  jackson:
+    default-property-inclusion: non_null
+
+server:
+  port: 8080
+  error:
+    include-message: always
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when_authorized
+
+staysync:
+  timezone: Asia/Seoul
+  hold-expiry-minutes: 15        # 직접예약 HOLD 유지 시간
+  ical:
+    poll-interval-minutes: 15
+    shrink-guard-ratio: 0.5      # 이벤트 수가 직전의 절반 이하로 줄면 취소 처리를 보류
+
+logging:
+  level:
+    com.staysync: DEBUG

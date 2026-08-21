@@ -1,0 +1,26 @@
+# docker compose up -d postgres redis 를 먼저 실행한 뒤 사용한다.
+
+staysync:
+  embedded-postgres:
+    enabled: false
+  lock:
+    type: redis
+  vector:
+    type: pgvector
+
+spring:
+  flyway:
+    # pgvector 를 쓸 수 있는 환경에서만 V2 를 추가로 적용한다.
+    locations:
+      - classpath:db/migration/postgresql
+      - classpath:db/migration/pgvector
+  datasource:
+    url: jdbc:postgresql://localhost:5432/staysync
+    username: ${POSTGRES_USER:staysync}
+    password: ${POSTGRES_PASSWORD:staysync}
+    hikari:
+      maximum-pool-size: 20
+  data:
+    redis:
+      host: localhost
+      port: 6379
