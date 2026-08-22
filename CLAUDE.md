@@ -64,6 +64,19 @@ Booking.com과 Channex가 ARI 전송의 최소 단위로 `rate_plan_id`를 요�
 어댑터마다 가짜 식별자를 끼워 넣는 우회 코드가 생긴다. 대신 `UnitRegistrationService`가
 판매 단위를 만들 때 기본 요금제를 자동 생성해 화면에서는 숨긴다.
 
+## 인증
+
+액세스 토큰은 HS256으로 서명한 JWT(30분), 리프레시 토큰은 `refresh_token` 테이블에
+SHA-256 해시로 저장하는 난수(14일)다. 갱신할 때마다 회전시키고, 이미 교체된 토큰이
+다시 들어오면 도난으로 보고 그 사용자의 토큰을 전부 무효화한다. 발급과 검증은
+`spring-boot-starter-oauth2-resource-server`(Nimbus)에 맡기고 직접 만들지 않는다.
+서명 키는 환경 변수 `JWT_SECRET`이며 없으면 기동이 막힌다(local 프로파일만 예외).
+근거는 `docs/adr/0004-jwt-인증.md`와 `docs/adr/0005-리프레시-토큰-회전.md`.
+
+인증 결과는 `shared.security.AuthenticatedUser`로 `SecurityContext`에 담긴다.
+다른 모듈은 이 타입만 읽고 identity를 참조하지 않는다. 조회를 조직 단위로 좁힐 때는
+반드시 여기의 `orgId`를 쓴다. 요청 본문이나 경로의 조직 식별자를 믿으면 안 된다.
+
 ## 중복예약 방어 (프로젝트의 핵심)
 
 네 계층으로 막는다. 하나라도 빼지 말 것.

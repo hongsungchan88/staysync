@@ -29,6 +29,34 @@ CREATE TABLE user_account (
 );
 CREATE INDEX idx_user_org ON user_account (org_id);
 
+-- 리프레시 토큰. 회전(rotation)과 재사용 탐지를 위해 서버가 상태를 들고 있어야 한다.
+-- 근거는 docs/adr/0005-리프레시-토큰-회전.md.
+--
+-- token_hash 는 토큰 원문이 아니라 SHA-256 해시다. 데이터베이스가 유출돼도 저장된
+-- 값을 그대로 Authorization 헤더에 넣을 수 없게 한다. 토큰은 128비트 난수라
+-- 사전 공격 대상이 아니므로 BCrypt 처럼 느린 해시는 쓰지 않는다. 그렇게 하면
+-- 갱신 요청마다 수백 밀리초가 든다.
+--
+-- replaced_by 는 회전 체인을 잇는다. NULL 이면 아직 살아 있는 토큰이고, 값이 있으면
+-- 이미 교체된 토큰이다. 교체된 토큰이 다시 들어오면 도난으로 보고 해당 사용자의
+-- 토큰을 전부 무효화한다.
+CREATE TABLE refresh_token (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     BIGINT NOT NULL REFERENCES user_account(id) ON DELETE CASCADE,
+    -- 항상 64자지만 CHAR 가 아니라 VARCHAR 다. Hibernate 는 JDBC 타입 코드로 비교하는데
+    -- CHAR(1)와 VARCHAR(12)는 코드가 달라 ddl-auto: validate 가 기동을 막는다.
+    token_hash  VARCHAR(64) NOT NULL,         -- SHA-256 을 소문자 16진수로
+    issued_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at  TIMESTAMPTZ NOT NULL,
+    replaced_by BIGINT REFERENCES refresh_token(id),
+    revoked_at  TIMESTAMPTZ,                  -- 로그아웃, 또는 재사용 탐지에 의한 일괄 무효화
+    CONSTRAINT uq_refresh_hash UNIQUE (token_hash)
+);
+-- 사용자별 일괄 무효화가 이 인덱스를 쓴다.
+CREATE INDEX idx_refresh_user ON refresh_token (user_id);
+-- 만료분 정리 배치가 이 인덱스를 쓴다.
+CREATE INDEX idx_refresh_expires ON refresh_token (expires_at);
+
 -- ---------------------------------------------------------------------
 -- 2. 숙소와 판매 단위
 --    안 B: RoomType/Room 2계층을 Unit 하나로 통합한다.
