@@ -74,8 +74,24 @@ public class Property {
         return checkOutTime;
     }
 
+    public String getCurrency() {
+        return currency;
+    }
+
+    public String getAddress() {
+        return address;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
     public void rename(String newName) {
         this.name = newName;
+    }
+
+    public void changeAddress(String newAddress) {
+        this.address = newAddress;
     }
 
     public void changeCheckTimes(LocalTime in, LocalTime out) {

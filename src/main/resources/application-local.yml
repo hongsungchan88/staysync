@@ -25,6 +25,10 @@ staysync:
       # 가리키는 사용자는 더 이상 존재하지 않는다. 재기동 후에는 다시 로그인해야 한다.
       # local 에서만 그렇고, docker 나 운영에서는 토큰이 재기동을 넘어 유지된다.
       secret: local-development-only-secret-key-do-not-use-in-production
+    cookie:
+      # HTTPS 가 아니라 끈다. 켜 두면 브라우저가 리프레시 토큰 쿠키를 저장하지 않아
+      # 로그인은 되는데 갱신이 되지 않는 상태가 된다. 운영 기본값은 켜져 있다.
+      secure: false
   vector:
     type: in-memory              # pgvector 없이 메모리에서 코사인 유사도 계산
                                  # 내장 PostgreSQL 바이너리에는 pgvector 가 없다.

@@ -89,7 +89,7 @@ tasks.register('resetLocalDb') {
     group = 'application'
     description = 'local 프로파일 데이터베이스를 초기화한다'
     doLast {
-        ['.localdb', '.localdb-test'].each { name ->
+        ['.localdb', '.localdb-test', '.localdb-api'].each { name ->
             def dir = file(name)
             if (!dir.exists()) {
                 return

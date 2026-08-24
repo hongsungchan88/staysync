@@ -21,11 +21,15 @@ CREATE TABLE user_account (
     password_hash VARCHAR(100) NOT NULL,
     display_name  VARCHAR(100) NOT NULL,
     role          VARCHAR(20)  NOT NULL,          -- OWNER | MANAGER | HOUSEKEEPER
-    status        VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',
+    status        VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',  -- ACTIVE | SUSPENDED
     last_login_at TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT uq_user_email UNIQUE (email),
-    CONSTRAINT chk_user_role CHECK (role IN ('OWNER','MANAGER','HOUSEKEEPER'))
+    CONSTRAINT chk_user_role CHECK (role IN ('OWNER','MANAGER','HOUSEKEEPER')),
+    -- role 에는 제약이 있는데 status 에만 없었다. UserStatus enum 이 값 범위를 관리하지만
+    -- 그것은 애플리케이션을 거쳐 들어오는 값에만 해당한다. 데이터 보정 SQL 이나 외부
+    -- 도구가 직접 쓰는 경로는 막지 못한다. 값 목록은 UserStatus 의 상수와 일치한다.
+    CONSTRAINT chk_user_status CHECK (status IN ('ACTIVE','SUSPENDED'))
 );
 CREATE INDEX idx_user_org ON user_account (org_id);
 

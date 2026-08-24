@@ -93,8 +93,11 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        // 로그인과 갱신은 토큰 없이 들어와야 하므로 열어 둔다.
-                        .requestMatchers("/api/auth/login", "/api/auth/refresh").permitAll()
+                        // 가입, 로그인, 갱신은 토큰 없이 들어와야 하므로 열어 둔다.
+                        // 갱신은 쿠키의 리프레시 토큰 자체가 자격증명이다.
+                        .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/refresh")
+                        .permitAll()
+                        // 로그아웃과 /me 는 인증이 필요하다. anyRequest 에 걸린다.
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2

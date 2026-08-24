@@ -44,6 +44,10 @@ staysync:
       issuer: staysync
       access-token-ttl: 30m      # 계획서 15.1
       refresh-token-ttl: 14d     # 계획서 15.1
+    cookie:
+      # 리프레시 토큰 쿠키의 Secure 속성. 운영 기본값은 켜 둔다.
+      # local 프로파일만 끈다. HTTPS 가 아니면 브라우저가 쿠키를 저장하지 않는다.
+      secure: true
   ical:
     poll-interval-minutes: 15
     shrink-guard-ratio: 0.5      # 이벤트 수가 직전의 절반 이하로 줄면 취소 처리를 보류
