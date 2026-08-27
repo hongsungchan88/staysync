@@ -36,9 +36,22 @@ public class OwnedResources {
         this.ratePlanRepo = ratePlanRepo;
     }
 
-    /** 조직의 숙소 전부. */
+    /** 조직의 숙소 전부. property 모듈 안에서만 쓴다. {@link Property} 가 내부 타입이다. */
     public List<Property> propertiesOf(Long orgId) {
         return propertyRepo.findByOrgId(orgId);
+    }
+
+    /**
+     * 조직의 숙소 식별자만.
+     *
+     * <p>{@link #propertiesOf} 는 {@code property.domain.Property} 를 돌려주므로 다른
+     * 모듈이 쓸 수 없다. booking 처럼 "내 조직의 숙소가 어떤 것들인가"로 목록을 좁히기만
+     * 하면 되는 쪽을 위해 식별자만 돌려준다.
+     */
+    public List<Long> propertyIdsOf(Long orgId) {
+        return propertyRepo.findByOrgId(orgId).stream()
+                .map(Property::getId)
+                .toList();
     }
 
     /** 1계층 — 숙소는 {@code org_id} 를 직접 들고 있다. */
@@ -71,7 +84,15 @@ public class OwnedResources {
         return ratePlanRepo.findByUnitId(unitId);
     }
 
-    private boolean ownsProperty(Long propertyId, Long orgId) {
+    /**
+     * 숙소가 이 조직의 것인지.
+     *
+     * <p>다른 모듈이 쓸 수 있는 유일한 소유 확인 통로다. {@link #property} 는
+     * {@code property.domain.Property} 를 돌려주는데 그건 모듈 내부 타입이라 바깥에서
+     * 참조하면 {@code ModularityTest} 가 깨진다. 그래서 booking 처럼 자기 자원이 어느
+     * 조직에 속하는지만 알면 되는 쪽을 위해 boolean 만 돌려주는 메서드를 열어 둔다.
+     */
+    public boolean ownsProperty(Long propertyId, Long orgId) {
         return propertyRepo.findById(propertyId)
                 .map(property -> property.getOrgId().equals(orgId))
                 .orElse(false);

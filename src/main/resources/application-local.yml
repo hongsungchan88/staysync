@@ -29,6 +29,11 @@ staysync:
       # HTTPS 가 아니라 끈다. 켜 두면 브라우저가 리프레시 토큰 쿠키를 저장하지 않아
       # 로그인은 되는데 갱신이 되지 않는 상태가 된다. 운영 기본값은 켜져 있다.
       secure: false
+    crypto:
+      # 개발 전용 고정 키(32바이트 Base64). 공개되어 있다는 전제로만 쓴다.
+      # 이 값이 바뀌면 이미 저장된 암호문을 복호화할 수 없고 검색 해시도 달라진다.
+      # local 은 clean-on-start 로 매번 데이터가 비워지므로 문제가 되지 않는다.
+      master-key: c3RheXN5bmMtbG9jYWwtZGV2LW9ubHkta2V5LTMyYiE=
   vector:
     type: in-memory              # pgvector 없이 메모리에서 코사인 유사도 계산
                                  # 내장 PostgreSQL 바이너리에는 pgvector 가 없다.
