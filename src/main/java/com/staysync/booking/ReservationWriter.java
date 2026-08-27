@@ -1,7 +1,10 @@
 package com.staysync.booking;
 
 import com.staysync.booking.domain.*;
+import com.staysync.shared.audit.AuditRecorder;
+import com.staysync.shared.outbox.OutboxRecorder;
 import java.math.BigDecimal;
+import java.util.Map;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.slf4j.Logger;
@@ -45,13 +48,19 @@ class ReservationWriter {
     private final ReservationRepository reservationRepo;
     private final ReservationNightRepository nightRepo;
     private final InventoryService inventoryService;
+    private final OutboxRecorder outbox;
+    private final AuditRecorder audit;
 
     ReservationWriter(ReservationRepository reservationRepo,
                       ReservationNightRepository nightRepo,
-                      InventoryService inventoryService) {
+                      InventoryService inventoryService,
+                      OutboxRecorder outbox,
+                      AuditRecorder audit) {
         this.reservationRepo = reservationRepo;
         this.nightRepo = nightRepo;
         this.inventoryService = inventoryService;
+        this.outbox = outbox;
+        this.audit = audit;
     }
 
     /** 수기 예약. 재고를 먼저 확보하고 예약을 만든다. 모자라면 전체가 실패한다. */
@@ -68,6 +77,7 @@ class ReservationWriter {
         }
         Reservation saved = reservationRepo.saveAndFlush(reservation);
         writeNights(saved);
+        recordConfirmed(saved, "MANUAL_CREATE", null);
         return saved;
     }
 
@@ -85,6 +95,10 @@ class ReservationWriter {
         }
         Reservation saved = reservationRepo.saveAndFlush(reservation);
         writeNights(saved);
+        // 이벤트는 만들지 않는다. 아직 확정되지 않은 점유를 바깥이 알 이유가 없다.
+        // 감사는 남긴다. 재고를 차지한 변경이기 때문이다.
+        audit.record(ReservationEvents.AGGREGATE_TYPE, saved.getId(), "HOLD_CREATE",
+                null, ReservationEvents.auditSnapshot(saved));
         return saved;
     }
 
@@ -92,8 +106,12 @@ class ReservationWriter {
     @Transactional
     Reservation confirm(Long reservationId) {
         Reservation reservation = load(reservationId);
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
         reservation.confirm();
         inventoryService.promoteHold(reservation.getUnitId(), reservation.getPeriod(), UNITS);
+
+        recordConfirmed(reservation, "CONFIRM", before);
         return reservation;
     }
 
@@ -111,6 +129,8 @@ class ReservationWriter {
         reservation.cancel();   // CHECKED_OUT 이면 여기서 예외가 난다
 
         if (before == ReservationStatus.CANCELLED) {
+            // 멱등하다. 상태도 재고도 바뀌지 않았으므로 이벤트와 감사도 남기지 않는다.
+            // 아무 일도 없었는데 "취소했다"는 이벤트가 나가면 소비자가 두 번 처리한다.
             log.debug("이미 취소된 예약이라 재고를 되돌리지 않는다. id={}", reservationId);
             return reservation;
         }
@@ -121,6 +141,14 @@ class ReservationWriter {
                     reservation.getUnitId(), reservation.getPeriod(), UNITS);
             default -> log.debug("재고를 점유하지 않은 상태라 되돌릴 것이 없다. status={}", before);
         }
+
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                ReservationEvents.CANCELLED, ReservationEvents.payloadOf(reservation));
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CANCEL",
+                ReservationEvents.auditSnapshot(before.name(),
+                        reservation.getPeriod().checkIn().toString(),
+                        reservation.getPeriod().checkOut().toString()),
+                ReservationEvents.auditSnapshot(reservation));
         return reservation;
     }
 
@@ -128,7 +156,14 @@ class ReservationWriter {
     @Transactional
     Reservation checkIn(Long reservationId) {
         Reservation reservation = load(reservationId);
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
         reservation.checkIn();
+
+        // 이벤트를 만들지 않는다. 체크인은 아직 소비자가 없고, 없는 소비자를 위해
+        // 이벤트를 만들면 발행 비용만 든다. 감사는 남긴다.
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHECK_IN",
+                before, ReservationEvents.auditSnapshot(reservation));
         return reservation;
     }
 
@@ -136,7 +171,14 @@ class ReservationWriter {
     @Transactional
     Reservation checkOut(Long reservationId) {
         Reservation reservation = load(reservationId);
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
         reservation.checkOut();
+
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                ReservationEvents.CHECKED_OUT, ReservationEvents.payloadOf(reservation));
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHECK_OUT",
+                before, ReservationEvents.auditSnapshot(reservation));
         return reservation;
     }
 
@@ -144,7 +186,13 @@ class ReservationWriter {
     @Transactional
     Reservation markNoShow(Long reservationId) {
         Reservation reservation = load(reservationId);
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
         reservation.markNoShow();
+
+        // 재고가 그대로라 채널에 알릴 것이 없다. 감사는 남긴다.
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "NO_SHOW",
+                before, ReservationEvents.auditSnapshot(reservation));
         return reservation;
     }
 
@@ -156,8 +204,19 @@ class ReservationWriter {
             // 배치가 목록을 읽은 뒤 사용자가 결제를 마쳤을 수 있다. 그냥 넘어간다.
             return;
         }
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
         reservation.expire();
         inventoryService.releaseHold(reservation.getUnitId(), reservation.getPeriod(), UNITS);
+
+        // 취소와 마찬가지로 재고가 풀린다. 채널이 다시 팔 수 있게 되었다는 사실을
+        // 알아야 하므로 이벤트를 만든다.
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                ReservationEvents.EXPIRED, ReservationEvents.payloadOf(reservation));
+        // 배치가 부르는 경로라 SecurityContext 가 없다. AuditRecorder 가 알아서
+        // actor_kind 를 SYSTEM 으로 남기고 actor_id 는 비운다.
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "HOLD_EXPIRE",
+                before, ReservationEvents.auditSnapshot(reservation));
     }
 
     /**
@@ -203,11 +262,25 @@ class ReservationWriter {
             }
         }
 
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
         reservation.changeStay(newPeriod, adults, children);
         if (!sameDates) {
             rewriteNights(reservation);
+            outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                    ReservationEvents.DATES_CHANGED, ReservationEvents.payloadOf(reservation));
         }
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHANGE_STAY",
+                before, ReservationEvents.auditSnapshot(reservation));
         return reservation;
+    }
+
+    /** 확정 이벤트와 감사를 함께 남긴다. 수기 등록과 HOLD 승격이 같은 사건을 만든다. */
+    private void recordConfirmed(Reservation reservation, String action,
+                                 Map<String, Object> before) {
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                ReservationEvents.CONFIRMED, ReservationEvents.payloadOf(reservation));
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), action,
+                before, ReservationEvents.auditSnapshot(reservation));
     }
 
     private Reservation load(Long reservationId) {

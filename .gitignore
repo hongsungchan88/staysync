@@ -21,6 +21,7 @@ bin/
 .localdb/
 .localdb-test/
 .localdb-api/
+.localdb-relay/
 
 # 환경 변수와 비밀
 .env
