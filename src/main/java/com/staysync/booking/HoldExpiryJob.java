@@ -67,6 +67,14 @@ public class HoldExpiryJob {
         if (expired > 0) {
             log.info("만료된 HOLD {}건을 정리했다", expired);
         }
+        if (due.size() == BATCH_LIMIT) {
+            // 상한에 닿았다는 것은 처리하지 못하고 남은 HOLD 가 더 있을 수 있다는 뜻이다.
+            // 남은 것은 다음 주기에 처리되지만, 매 주기 상한에 닿는다면 유입이 처리 속도를
+            // 앞지르고 있다는 신호다. 그 상태로 두면 팔 수 있는 방이 계속 묶인다.
+            // 조용히 잘리면 밀린 HOLD 가 쌓여도 정상으로 보이므로 반드시 남긴다.
+            log.warn("HOLD 만료 처리가 한 주기 상한 {}건에 닿았다. 남은 건은 다음 주기로 넘긴다. "
+                    + "이 로그가 계속 나오면 상한이나 주기를 조정해야 한다", BATCH_LIMIT);
+        }
         return expired;
     }
 }
