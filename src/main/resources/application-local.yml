@@ -14,6 +14,21 @@ staysync:
     clean-on-start: true
   lock:
     type: local                  # JVM 내부 락 (단일 인스턴스 전제)
+  security:
+    jwt:
+      # 개발 전용 고정 키. 이 값이 공개되어 있다는 전제로만 쓴다.
+      # 고정값이라 재기동해도 액세스 토큰이 그대로 유효하다. 매번 난수를 만들면
+      # 앱을 띄울 때마다 다시 로그인해야 해서 개발이 번거로워진다.
+      #
+      # 다만 위 clean-on-start 가 켜져 있어 기동할 때마다 데이터베이스가 비워진다.
+      # refresh_token 행과 user_account 행이 함께 사라지므로, 살아남은 액세스 토큰이
+      # 가리키는 사용자는 더 이상 존재하지 않는다. 재기동 후에는 다시 로그인해야 한다.
+      # local 에서만 그렇고, docker 나 운영에서는 토큰이 재기동을 넘어 유지된다.
+      secret: local-development-only-secret-key-do-not-use-in-production
+    cookie:
+      # HTTPS 가 아니라 끈다. 켜 두면 브라우저가 리프레시 토큰 쿠키를 저장하지 않아
+      # 로그인은 되는데 갱신이 되지 않는 상태가 된다. 운영 기본값은 켜져 있다.
+      secure: false
   vector:
     type: in-memory              # pgvector 없이 메모리에서 코사인 유사도 계산
                                  # 내장 PostgreSQL 바이너리에는 pgvector 가 없다.

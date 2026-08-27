@@ -64,6 +64,30 @@ Booking.com과 Channex가 ARI 전송의 최소 단위로 `rate_plan_id`를 요�
 어댑터마다 가짜 식별자를 끼워 넣는 우회 코드가 생긴다. 대신 `UnitRegistrationService`가
 판매 단위를 만들 때 기본 요금제를 자동 생성해 화면에서는 숨긴다.
 
+## 인증
+
+액세스 토큰은 HS256으로 서명한 JWT(30분), 리프레시 토큰은 `refresh_token` 테이블에
+SHA-256 해시로 저장하는 난수(14일)다. 갱신할 때마다 회전시키고, 이미 교체된 토큰이
+다시 들어오면 도난으로 보고 그 사용자의 토큰을 전부 무효화한다. 발급과 검증은
+`spring-boot-starter-oauth2-resource-server`(Nimbus)에 맡기고 직접 만들지 않는다.
+서명 키는 환경 변수 `JWT_SECRET`이며 없으면 기동이 막힌다(local 프로파일만 예외).
+근거는 `docs/adr/0004-jwt-인증.md`와 `docs/adr/0005-리프레시-토큰-회전.md`.
+
+액세스 토큰은 응답 본문 JSON으로, 리프레시 토큰은 쿠키로 내보낸다
+(`HttpOnly; Secure; SameSite=Strict; Path=/api/auth`). 액세스는 헤더에 실어야 하니
+자바스크립트가 읽어야 하지만 리프레시는 읽을 이유가 없다. `Secure`는 local에서만 끈다.
+근거는 `docs/adr/0006-토큰-전달-방식.md`.
+
+인증 결과는 `shared.security.AuthenticatedUser`로 `SecurityContext`에 담긴다.
+다른 모듈은 이 타입만 읽고 identity를 참조하지 않는다. 조회를 조직 단위로 좁힐 때는
+반드시 여기의 `orgId`를 쓴다. 요청 본문이나 경로의 조직 식별자를 믿으면 안 된다.
+`unit`과 `rate_plan`에는 `org_id`가 없어 `property`까지 거슬러 올라가야 하는데,
+그 확인은 `property.OwnedResources` 한 곳에 모아 뒀다. 컨트롤러는 반드시 이걸 거친다.
+
+**재사용 탐지 같은 "실패하면서 기록을 남기는" 처리는 별도 트랜잭션이어야 한다.**
+같은 트랜잭션에서 무효화하고 예외를 던지면 롤백이 무효화까지 되돌린다.
+`CompromisedTokenHandler`를 따로 둔 이유다.
+
 ## 중복예약 방어 (프로젝트의 핵심)
 
 네 계층으로 막는다. 하나라도 빼지 말 것.
@@ -97,8 +121,13 @@ Booking.com과 Channex가 ARI 전송의 최소 단위로 `rate_plan_id`를 요�
 - 예약 수신 멱등성은 `(channel_code, channel_booking_id)` 유니크 제약으로 보장한다.
   같은 웹훅이 세 번 와도 예약은 한 건이어야 한다.
 - 예약 수정은 `revision` 비교로 순서 역전을 막는다. 낮은 버전이 나중에 도착하면 무시한다.
-- Channex는 숙소당 분당 10회 제한이 있다. 변경을 6초 윈도로 모으고 연속된 같은 값은
-  날짜 구간으로 압축해서 보낸다. 30일 일괄 변경이 호출 한 번으로 끝나야 한다.
+- Channex 제한은 숙소당 분당 20회다. 요금·제약 10회와 재고 10회가 따로 매겨진다.
+  초과하면 429가 오며, 그 숙소의 전송을 1분 멈춘 뒤 지수 백오프로 재시도한다.
+  변경을 6초 윈도로 모으고 연속된 같은 값은 날짜 구간으로 압축해서 보낸다.
+  본문을 10MB까지 받으므로 압축 목표는 6개월치 변경이 호출 한 번으로 끝나는 것이다.
+  Channex 자가 인증 항목 8이 그 기준이다. 근거는 `docs/조사-01-channex-샌드박스.md`.
+- Channex 스테이징(`staging.channex.io`)은 무료이고 구독 없이 API 키가 나온다.
+  부킹닷컴 공용 테스트 숙소가 준비되어 있어 Mock 이 아닌 실제 채널로 검증할 수 있다.
 
 ## 마이그레이션
 
@@ -147,14 +176,15 @@ Booking.com과 Channex가 ARI 전송의 최소 단위로 `rate_plan_id`를 요�
 
 ## 현재 상태
 
-**끝난 것** — 데이터 모델 확정과 실행 검증, 애플리케이션 기동 확인, 재고 방어 계층 구현,
-`ChannelAdapter` 인터페이스, ADR 3건.
+**끝난 것** — 데이터 모델 확정과 실행 검증, 재고 방어 계층 구현, `ChannelAdapter`
+인터페이스, ADR 6건. P1 3주차: JWT 인증(가입·로그인·갱신·로그아웃·시도 제한),
+리프레시 토큰 회전과 재사용 탐지, 숙소·판매 단위·요금제 REST API와 조직 스코핑.
+테스트 44건 통과.
 
-**다음** — P1 3주차. 인증과 권한(JWT), 숙소·판매 단위·요금제 REST API, 그 통합 테스트.
-그 전에 `./gradlew test`로 `InventoryConcurrencyTest`가 통과하는지 확인해야 한다.
-이 테스트가 P1의 완료 조건이자 평가 근거다.
+**다음** — P1 4주차. 예약 애그리게이트와 상태 머신, 수기 예약 처리.
+역할별 인가 규칙(`@PreAuthorize`)은 아직 없다. 지금은 인증 여부와 조직 스코핑까지다.
 
-**아직 비어 있는 모듈** — identity, pricing, messaging, ops, payment, ai, analytics.
+**아직 비어 있는 모듈** — pricing, messaging, ops, payment, ai, analytics.
 각 패키지의 `package-info.java`에 담당 범위와 착수 시점을 적어뒀다.
 
 ## 겪은 함정

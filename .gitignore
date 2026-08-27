@@ -20,6 +20,7 @@ bin/
 # 로컬 데이터베이스 (embedded-postgres 데이터 디렉터리)
 .localdb/
 .localdb-test/
+.localdb-api/
 
 # 환경 변수와 비밀
 .env

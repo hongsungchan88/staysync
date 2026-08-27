@@ -200,7 +200,10 @@ fi
 
 
 # Add default JVM options here. You can also use JAVA_OPTS and GRADLE_OPTS to pass JVM options to this script.
-DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
+# stdout.encoding 은 런처 JVM 에 걸어야 한다. gradle.properties 의 org.gradle.jvmargs 는
+# 데몬에만 적용되는데 콘솔에 실제로 쓰는 것은 이 런처라, 그것만으로는 한국어 테스트
+# 이름이 MS949 로 나가 깨진다. 자세한 내용은 gradle.properties 주석 참고.
+DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m" "-Dfile.encoding=UTF-8" "-Dstdout.encoding=UTF-8" "-Dstderr.encoding=UTF-8"'
 
 # Collect all arguments for the java command:
 #   * DEFAULT_JVM_OPTS, JAVA_OPTS, and optsEnvironmentVar are not allowed to contain shell fragments,

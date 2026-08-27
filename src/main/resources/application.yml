@@ -35,6 +35,19 @@ management:
 staysync:
   timezone: Asia/Seoul
   hold-expiry-minutes: 15        # 직접예약 HOLD 유지 시간
+  security:
+    jwt:
+      # 서명 키는 저장소에 두지 않는다. 환경 변수로 주입한다 (.env.example 참고).
+      # 기본값을 비워 두었으므로 값이 없으면 기동 시점에 실패한다. 첫 로그인 요청까지
+      # 문제가 미뤄지는 것보다 낫다. local 프로파일만 개발용 고정값으로 덮어쓴다.
+      secret: ${JWT_SECRET:}
+      issuer: staysync
+      access-token-ttl: 30m      # 계획서 15.1
+      refresh-token-ttl: 14d     # 계획서 15.1
+    cookie:
+      # 리프레시 토큰 쿠키의 Secure 속성. 운영 기본값은 켜 둔다.
+      # local 프로파일만 끈다. HTTPS 가 아니면 브라우저가 쿠키를 저장하지 않는다.
+      secure: true
   ical:
     poll-interval-minutes: 15
     shrink-guard-ratio: 0.5      # 이벤트 수가 직전의 절반 이하로 줄면 취소 처리를 보류

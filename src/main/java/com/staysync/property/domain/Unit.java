@@ -118,6 +118,10 @@ public class Unit {
         return floorPrice != null && ceilingPrice != null;
     }
 
+    public void rename(String newName) {
+        this.name = newName;
+    }
+
     public void markDirty() {
         this.housekeeping = Housekeeping.DIRTY;
     }
