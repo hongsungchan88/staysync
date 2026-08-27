@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StaySync 통합 캘린더 와이어프레임</title>
+<style>
+  :root {
+    --ink: #1C2733;
+    --sand: #E8E4DC;
+    --clay: #C0654A;
+    --sage: #7E9184;
+    --paper: #FFFFFF;
+    --faint: #F4F2EE;
+    --body: #4A5560;
+    --muted: #6E7781;
+    --rule: #E2DED7;
+    --rule-strong: #CDC8BF;
+    --sel: rgba(192, 101, 74, 0.14);
+    --sel-line: #C0654A;
+    --warn: #B4472C;
+    --day-w: 66px;
+    --left-w: 216px;
+    --row-h: 58px;
+    --head-h: 58px;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Malgun Gothic", "맑은 고딕", -apple-system, BlinkMacSystemFont,
+                 "Segoe UI", "Noto Sans KR", sans-serif;
+    font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ── 와이어프레임 안내 바 ───────────────────────────── */
+  .wf-bar {
+    background: var(--ink); color: var(--sand);
+    padding: 10px 20px; display: flex; align-items: center;
+    gap: 16px; flex-wrap: wrap; font-size: 12px;
+  }
+  .wf-bar strong { color: #fff; font-weight: 700; letter-spacing: .2px; }
+  .wf-bar .sep { width: 1px; height: 16px; background: #33414F; }
+  .wf-bar .note { color: #93A1AE; }
+  .wf-btns { display: flex; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+  .wf-btns button {
+    background: transparent; color: var(--sand);
+    border: 1px solid #3A4855; border-radius: 4px;
+    padding: 5px 11px; font-size: 12px;
+  }
+  .wf-btns button:hover { border-color: #5C6D7C; }
+  .wf-btns button[aria-pressed="true"] {
+    background: var(--clay); border-color: var(--clay); color: #fff;
+  }
+
+  /* ── 앱 헤더 ────────────────────────────────────────── */
+  .app-head {
+    padding: 16px 20px 0; border-bottom: 1px solid var(--rule);
+  }
+  .app-head-top {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  .app-title { font-size: 19px; font-weight: 700; margin: 0; }
+  .prop-select {
+    font: inherit; font-size: 13px; color: var(--ink);
+    border: 1px solid var(--rule-strong); border-radius: 4px;
+    padding: 5px 9px; background: var(--paper);
+  }
+  .live {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted); margin-left: auto;
+  }
+  .live .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--sage);
+    box-shadow: 0 0 0 0 rgba(126,145,132,.6); animation: pulse 2.4s infinite;
+  }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(126,145,132,.55); }
+    70% { box-shadow: 0 0 0 7px rgba(126,145,132,0); }
+    100% { box-shadow: 0 0 0 0 rgba(126,145,132,0); }
+  }
+  .toolbar {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 0 12px; flex-wrap: wrap;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--rule-strong); border-radius: 4px; overflow: hidden; }
+  .seg button {
+    border: 0; background: var(--paper); color: var(--body);
+    padding: 6px 13px; font-size: 12px; border-right: 1px solid var(--rule);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+  .range-label { font-size: 12.5px; color: var(--body); }
+  .nav-btn {
+    border: 1px solid var(--rule-strong); background: var(--paper);
+    border-radius: 4px; width: 28px; height: 28px; color: var(--body); font-size: 13px;
+  }
+  .legend { display: flex; gap: 14px; align-items: center; margin-left: auto; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+  .swatch { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+
+  /* ── 본체 ───────────────────────────────────────────── */
+  .main { display: flex; align-items: stretch; min-height: 460px; }
+  .cal-wrap { flex: 1; min-width: 0; position: relative; }
+  .scroller { overflow: auto; max-height: 62vh; position: relative; }
+
+  .grid {
+    position: relative;
+    display: grid;
+    width: max-content;
+    min-width: 100%;
+  }
+  .cell, .unit-cell, .dhead, .corner { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+
+  .corner {
+    position: sticky; left: 0; top: 0; z-index: 40;
+    background: var(--faint); height: var(--head-h);
+    display: flex; align-items: flex-end; padding: 0 12px 8px;
+    font-size: 11.5px; color: var(--muted);
+    border-right: 1px solid var(--rule-strong);
+  }
+  .dhead {
+    position: sticky; top: 0; z-index: 20; background: var(--faint);
+    height: var(--head-h); padding: 7px 0 0; text-align: center;
+  }
+  .dhead .mon { font-size: 10.5px; color: var(--muted); letter-spacing: .2px; }
+  .dhead .dnum { font-size: 15px; font-weight: 700; line-height: 1.35; }
+  .dhead .dow { font-size: 10.5px; color: var(--muted); }
+  .dhead.we .dnum, .dhead.we .dow { color: var(--clay); }
+  .dhead.today { background: #EDE7E0; box-shadow: inset 0 -2px 0 var(--clay); }
+
+  .unit-cell {
+    position: sticky; left: 0; z-index: 15; background: var(--paper);
+    padding: 9px 12px; border-right: 1px solid var(--rule-strong);
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .unit-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; }
+  .unit-meta { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+
+  /* 셀 글자는 위쪽에 모으고 아래는 예약 막대가 지나갈 띠로 비워 둔다.
+     막대를 셀 한가운데 놓으면 요금을 가린다. */
+  .cell {
+    position: relative; background: var(--paper);
+    padding: 5px 6px 0; user-select: none; cursor: crosshair;
+  }
+  .cell .cline { display: flex; align-items: center; justify-content: space-between; gap: 3px; }
+  .cell .avail { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .cell .avail.zero { color: var(--muted); font-weight: 400; }
+  .cell .price { font-size: 11px; color: var(--body); line-height: 1.5; }
+  .cell .flags { display: flex; gap: 3px; }
+  .flag {
+    font-size: 9.5px; line-height: 1; padding: 2px 3px; border-radius: 2px;
+    background: var(--faint); color: var(--muted); border: 1px solid var(--rule);
+  }
+  .cell.stop { background: repeating-linear-gradient(45deg, #FAF8F5, #FAF8F5 5px, #F0ECE6 5px, #F0ECE6 10px); }
+  .cell.stop .price { text-decoration: line-through; color: var(--muted); }
+  .cell.we { background: #FCFBF9; }
+  .cell.sel { background: var(--sel); box-shadow: inset 0 0 0 1px var(--sel-line); }
+
+  .conflict-mark {
+    width: 15px; height: 15px; flex: 0 0 15px;
+    border-radius: 50%; background: var(--warn); color: #fff;
+    font-size: 10px; font-weight: 700; line-height: 15px; text-align: center;
+    cursor: pointer; z-index: 12; border: 0; padding: 0; position: relative;
+  }
+  .cell.has-conflict { box-shadow: inset 0 0 0 2px var(--warn); }
+
+  /* 예약 막대 */
+  .bars { position: absolute; inset: 0; pointer-events: none; z-index: 10; }
+  .bar {
+    position: absolute; height: 22px; border-radius: 4px;
+    color: #fff; font-size: 11px; line-height: 22px;
+    padding: 0 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    pointer-events: auto; cursor: grab; opacity: .97;
+  }
+  .bar:active { cursor: grabbing; }
+  /* 셀을 끌어 기간을 고르는 동안에는 막대가 마우스를 가로채면 안 된다.
+     가로채면 막대 위를 지날 때 선택이 끊긴다. */
+  .grid.selecting .bar { pointer-events: none; }
+  .bar.dragging { opacity: .55; box-shadow: 0 3px 10px rgba(28,39,51,.3); }
+  .bar.hold { background-image: repeating-linear-gradient(45deg, rgba(255,255,255,.2), rgba(255,255,255,.2) 4px, transparent 4px, transparent 8px); }
+  .bar .ch { opacity: .78; font-size: 10px; }
+  .bar.new { animation: land .7s ease; }
+  @keyframes land {
+    0% { transform: translateY(-9px) scale(.96); opacity: 0; }
+    60% { opacity: 1; }
+    100% { transform: none; opacity: .97; }
+  }
+
+  /* ── 우측 편집 패널 ─────────────────────────────────── */
+  .panel {
+    width: 306px; flex: 0 0 306px; border-left: 1px solid var(--rule);
+    background: var(--faint); padding: 16px 18px; overflow-y: auto; max-height: 62vh;
+  }
+  .panel[hidden] { display: none; }
+  .panel h2 { font-size: 14px; margin: 0 0 3px; }
+  .panel .sub { font-size: 11.5px; color: var(--muted); margin-bottom: 14px; }
+  .fld { margin-bottom: 13px; }
+  .fld > label.k {
+    display: block; font-size: 11px; color: var(--muted);
+    margin-bottom: 5px; letter-spacing: .2px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid var(--rule-strong); background: var(--paper);
+    border-radius: 3px; padding: 4px 7px; font-size: 11.5px; color: var(--body);
+  }
+  .chip input { margin: 0; accent-color: var(--clay); }
+  .dow-row { display: flex; gap: 3px; }
+  .dow-row label {
+    flex: 1; text-align: center; font-size: 11px; padding: 5px 0;
+    border: 1px solid var(--rule-strong); border-radius: 3px;
+    background: var(--paper); color: var(--body); cursor: pointer;
+  }
+  .dow-row input { display: none; }
+  .dow-row input:checked + span { color: #fff; }
+  .dow-row label:has(input:checked) { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .row2 { display: flex; gap: 8px; }
+  input[type="text"], input[type="number"] {
+    font: inherit; font-size: 12.5px; width: 100%;
+    border: 1px solid var(--rule-strong); border-radius: 3px;
+    padding: 6px 8px; background: var(--paper); color: var(--ink);
+  }
+  .radio-row { display: flex; gap: 12px; margin-top: 6px; }
+  .radio-row label { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--body); }
+  .radio-row input { accent-color: var(--clay); margin: 0; }
+  .check-line { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--body); padding: 3px 0; }
+  .check-line input { accent-color: var(--clay); margin: 0; }
+  .hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  /* 패널 내용이 화면보다 길어 스크롤된다. 적용 버튼이 밀려 사라지면 안 되므로
+     아래에 붙여 둔다. */
+  .panel-foot {
+    position: sticky; bottom: -16px; margin: 16px -18px -16px;
+    padding: 12px 18px 16px; background: var(--faint);
+    border-top: 1px solid var(--rule);
+  }
+  .panel-actions { display: flex; gap: 7px; }
+  .panel-actions + .panel-actions { margin-top: 7px; }
+  .btn {
+    flex: 1; padding: 8px 0; border-radius: 4px; font-size: 12.5px;
+    border: 1px solid var(--rule-strong); background: var(--paper); color: var(--body);
+  }
+  .btn.primary { background: var(--ink); border-color: var(--ink); color: #fff; }
+  .preview {
+    margin-top: 12px; background: var(--paper); border: 1px solid var(--rule);
+    border-radius: 4px; padding: 10px 11px; font-size: 11.5px; color: var(--body); line-height: 1.6;
+  }
+  .preview b { color: var(--ink); }
+
+  /* ── 상태 화면 ──────────────────────────────────────── */
+  .state {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 64px 24px; min-height: 380px; gap: 10px;
+  }
+  .state h3 { margin: 0; font-size: 15px; }
+  .state p { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 380px; line-height: 1.7; }
+  .state .acts { margin-top: 8px; display: flex; gap: 8px; }
+  .state .acts .btn { flex: 0 0 auto; padding: 8px 16px; }
+  .skel-wrap { padding: 0; }
+  .skel-row { display: flex; gap: 1px; margin-bottom: 1px; }
+  .skel {
+    background: linear-gradient(90deg, #F2F0EC 25%, #E8E5DF 37%, #F2F0EC 63%);
+    background-size: 400% 100%; animation: shimmer 1.3s ease infinite;
+  }
+  @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+  .banner {
+    display: flex; align-items: center; gap: 10px;
+    background: #FBF0EC; border: 1px solid #E8C4B8; border-left: 3px solid var(--warn);
+    padding: 9px 13px; margin: 12px 20px 0; border-radius: 3px; font-size: 12px; color: #7E3722;
+  }
+  /* display:flex 가 hidden 속성의 기본 display:none 을 이긴다. 명시적으로 되돌린다. */
+  .banner[hidden] { display: none; }
+  .banner button {
+    margin-left: auto; border: 1px solid #D9A796; background: transparent;
+    color: #7E3722; border-radius: 3px; padding: 4px 10px; font-size: 11.5px;
+  }
+
+  /* ── 충돌 해소 모달 ─────────────────────────────────── */
+  dialog {
+    border: 0; border-radius: 6px; padding: 0; width: min(520px, 92vw);
+    box-shadow: 0 16px 44px rgba(28,39,51,.24); color: var(--ink);
+  }
+  dialog::backdrop { background: rgba(28,39,51,.42); }
+  .dlg-head { padding: 18px 22px 12px; border-bottom: 1px solid var(--rule); }
+  .dlg-head h2 { margin: 0 0 5px; font-size: 15px; }
+  .dlg-head p { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .dlg-body { padding: 16px 22px; }
+  .facts { border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; margin-bottom: 15px; }
+  .facts div { display: flex; font-size: 12px; border-bottom: 1px solid var(--rule); }
+  .facts div:last-child { border-bottom: 0; }
+  .facts dt { width: 104px; flex: 0 0 104px; background: var(--faint); color: var(--muted); padding: 7px 11px; margin: 0; }
+  .facts dd { margin: 0; padding: 7px 11px; color: var(--body); }
+  .opt {
+    display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px;
+    border: 1px solid var(--rule-strong); border-radius: 4px; margin-bottom: 7px; cursor: pointer;
+  }
+  .opt:has(input:checked) { border-color: var(--clay); background: #FCF6F3; }
+  .opt input { margin-top: 2px; accent-color: var(--clay); }
+  .opt b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+  .opt span { font-size: 11.5px; color: var(--muted); line-height: 1.55; }
+  .dlg-foot { padding: 13px 22px 18px; display: flex; gap: 8px; justify-content: flex-end; }
+  .dlg-foot .btn { flex: 0 0 auto; padding: 8px 18px; }
+
+  /* ── 하단 명세 대조 ─────────────────────────────────── */
+  .spec {
+    border-top: 1px solid var(--rule); background: var(--faint);
+    padding: 16px 20px 22px; font-size: 12px; color: var(--body);
+  }
+  .spec h3 { margin: 0 0 9px; font-size: 12.5px; color: var(--ink); }
+  .spec table { border-collapse: collapse; width: 100%; max-width: 900px; }
+  .spec td { padding: 5px 10px 5px 0; vertical-align: top; line-height: 1.6; }
+  .spec td:first-child { width: 92px; color: var(--muted); white-space: nowrap; }
+  .spec .foot { margin-top: 12px; font-size: 11.5px; color: var(--muted); line-height: 1.7; max-width: 900px; }
+
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  @media (max-width: 900px) {
+    .main { flex-direction: column; }
+    .panel { width: auto; flex: none; border-left: 0; border-top: 1px solid var(--rule); max-height: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wf-bar">
+  <strong>StaySync 통합 캘린더</strong>
+  <span class="sep"></span>
+  <span class="note">와이어프레임 · 계획서 8.2 / 8.4 / 13.5 기준 · 데이터는 모두 가짜</span>
+  <div class="wf-btns" role="group" aria-label="화면 상태 전환">
+    <button data-state="ready" aria-pressed="true">정상</button>
+    <button data-state="loading" aria-pressed="false">로딩</button>
+    <button data-state="empty" aria-pressed="false">빈 상태</button>
+    <button data-state="error" aria-pressed="false">동기화 오류</button>
+    <button id="btn-sse">예약 유입</button>
+  </div>
+</div>
+
+<div id="sync-banner" class="banner" hidden>
+  <span id="sync-msg">부킹닷컴 동기화가 12분째 지연되고 있습니다. 마지막 성공 09-01 14:32.</span>
+  <button id="btn-retry">다시 시도</button>
+</div>
+
+<header class="app-head">
+  <div class="app-head-top">
+    <h1 class="app-title">통합 캘린더</h1>
+    <select class="prop-select" aria-label="숙소 선택">
+      <option>성수동 하우스</option>
+      <option>연남동 스튜디오</option>
+    </select>
+    <span class="live"><span class="dot"></span> 실시간 연결됨 · 방금 갱신</span>
+  </div>
+  <div class="toolbar">
+    <button class="nav-btn" aria-label="이전 기간">‹</button>
+    <button class="nav-btn" aria-label="다음 기간">›</button>
+    <span class="range-label" id="range-label"></span>
+    <div class="seg" role="group" aria-label="표시 기간">
+      <button data-days="30" aria-pressed="true">30일</button>
+      <button data-days="60" aria-pressed="false">60일</button>
+      <button data-days="90" aria-pressed="false">90일</button>
+    </div>
+    <div class="legend">
+      <span><i class="swatch" style="background:#B25C42"></i>에어비앤비</span>
+      <span><i class="swatch" style="background:#3F5A6B"></i>부킹닷컴</span>
+      <span><i class="swatch" style="background:#5C7166"></i>네이버</span>
+      <span><i class="swatch" style="background:#71634A"></i>직접예약</span>
+      <span><i class="swatch" style="background:#B4472C;border-radius:50%"></i>충돌</span>
+    </div>
+  </div>
+</header>
+
+<div class="main">
+  <div class="cal-wrap">
+    <div class="scroller" id="scroller">
+      <div class="grid" id="grid"></div>
+      <div class="state" id="state-loading">
+        <div class="skel-wrap" id="skel"></div>
+      </div>
+      <div class="state" id="state-empty">
+        <h3>아직 등록한 판매 단위가 없습니다</h3>
+        <p>숙소를 만들고 판매 단위를 하나 등록하면 이 화면에 달력이 나타납니다.
+           판매 단위를 만들 때 기본 요금제가 함께 생성됩니다.</p>
+        <div class="acts">
+          <button class="btn primary">판매 단위 추가</button>
+          <button class="btn">채널 연결부터 하기</button>
+        </div>
+      </div>
+      <div class="state" id="state-error">
+        <h3>달력을 불러오지 못했습니다</h3>
+        <p>서버 응답이 없습니다. 잠시 뒤 다시 시도해 주세요.
+           문제가 이어지면 채널 동기화 로그에서 마지막 성공 시각을 확인할 수 있습니다.</p>
+        <div class="acts">
+          <button class="btn primary" id="btn-reload">다시 불러오기</button>
+          <button class="btn">동기화 로그 보기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside class="panel" id="panel" hidden aria-label="요금과 제약 일괄 편집">
+    <h2>요금과 제약 편집</h2>
+    <p class="sub" id="panel-sub"></p>
+
+    <div class="fld">
+      <label class="k">적용 대상</label>
+      <div class="chips" id="target-units"></div>
+    </div>
+
+    <div class="fld">
+      <label class="k">기간</label>
+      <input type="text" id="fld-range" readonly>
+    </div>
+
+    <div class="fld">
+      <label class="k">요일 필터</label>
+      <div class="dow-row" id="dow-row"></div>
+      <p class="hint">선택한 요일에만 적용합니다. 아무것도 고르지 않으면 전체 요일입니다.</p>
+    </div>
+
+    <div class="fld">
+      <label class="k">요금</label>
+      <div class="row2">
+        <input type="number" id="fld-price" value="250000" step="1000">
+      </div>
+      <div class="radio-row">
+        <label><input type="radio" name="pmode" value="fixed" checked> 고정값</label>
+        <label><input type="radio" name="pmode" value="pct"> 기존 대비 +20%</label>
+      </div>
+      <p class="hint">규칙 엔진이 산출한 값에 하한과 상한을 적용한 뒤 100원 단위로 반올림합니다.</p>
+    </div>
+
+    <div class="fld">
+      <label class="k">제약</label>
+      <div class="row2" style="margin-bottom:7px">
+        <input type="number" id="fld-minstay" value="2" min="1" aria-label="최소 숙박">
+      </div>
+      <label class="check-line"><input type="checkbox" id="fld-cta"> 체크인 금지</label>
+      <label class="check-line"><input type="checkbox" id="fld-stop"> 판매 중지</label>
+    </div>
+
+    <div class="fld">
+      <label class="k">적용 채널</label>
+      <label class="check-line"><input type="checkbox" checked> 전체</label>
+      <p class="hint">에어비앤비 iCal은 요금 전송을 지원하지 않아 자동 제외됩니다.
+        재고와 판매 중지만 전달됩니다.</p>
+    </div>
+
+    <div class="preview" id="preview" hidden></div>
+
+    <div class="panel-foot">
+      <div class="panel-actions">
+        <button class="btn" id="btn-preview">미리보기</button>
+        <button class="btn primary" id="btn-apply">적용</button>
+      </div>
+      <div class="panel-actions">
+        <button class="btn" id="btn-cancel">선택 해제</button>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<dialog id="dlg">
+  <div class="dlg-head">
+    <h2>중복예약 충돌</h2>
+    <p>OTA에서 이미 성사된 예약은 재고가 없어도 거절하지 않고 받아들입니다.
+       대신 여기에 기록해 운영자가 해소합니다.</p>
+  </div>
+  <div class="dlg-body">
+    <div class="facts" id="dlg-facts"></div>
+    <label class="opt">
+      <input type="radio" name="res" checked>
+      <span><b>다른 판매 단위로 옮긴다</b>
+        <span>같은 날짜에 여유가 있는 단위를 찾아 배정합니다. 게스트에게 안내가 필요할 수 있습니다.</span></span>
+    </label>
+    <label class="opt">
+      <input type="radio" name="res">
+      <span><b>게스트에게 연락해 날짜를 조정한다</b>
+        <span>인박스에 초안을 만들고 스레드를 엽니다. 합의 뒤 예약을 수정합니다.</span></span>
+    </label>
+    <label class="opt">
+      <input type="radio" name="res">
+      <span><b>다른 채널의 예약을 취소한다</b>
+        <span>취소 정책에 따라 환불액을 계산한 뒤 승인 절차를 거칩니다. 평점에 영향이 갑니다.</span></span>
+    </label>
+    <label class="opt">
+      <input type="radio" name="res">
+      <span><b>이미 해결됨으로 표시한다</b>
+        <span>채널 밖에서 처리한 경우입니다. 사유를 남기면 감사 로그에 기록됩니다.</span></span>
+    </label>
+  </div>
+  <div class="dlg-foot">
+    <button class="btn" id="dlg-close">닫기</button>
+    <button class="btn primary" id="dlg-ok">해소 처리</button>
+  </div>
+</dialog>
+
+<section class="spec">
+  <h3>명세 대조</h3>
+  <table>
+    <tr><td>8.2</td><td>좌측 판매 단위 고정, 상단 날짜 고정, 셀당 잔여 재고·요금·최소숙박·판매중지. 예약은 채널별 색 막대이고 좌우로 끌어 날짜를 바꾼다. 셀을 끌어 기간을 고르면 우측 패널이 열린다. 충돌 셀은 따로 표시하고 눌러서 해소 절차로 들어간다.</td></tr>
+    <tr><td>8.4</td><td>편집 패널의 적용 대상, 기간, 요일 필터, 고정값과 배분율, 최소 숙박, 체크인 금지, 판매 중지, 적용 채널.</td></tr>
+    <tr><td>13.5</td><td>서버는 <code>units[].days[]</code> 와 <code>reservations[]</code> 를 한 번에 돌려준다. 이 화면의 가짜 데이터도 같은 모양으로 만들었다.</td></tr>
+    <tr><td>CLAUDE.md</td><td>iCal은 요금 전송을 지원하지 않아 적용 채널에서 자동으로 빠진다. OTA에서 성사된 예약은 거절하지 않고 충돌로 기록한다.</td></tr>
+  </table>
+  <p class="foot">
+    확인이 필요한 것 세 가지. 첫째, 판매 단위가 열 개를 넘으면 좌측 목록에 그룹이 필요한지.
+    둘째, 90일을 볼 때 날짜 칸을 좁힐지 가로 스크롤에 맡길지. 셋째, 도미토리처럼
+    <code>totalUnits</code> 가 여럿인 단위에서 예약 막대를 어떻게 쌓을지. 지금은 겹치면
+    아래로 밀어 두었는데 자리 수가 많아지면 행이 높아진다.
+  </p>
+</section>
+
+<script>
+(function () {
+  'use strict';
+
+  // ── 채널 정의 ────────────────────────────────────────
+  // 막대 위에 흰 글자를 얹으므로 팔레트 색을 그대로 쓰지 않고
+  // 대비 4.5:1 을 넘도록 어둡게 조정한 값을 쓴다.
+  var CH = {
+    AIRBNB_ICAL:     { name: '에어비앤비', color: '#B25C42' },
+    BOOKING_CHANNEX: { name: '부킹닷컴',   color: '#3F5A6B' },
+    NAVER:           { name: '네이버',     color: '#5C7166' },
+    DIRECT:          { name: '직접예약',   color: '#71634A' }
+  };
+  var CH_KEYS = Object.keys(CH);
+
+  var UNITS = [
+    { id: 1, name: '성수동 오피스텔', kind: '독채',   total: 1 },
+    { id: 2, name: '작은방',         kind: '개인실', total: 1 },
+    { id: 3, name: '큰방',           kind: '개인실', total: 1 },
+    { id: 4, name: '도미토리 A',     kind: '다인실', total: 4 },
+    { id: 5, name: '옥탑방',         kind: '개인실', total: 1 },
+    { id: 6, name: '연남동 스튜디오', kind: '독채',   total: 1 }
+  ];
+
+  var START = new Date(2026, 8, 1);            // 2026-09-01
+  var DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  var NAMES = ['김민수', '이서연', '박준호', '최유진', '정하윤', '강도현',
+               'A. Schmidt', 'M. Tanaka', 'J. Wilson', '오세영'];
+
+  var state = { days: 30, sel: null, dragging: null, conflicts: {}, res: [], grid: {} };
+
+  // ── 결정적 난수 (새로고침해도 같은 화면) ─────────────
+  var seed = 20260901;
+  function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
+
+  function dateAt(i) { var d = new Date(START); d.setDate(d.getDate() + i); return d; }
+  function fmt(d) {
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') +
+           '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function fmtShort(d) { return (d.getMonth() + 1) + '월 ' + d.getDate() + '일'; }
+  function won(n) { return n.toLocaleString('ko-KR'); }
+
+  // ── 가짜 데이터 (13.5 응답 모양) ─────────────────────
+  function build(days) {
+    seed = 20260901;
+    var g = {}, res = [], conflicts = {}, rid = 1200;
+
+    UNITS.forEach(function (u) {
+      var base = 90000 + Math.floor(rnd() * 9) * 15000;
+      g[u.id] = [];
+      for (var i = 0; i < days; i++) {
+        var d = dateAt(i), we = d.getDay() === 5 || d.getDay() === 6;
+        g[u.id].push({
+          date: fmt(d),
+          avail: u.total,
+          price: Math.round((base * (we ? 1.25 : 1)) / 1000) * 1000,
+          minStay: we ? 2 : 1,
+          stopSell: false,
+          conflict: false
+        });
+      }
+    });
+
+    // 예약 만들기
+    UNITS.forEach(function (u) {
+      var cur = Math.floor(rnd() * 4);
+      while (cur < days - 1) {
+        var nights = 1 + Math.floor(rnd() * 4);
+        if (cur + nights > days) break;
+        if (rnd() > 0.36) {
+          var ch = CH_KEYS[Math.floor(rnd() * CH_KEYS.length)];
+          var hold = rnd() > 0.9;
+          res.push({
+            id: rid++, unitId: u.id, start: cur, nights: nights,
+            guest: NAMES[Math.floor(rnd() * NAMES.length)],
+            channel: ch, status: hold ? 'HOLD' : 'CONFIRMED',
+            amount: g[u.id][cur].price * nights
+          });
+          for (var k = cur; k < cur + nights; k++) g[u.id][k].avail -= 1;
+        }
+        cur += nights + Math.floor(rnd() * 3);
+      }
+    });
+
+    // 판매 중지 몇 칸
+    for (var s = 0; s < 4; s++) {
+      var u2 = UNITS[Math.floor(rnd() * UNITS.length)];
+      var di = Math.floor(rnd() * days);
+      if (g[u2.id][di].avail === u2.total) g[u2.id][di].stopSell = true;
+    }
+
+    // 충돌 두 건: 재고가 없는데 다른 채널 예약이 하나 더 들어온 상태
+    var made = 0;
+    for (var t = 0; t < res.length && made < 2; t++) {
+      var r = res[t];
+      var unit = UNITS.filter(function (x) { return x.id === r.unitId; })[0];
+      if (unit.total !== 1) continue;
+      var di2 = r.start + Math.floor(r.nights / 2);
+      if (di2 >= days) continue;
+      var cell = g[r.unitId][di2];
+      if (cell.conflict) continue;
+      cell.conflict = true;
+      cell.avail = -1;
+      var other = CH_KEYS.filter(function (c) { return c !== r.channel; })[made];
+      conflicts[r.unitId + ':' + di2] = {
+        unitId: r.unitId, dayIndex: di2, date: cell.date,
+        held: { guest: r.guest, channel: r.channel },
+        incoming: { guest: NAMES[(made * 3 + 2) % NAMES.length], channel: other }
+      };
+      made++;
+    }
+
+    state.grid = g; state.res = res; state.conflicts = conflicts;
+  }
+
+  // ── 렌더 ─────────────────────────────────────────────
+  var gridEl = document.getElementById('grid');
+  var scroller = document.getElementById('scroller');
+
+  function render() {
+    var days = state.days;
+    gridEl.style.gridTemplateColumns = 'var(--left-w) repeat(' + days + ', var(--day-w))';
+    gridEl.style.gridTemplateRows = 'var(--head-h) ' +
+      UNITS.map(function (u) { return px(rowHeight(u)); }).join(' ');
+
+    var html = ['<div class="corner">판매 단위 ' + UNITS.length + '개</div>'];
+    var today = 3;
+    for (var i = 0; i < days; i++) {
+      var d = dateAt(i), we = d.getDay() === 0 || d.getDay() === 6;
+      var first = i === 0 || d.getDate() === 1;
+      html.push(
+        '<div class="dhead' + (we ? ' we' : '') + (i === today ? ' today' : '') + '">' +
+          '<div class="mon">' + (first ? (d.getMonth() + 1) + '월' : '&nbsp;') + '</div>' +
+          '<div class="dnum">' + d.getDate() + '</div>' +
+          '<div class="dow">' + DOW[d.getDay()] + '</div>' +
+        '</div>');
+    }
+
+    UNITS.forEach(function (u, ri) {
+      html.push('<div class="unit-cell"><span class="unit-name">' + u.name + '</span>' +
+                '<span class="unit-meta">' + u.kind +
+                (u.total > 1 ? ' · ' + u.total + '자리' : '') + '</span></div>');
+      for (var j = 0; j < days; j++) {
+        var c = state.grid[u.id][j];
+        var dd = dateAt(j), we2 = dd.getDay() === 0 || dd.getDay() === 6;
+        var cls = 'cell' + (we2 ? ' we' : '') + (c.stopSell ? ' stop' : '') +
+                  (c.conflict ? ' has-conflict' : '');
+        var flags = '';
+        if (c.conflict) {
+          flags += '<button class="conflict-mark" data-cf="' + u.id + ':' + j +
+                   '" title="충돌 해소">!</button>';
+        } else {
+          if (c.minStay > 1) flags += '<i class="flag">' + c.minStay + '박</i>';
+          if (c.stopSell) flags += '<i class="flag">중지</i>';
+        }
+        var availTxt = c.conflict ? '초과' : c.avail;
+        html.push(
+          '<div class="' + cls + '" data-u="' + ri + '" data-d="' + j + '">' +
+            '<div class="cline">' +
+              '<span class="avail' + (c.avail <= 0 ? ' zero' : '') + '">' + availTxt + '</span>' +
+              '<span class="flags">' + flags + '</span>' +
+            '</div>' +
+            '<div class="price">' + won(c.price) + '</div>' +
+          '</div>');
+      }
+    });
+
+    html.push('<div class="bars" id="bars"></div>');
+    gridEl.innerHTML = html.join('');
+    renderBars();
+    document.getElementById('range-label').textContent =
+      fmtShort(dateAt(0)) + ' – ' + fmtShort(dateAt(days - 1)) + ' · ' + days + '일';
+  }
+
+  function px(v) { return v + 'px'; }
+
+  // 자리가 여럿인 단위(도미토리)는 같은 날짜에 예약이 겹칠 수 있다.
+  // 겹친 예약을 위아래로 나눠 놓아야 하므로 그런 행은 더 높게 잡는다.
+  var LANE_H = 24, TEXT_H = 36, ROW_PAD = 6;
+  function lanesOf(u) { return u.total > 1 ? 2 : 1; }
+  function rowHeight(u) { return TEXT_H + lanesOf(u) * LANE_H + ROW_PAD; }
+
+  function metrics() {
+    var cs = getComputedStyle(document.documentElement);
+    var m = {
+      dayW: parseFloat(cs.getPropertyValue('--day-w')),
+      leftW: parseFloat(cs.getPropertyValue('--left-w')),
+      headH: parseFloat(cs.getPropertyValue('--head-h')),
+      tops: [], heights: []
+    };
+    var y = m.headH;
+    UNITS.forEach(function (u) {
+      m.tops.push(y); m.heights.push(rowHeight(u)); y += rowHeight(u);
+    });
+    return m;
+  }
+
+  // 겹치는 예약에 레인 번호를 매긴다. 자리 수를 넘으면 그대로 겹쳐 두고
+  // 화면 아래 메모에 적어 둔 미결 사항으로 남긴다.
+  function assignLanes(unitId, lanes) {
+    var list = state.res.filter(function (r) { return r.unitId === unitId; })
+                        .sort(function (a, b) { return a.start - b.start; });
+    var ends = [];
+    list.forEach(function (r) {
+      var lane = 0;
+      while (lane < lanes && ends[lane] !== undefined && ends[lane] > r.start) lane++;
+      if (lane >= lanes) lane = lanes - 1;
+      r.lane = lane;
+      ends[lane] = Math.max(ends[lane] || 0, r.start + r.nights);
+    });
+  }
+
+  function renderBars() {
+    var m = metrics(), bars = document.getElementById('bars');
+    if (!bars) return;
+    UNITS.forEach(function (u) { assignLanes(u.id, lanesOf(u)); });
+    var out = [];
+    state.res.forEach(function (r) {
+      if (r.start >= state.days) return;
+      var ri = UNITS.findIndex(function (u) { return u.id === r.unitId; });
+      var nights = Math.min(r.nights, state.days - r.start);
+      var left = m.leftW + r.start * m.dayW + 4;
+      var w = nights * m.dayW - 8;
+      var top = m.tops[ri] + TEXT_H + (r.lane || 0) * LANE_H;
+      var c = CH[r.channel];
+      out.push('<div class="bar' + (r.status === 'HOLD' ? ' hold' : '') + (r.isNew ? ' new' : '') +
+        '" data-r="' + r.id + '" style="left:' + px(left) + ';top:' + px(top) +
+        ';width:' + px(w) + ';background:' + c.color + '" title="' +
+        r.guest + ' · ' + c.name + ' · ' + nights + '박 · ' + won(r.amount) + '원">' +
+        r.guest + ' <span class="ch">' + c.name + '</span></div>');
+      r.isNew = false;
+    });
+    bars.innerHTML = out.join('');
+  }
+
+  // ── 셀 드래그로 기간 선택 ────────────────────────────
+  var anchor = null;
+
+  gridEl.addEventListener('mousedown', function (e) {
+    if (e.target.closest('.bar') || e.target.closest('.conflict-mark')) return;
+    var cell = e.target.closest('.cell');
+    if (!cell) return;
+    e.preventDefault();
+    anchor = { u: +cell.dataset.u, d: +cell.dataset.d };
+    state.sel = { u1: anchor.u, u2: anchor.u, d1: anchor.d, d2: anchor.d };
+    gridEl.classList.add('selecting');
+    paintSel();
+  });
+
+  gridEl.addEventListener('mouseover', function (e) {
+    if (!anchor) return;
+    var cell = e.target.closest('.cell');
+    if (!cell) return;
+    state.sel = {
+      u1: Math.min(anchor.u, +cell.dataset.u), u2: Math.max(anchor.u, +cell.dataset.u),
+      d1: Math.min(anchor.d, +cell.dataset.d), d2: Math.max(anchor.d, +cell.dataset.d)
+    };
+    paintSel();
+  });
+
+  document.addEventListener('mouseup', function () {
+    if (anchor) { anchor = null; gridEl.classList.remove('selecting'); openPanel(); }
+  });
+
+  function paintSel() {
+    var s = state.sel;
+    gridEl.querySelectorAll('.cell').forEach(function (c) {
+      var u = +c.dataset.u, d = +c.dataset.d;
+      var on = s && u >= s.u1 && u <= s.u2 && d >= s.d1 && d <= s.d2;
+      c.classList.toggle('sel', !!on);
+    });
+  }
+
+  // ── 편집 패널 ────────────────────────────────────────
+  var panel = document.getElementById('panel');
+
+  function openPanel() {
+    var s = state.sel;
+    if (!s) return;
+    var n = (s.u2 - s.u1 + 1) * (s.d2 - s.d1 + 1);
+    document.getElementById('panel-sub').textContent =
+      n + '개 칸 선택 · 판매 단위 ' + (s.u2 - s.u1 + 1) + '개 × ' + (s.d2 - s.d1 + 1) + '일';
+    document.getElementById('fld-range').value =
+      fmt(dateAt(s.d1)) + ' ~ ' + fmt(dateAt(s.d2));
+
+    var chips = [];
+    UNITS.forEach(function (u, i) {
+      var on = i >= s.u1 && i <= s.u2;
+      chips.push('<label class="chip"><input type="checkbox"' + (on ? ' checked' : '') +
+                 '> ' + u.name + '</label>');
+    });
+    document.getElementById('target-units').innerHTML = chips.join('');
+
+    var dow = [];
+    for (var k = 0; k < 7; k++) {
+      var used = false;
+      for (var d = s.d1; d <= s.d2; d++) if (dateAt(d).getDay() === k) used = true;
+      dow.push('<label' + (used ? '' : ' style="opacity:.4"') +
+               '><input type="checkbox"><span>' + DOW[k] + '</span></label>');
+    }
+    document.getElementById('dow-row').innerHTML = dow.join('');
+
+    document.getElementById('preview').hidden = true;
+    panel.hidden = false;
+  }
+
+  document.getElementById('btn-cancel').addEventListener('click', function () {
+    state.sel = null; paintSel(); panel.hidden = true;
+  });
+
+  document.getElementById('btn-preview').addEventListener('click', function () {
+    var s = state.sel; if (!s) return;
+    var price = +document.getElementById('fld-price').value;
+    var pct = document.querySelector('input[name="pmode"]:checked').value === 'pct';
+    var stop = document.getElementById('fld-stop').checked;
+    var units = s.u2 - s.u1 + 1, days = s.d2 - s.d1 + 1;
+    var calls = Math.ceil(units * days / 400);
+    var p = document.getElementById('preview');
+    p.innerHTML =
+      '<b>' + (units * days) + '칸</b>이 바뀝니다.<br>' +
+      '요금 ' + (pct ? '기존 대비 +20%' : won(price) + '원') +
+      ', 최소 숙박 ' + document.getElementById('fld-minstay').value + '박' +
+      (stop ? ', 판매 중지' : '') + '<br>' +
+      '전파 대상 채널 3곳. 날짜 구간으로 압축해 채널당 <b>' + calls + '회</b> 호출로 보냅니다.<br>' +
+      '<span style="color:var(--muted)">에어비앤비 iCal은 요금을 받지 않아 재고만 갱신됩니다.</span>';
+    p.hidden = false;
+  });
+
+  document.getElementById('btn-apply').addEventListener('click', function () {
+    var s = state.sel; if (!s) return;
+    var price = +document.getElementById('fld-price').value;
+    var pct = document.querySelector('input[name="pmode"]:checked').value === 'pct';
+    var ms = +document.getElementById('fld-minstay').value;
+    var stop = document.getElementById('fld-stop').checked;
+    for (var ui = s.u1; ui <= s.u2; ui++) {
+      var u = UNITS[ui];
+      for (var d = s.d1; d <= s.d2; d++) {
+        var c = state.grid[u.id][d];
+        c.price = pct ? Math.round(c.price * 1.2 / 1000) * 1000 : price;
+        c.minStay = ms;
+        c.stopSell = stop;
+      }
+    }
+    state.sel = null; panel.hidden = true;
+    render();
+  });
+
+  // ── 예약 막대 좌우 드래그 ────────────────────────────
+  gridEl.addEventListener('mousedown', function (e) {
+    var bar = e.target.closest('.bar');
+    if (!bar) return;
+    e.preventDefault();
+    var id = +bar.dataset.r;
+    var r = state.res.filter(function (x) { return x.id === id; })[0];
+    var m = metrics();
+    var startX = e.clientX, origin = r.start, moved = 0;
+    bar.classList.add('dragging');
+
+    function move(ev) {
+      moved = Math.round((ev.clientX - startX) / m.dayW);
+      var ns = Math.max(0, Math.min(state.days - r.nights, origin + moved));
+      bar.style.left = px(m.leftW + ns * m.dayW + 4);
+    }
+    function up() {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      bar.classList.remove('dragging');
+      var ns = Math.max(0, Math.min(state.days - r.nights, origin + moved));
+      if (ns !== origin) {
+        for (var k = origin; k < origin + r.nights; k++)
+          if (state.grid[r.unitId][k]) state.grid[r.unitId][k].avail += 1;
+        r.start = ns;
+        for (var k2 = ns; k2 < ns + r.nights; k2++)
+          if (state.grid[r.unitId][k2]) state.grid[r.unitId][k2].avail -= 1;
+        render();
+      } else {
+        renderBars();
+      }
+    }
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  });
+
+  // ── 충돌 해소 ────────────────────────────────────────
+  var dlg = document.getElementById('dlg');
+  var cfKey = null;
+
+  gridEl.addEventListener('click', function (e) {
+    var b = e.target.closest('.conflict-mark');
+    if (!b) return;
+    cfKey = b.dataset.cf;
+    var c = state.conflicts[cfKey];
+    if (!c) return;
+    document.getElementById('dlg-facts').innerHTML =
+      row('날짜', c.date) +
+      row('판매 단위', UNITS.filter(function (u) { return u.id === c.unitId; })[0].name) +
+      row('기존 예약', c.held.guest + ' · ' + CH[c.held.channel].name) +
+      row('나중 예약', c.incoming.guest + ' · ' + CH[c.incoming.channel].name) +
+      row('감지 시각', c.date + ' 02:14 · 재동기화 배치');
+    dlg.showModal();
+  });
+  function row(k, v) { return '<div><dt>' + k + '</dt><dd>' + v + '</dd></div>'; }
+
+  document.getElementById('dlg-close').addEventListener('click', function () { dlg.close(); });
+  document.getElementById('dlg-ok').addEventListener('click', function () {
+    if (cfKey) {
+      var c = state.conflicts[cfKey];
+      var cell = state.grid[c.unitId][c.dayIndex];
+      cell.conflict = false; cell.avail = 0;
+      delete state.conflicts[cfKey];
+      cfKey = null;
+      render();
+    }
+    dlg.close();
+  });
+
+  // ── 상태 전환 ────────────────────────────────────────
+  var states = {
+    ready:   { grid: true,  el: null },
+    loading: { grid: false, el: 'state-loading' },
+    empty:   { grid: false, el: 'state-empty' },
+    error:   { grid: false, el: 'state-error' }
+  };
+
+  function setState(name) {
+    Object.keys(states).forEach(function (k) {
+      var s = states[k];
+      if (s.el) document.getElementById(s.el).style.display = 'none';
+    });
+    gridEl.style.display = states[name].grid ? 'grid' : 'none';
+    panel.hidden = true;
+    document.getElementById('sync-banner').hidden = name !== 'error';
+    if (states[name].el) document.getElementById(states[name].el).style.display = 'flex';
+    document.querySelectorAll('.wf-btns [data-state]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.state === name));
+    });
+    if (name === 'loading') buildSkeleton();
+  }
+
+  function buildSkeleton() {
+    var m = metrics(), out = [];
+    for (var r = 0; r < 6; r++) {
+      var h = m.heights[r] - 1;
+      var cells = ['<div class="skel" style="width:' + px(m.leftW - 1) +
+                   ';height:' + px(h) + '"></div>'];
+      for (var c = 0; c < 12; c++)
+        cells.push('<div class="skel" style="width:' + px(m.dayW - 1) +
+                   ';height:' + px(h) + ';opacity:' + (1 - c * 0.06) + '"></div>');
+      out.push('<div class="skel-row">' + cells.join('') + '</div>');
+    }
+    document.getElementById('skel').innerHTML = out.join('');
+  }
+
+  document.querySelectorAll('.wf-btns [data-state]').forEach(function (b) {
+    b.addEventListener('click', function () { setState(b.dataset.state); });
+  });
+  document.getElementById('btn-reload').addEventListener('click', function () {
+    setState('loading');
+    setTimeout(function () { setState('ready'); }, 1100);
+  });
+  document.getElementById('btn-retry').addEventListener('click', function () {
+    document.getElementById('sync-banner').hidden = true;
+  });
+
+  // ── 표시 기간 ────────────────────────────────────────
+  document.querySelectorAll('.seg [data-days]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.seg [data-days]').forEach(function (x) {
+        x.setAttribute('aria-pressed', String(x === b));
+      });
+      state.days = +b.dataset.days;
+      state.sel = null; panel.hidden = true;
+      build(state.days); render();
+      setState('ready');
+    });
+  });
+
+  // ── SSE 유입 시뮬레이션 ──────────────────────────────
+  document.getElementById('btn-sse').addEventListener('click', function () {
+    setState('ready');
+    var tries = 0, placed = false;
+    while (tries++ < 40 && !placed) {
+      var u = UNITS[Math.floor(Math.random() * UNITS.length)];
+      var st = Math.floor(Math.random() * (state.days - 3));
+      var nights = 1 + Math.floor(Math.random() * 3);
+      var ok = true;
+      for (var k = st; k < st + nights; k++)
+        if (!state.grid[u.id][k] || state.grid[u.id][k].avail <= 0 ||
+            state.grid[u.id][k].stopSell) ok = false;
+      if (!ok) continue;
+      var ch = CH_KEYS[Math.floor(Math.random() * CH_KEYS.length)];
+      state.res.push({
+        id: Date.now() % 100000, unitId: u.id, start: st, nights: nights,
+        guest: NAMES[Math.floor(Math.random() * NAMES.length)],
+        channel: ch, status: 'CONFIRMED',
+        amount: state.grid[u.id][st].price * nights, isNew: true
+      });
+      for (var k2 = st; k2 < st + nights; k2++) state.grid[u.id][k2].avail -= 1;
+      placed = true;
+    }
+    render();
+    var live = document.querySelector('.live');
+    live.lastChild.textContent = ' 실시간 연결됨 · 방금 예약 1건 반영';
+  });
+
+  window.addEventListener('resize', renderBars);
+
+  build(state.days);
+  render();
+  setState('ready');
+})();
+</script>
+</body>
+</html>
