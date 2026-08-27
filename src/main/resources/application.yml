@@ -48,6 +48,10 @@ staysync:
       # 리프레시 토큰 쿠키의 Secure 속성. 운영 기본값은 켜 둔다.
       # local 프로파일만 끈다. HTTPS 가 아니면 브라우저가 쿠키를 저장하지 않는다.
       secure: true
+    crypto:
+      # 게스트 연락처 암호화 키. JWT_SECRET 과 같이 저장소에 두지 않는다.
+      # 값이 없으면 기동에 실패한다. local 프로파일만 개발용 고정값을 덮어쓴다.
+      master-key: ${GUEST_DATA_KEY:}
   ical:
     poll-interval-minutes: 15
     shrink-guard-ratio: 0.5      # 이벤트 수가 직전의 절반 이하로 줄면 취소 처리를 보류

@@ -111,6 +111,27 @@ public class Reservation {
         return r;
     }
 
+    /**
+     * 수기 예약. 전화로 받은 예약 등을 직접 등록한다.
+     *
+     * <p>채널 예약과 달리 바로 확정으로 만든다. 운영자가 이미 성사시킨 건이라 결제를
+     * 기다리는 HOLD 단계가 없다.
+     *
+     * <p>{@code channelBookingId} 를 비워 둔다. {@code uq_channel_booking} 유니크 제약이
+     * 걸려 있지만 PostgreSQL 은 NULL 을 서로 다른 값으로 보므로 수기 예약이 여러 건이어도
+     * 충돌하지 않는다.
+     */
+    public static Reservation manual(Long propertyId, Long unitId, StayPeriod period,
+                                     String confirmationCode, BigDecimal totalAmount,
+                                     short adults, short children) {
+        Reservation r = new Reservation(propertyId, unitId, period,
+                "DIRECT", confirmationCode, ReservationStatus.CONFIRMED);
+        r.totalAmount = totalAmount;
+        r.adults = adults;
+        r.children = children;
+        return r;
+    }
+
     public Long getId() {
         return id;
     }
@@ -199,6 +220,72 @@ public class Reservation {
         }
         this.status = ReservationStatus.EXPIRED;
         touch();
+    }
+
+    /**
+     * 노쇼 처리.
+     *
+     * <p><b>재고를 되돌리지 않는다.</b> 방은 비었지만 요금은 받으므로 {@code booked} 를
+     * 그대로 둔다. 리포트의 매출 집계와도 이 편이 맞는다. 작업지시 02 의 5절 3번.
+     */
+    public void markNoShow() {
+        if (status != ReservationStatus.CONFIRMED) {
+            throw new IllegalReservationTransition(status, ReservationStatus.NO_SHOW);
+        }
+        this.status = ReservationStatus.NO_SHOW;
+        touch();
+    }
+
+    /**
+     * 숙박 기간과 인원을 바꾼다.
+     *
+     * <p>재고 이동은 이 메서드가 하지 않는다. 옛 기간을 되돌리고 새 기간을 잡는 일은
+     * 락과 트랜잭션이 필요해 엔티티 바깥({@code BookingService})의 일이다. 여기서는
+     * 바꿀 수 있는 상태인지만 판단하고 값을 갈아 끼운다.
+     */
+    public void changeStay(StayPeriod newPeriod, short newAdults, short newChildren) {
+        if (!isActive()) {
+            // 취소·만료·체크아웃된 예약의 날짜를 바꾸는 것은 의미가 없다.
+            throw new IllegalReservationTransition(status, status);
+        }
+        this.period = newPeriod;
+        this.adults = newAdults;
+        this.children = newChildren;
+        touch();
+    }
+
+    /** 게스트를 연결한다. 수기 등록에서 게스트를 먼저 만든 뒤 부른다. */
+    public void assignGuest(Long guestId) {
+        this.guestId = guestId;
+    }
+
+    public Long getGuestId() {
+        return guestId;
+    }
+
+    public short getAdults() {
+        return adults;
+    }
+
+    public short getChildren() {
+        return children;
+    }
+
+    public BigDecimal getChannelCommission() {
+        return channelCommission;
+    }
+
+    /** 데이터베이스가 계산한 값. 저장 직후에는 비어 있을 수 있다. */
+    public BigDecimal getNetAmount() {
+        return netAmount;
+    }
+
+    public OffsetDateTime getHoldExpiresAt() {
+        return holdExpiresAt;
+    }
+
+    public OffsetDateTime getCreatedAt() {
+        return createdAt;
     }
 
     /**
