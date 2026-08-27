@@ -120,6 +120,14 @@ tasks.named('test') {
     systemProperty 'file.encoding', 'UTF-8'
     systemProperty 'stdout.encoding', 'UTF-8'
     systemProperty 'stderr.encoding', 'UTF-8'
+    // Outbox 릴레이의 주기 실행을 테스트 내내 멈춘다.
+    //
+    // @EnableScheduling 이 켜져 있어 테스트 컨텍스트에서도 1초마다 돈다. 문제는 로그
+    // 검증이다. Logback 로거는 JVM 전역이라 한 컨텍스트의 릴레이가 남긴 경고가 다른
+    // 테스트의 appender 에 잡힌다. 예약 테스트들이 이벤트를 대량으로 만들면 그쪽 릴레이가
+    // 진짜로 상한에 닿아 경고를 남기고, 그게 OutboxRelayTest 의 "경고가 없어야 한다"를
+    // 깨뜨린다. 테스트 클래스마다 속성을 거는 대신 여기서 한 번에 끈다.
+    systemProperty 'staysync.outbox.relay-interval-ms', '3600000'
     // 동시성 테스트는 시간이 걸리므로 기본 실행에 포함하되 로그를 남긴다.
     testLogging { events 'passed', 'skipped', 'failed' }
 }

@@ -29,6 +29,11 @@ import org.springframework.test.context.ActiveProfiles;
  * <p>발행 구현을 테스트용으로 갈아끼워 성공과 실패를 마음대로 만든다. 실제 발행 대상이
  * 아직 없으므로({@code LoggingDomainEventPublisher}) 이 방법 말고는 실패 경로를
  * 만들 수가 없다.
+ *
+ * <p>로그를 검증하려면 주기 실행이 멈춰 있어야 한다. Logback 로거는 JVM 전역이라
+ * <b>다른 스프링 컨텍스트에서 도는 릴레이가 남긴 로그도 여기 appender 에 잡힌다.</b>
+ * 그래서 이 클래스만이 아니라 모든 테스트 컨텍스트에서 꺼야 하며, build.gradle 의
+ * test 태스크가 시스템 속성으로 일괄 적용한다.
  */
 @SpringBootTest(properties = {
         // 포트와 디렉터리를 따로 쓴다. 아래 @TestConfiguration 이 컨텍스트 캐시 키를
@@ -36,10 +41,7 @@ import org.springframework.test.context.ActiveProfiles;
         // 뜬다. 디렉터리가 같으면 뒤에 뜨는 쪽의 initdb 가 실패한다.
         // ApiTestBase 가 15434 를 쓰는 것과 같은 이유다.
         "staysync.embedded-postgres.port=15435",
-        "staysync.embedded-postgres.data-directory=.localdb-relay",
-        // 스케줄러를 사실상 끈다. 켜 두면 1초마다 도는 릴레이가 이 테스트가 직접 부르는
-        // relayPending() 과 같은 이벤트를 두고 경쟁해 재시도 횟수와 로그 건수가 어긋난다.
-        "staysync.outbox.relay-interval-ms=3600000"
+        "staysync.embedded-postgres.data-directory=.localdb-relay"
 })
 @ActiveProfiles("local")
 class OutboxRelayTest {
