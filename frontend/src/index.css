@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/*
+ * 색과 치수는 docs/와이어프레임-01-통합캘린더.html 에서 그대로 가져왔다.
+ * 와이어프레임이 화면 명세이므로 값을 다시 정하지 않는다.
+ */
+@theme {
+  --color-ink: #1c2733;
+  --color-sand: #e8e4dc;
+  --color-clay: #c0654a;
+  --color-sage: #7e9184;
+  --color-paper: #ffffff;
+  --color-faint: #f4f2ee;
+  --color-body: #4a5560;
+  --color-muted: #6e7781;
+  --color-rule: #e2ded7;
+  --color-rule-strong: #cdc8bf;
+  --color-warn: #b4472c;
+}
+
+:root {
+  /* 그리드 치수. 8주차의 가상 스크롤이 이 값을 그대로 쓴다. */
+  --day-w: 66px;
+  --left-w: 216px;
+  --row-h: 58px;
+  --head-h: 58px;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-faint);
+  color: var(--color-body);
+  font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
