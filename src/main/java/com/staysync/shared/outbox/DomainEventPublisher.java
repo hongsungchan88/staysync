@@ -4,7 +4,7 @@ package com.staysync.shared.outbox;
  * 커밋된 이벤트를 실제로 내보내는 곳. <b>소비자를 붙이는 지점</b>이다.
  *
  * <p>계획서 4.4 는 {@code ChannelSyncWorker}, {@code OpsWorker},
- * {@code MessagingWorker} 를 그리지만 각각 P3, P5, P5 다. 지금 만들면 할 일이 없는
+ * {@code MessagingWorker} 를 그리지만 각각 P3, P4, P4 다. 지금 만들면 할 일이 없는
  * 워커가 된다. 그래서 인터페이스만 두고 로그만 남기는 구현 하나를 붙여 둔다.
  * P3 에서 채널 워커를 만들 때 이 자리에 끼우면 된다.
  *

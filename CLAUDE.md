@@ -250,7 +250,7 @@ SSE다. 이 시점에 계획서 진척 현황과 발표자료를 갱신한다.
 
 **아직 없는 것** — 역할별 인가(`@PreAuthorize`)는 지금도 없다. 인증 여부와 조직
 스코핑까지다. 채널 수신(`BookingIngestService`)은 P3이며 `fromChannel`과
-`applyRevision`은 자리만 있다. 이벤트 소비자 워커 셋도 P3·P5다.
+`applyRevision`은 자리만 있다. 이벤트 소비자 워커 셋도 P3·P4다.
 
 **아직 비어 있는 모듈** — pricing, messaging, ops, payment, ai, analytics.
 각 패키지의 `package-info.java`에 담당 범위와 착수 시점을 적어뒀다.

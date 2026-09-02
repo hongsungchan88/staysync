@@ -65,7 +65,7 @@ public class BookingService {
                         totalAmount, adults, children, guestId));
     }
 
-    /** 임시 점유를 만든다. 직접예약 위젯(P5)이 쓸 경로이며 지금은 서비스로만 열려 있다. */
+    /** 임시 점유를 만든다. 직접예약 위젯(P4)이 쓸 경로이며 지금은 서비스로만 열려 있다. */
     public Reservation hold(Long propertyId, Long unitId, StayPeriod period,
                             BigDecimal totalAmount, Long guestId) {
         OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(holdExpiryMinutes);

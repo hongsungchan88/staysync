@@ -40,7 +40,7 @@ public class GuestRegistrar {
                 cipher.searchHash(normalizedEmail)));
     }
 
-    /** 저장된 연락처를 평문으로 되돌린다. 화면 마스킹과 조회 기록은 P5 에서 본다. */
+    /** 저장된 연락처를 평문으로 되돌린다. 화면 마스킹과 조회 기록은 P4 에서 본다. */
     @Transactional(readOnly = true)
     public String revealPhone(Guest guest) {
         return cipher.decrypt(guest.getPhoneEnc());

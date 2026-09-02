@@ -50,7 +50,7 @@ public class AuthService {
      * 가입. 조직 하나와 OWNER 한 명이 함께 생긴다.
      *
      * <p>개인 호스트가 대상이라 조직을 따로 만드는 절차를 두지 않는다. 매니저나 청소
-     * 담당자를 초대하는 기능은 P5 다.
+     * 담당자를 초대하는 기능은 P4 다.
      */
     @Transactional
     public TokenPair signup(String email, String rawPassword, String displayName, String orgName,
