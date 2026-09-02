@@ -1,8 +1,11 @@
 /**
- * 요금 캘린더와 판매 제약, 요금 규칙 엔진을 다룬다. P2 9주차에 구현한다.
+ * 요금 캘린더와 판매 제약, 요금 규칙 엔진을 다룬다.
  *
- * <p>아직 비어 있는 모듈이다. 이 파일은 Spring Modulith 가 모듈 경계를 인식하도록
- * 자리만 잡아 둔 것이다. 다른 모듈에서 이 패키지의 하위 패키지를 직접 참조하면
- * ModularityTest 가 실패한다.
+ * <p>P2 7주차에 <b>읽기만</b> 만들었다. 캘린더 화면이 요금을 보여줘야 해서 필요했다.
+ * 바깥에 공개하는 것은 {@link com.staysync.pricing.RateCalendarView} 와
+ * {@link com.staysync.pricing.DayRate} 뿐이며, {@code pricing.domain} 아래의 엔티티는
+ * 모듈 내부 구현이다.
+ *
+ * <p>요금·제약 일괄 편집과 규칙 엔진은 9주차다.
  */
 package com.staysync.pricing;

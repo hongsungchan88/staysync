@@ -28,8 +28,14 @@ Java 21 · Spring Boot 3.5.4 · Spring Modulith 1.3 · PostgreSQL 16 · Flyway �
 | `local` (기본) | 내장 PostgreSQL 16 (zonky embedded-postgres) | JVM 내부 | 메모리 코사인 | 불필요 |
 | `docker` | PostgreSQL 16 + pgvector + Redis | Redis | pgvector HNSW | 필요 |
 
-`local`은 `clean-on-start: true`라 기동할 때마다 DB를 새로 만든다. 스키마가 자주 바뀌는 지금은
-이게 맞다. Flyway 체크섬 오류를 만날 일이 없다. P2 무렵 스키마가 안정되면 끈다.
+`local`의 `clean-on-start`는 **P2 7주차에 껐다.** 프론트엔드를 붙이는 동안 기동할 때마다
+계정이 사라지면 매번 회원가입부터 다시 해야 한다. 데이터가 재기동을 넘어 유지된다.
+
+그래서 **Flyway 체크섬 관리가 시작됐다.** 이미 적용된 마이그레이션을 고치면 기동이 막힌다.
+디렉터리가 어중간해지면 `./gradlew resetLocalDb`로 지운다. 이 태스크가 이제 실제로 쓰인다.
+
+테스트는 이 설정을 쓰지 않는다. `build.gradle`의 test 태스크가 `clean-on-start`를 `true`로
+덮어써 매번 빈 데이터베이스에서 시작한다. 앱과 테스트의 요구가 반대이기 때문이다.
 
 H2를 쓰지 않는 이유는 마이그레이션을 두 벌 유지해야 하고, `FOR UPDATE SKIP LOCKED`와
 생성 컬럼, 부분 인덱스가 동작하지 않아 정작 검증할 것을 검증하지 못하기 때문이다.
@@ -196,8 +202,8 @@ SHA-256 해시로 저장하는 난수(14일)다. 갱신할 때마다 회전시�
 
 - 모듈 경계를 넘는 직접 호출. `ModularityTest`가 실패한다.
 - `ddl-auto`를 `update`나 `create`로 바꾸기. 스키마는 Flyway가 관리한다.
-- 이미 적용된 마이그레이션 파일 수정. 새 버전을 추가한다.
-  (단 스키마가 안정되기 전인 지금은 V1 수정 + `clean-on-start`로 처리 중이다.)
+- **이미 적용된 마이그레이션 파일 수정.** 새 버전을 추가한다. P2 7주차에
+  `clean-on-start`를 끄면서 V1을 고쳐도 되던 예외가 사라졌다.
 - LLM에게 금액을 계산시키기. 요금은 규칙 엔진이 산출하고 LLM은 설명만 한다.
 - AI 코파일럿에 쓰기 도구 제공. 조회와 제안까지만 한다.
 - 스크래핑이나 비공개 API 역공학. 학술 프로젝트로서 지키기로 한 선이다.

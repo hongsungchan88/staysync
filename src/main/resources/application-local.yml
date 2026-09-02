@@ -7,11 +7,15 @@ staysync:
     enabled: true
     port: 15432
     data-directory: .localdb     # .gitignore 에 포함되어 있다
-    # 기동할 때마다 데이터 디렉터리를 새로 만든다.
-    # 스키마가 자주 바뀌는 지금은 켜 두는 편이 편하다. 마이그레이션이 바뀌어도
-    # Flyway 체크섬 오류가 나지 않고 resetLocalDb 를 부를 일도 없다.
-    # 스키마가 안정되고 시드 데이터를 유지하고 싶어지면(P2 무렵) false 로 바꾼다.
-    clean-on-start: true
+    # P2 7주차에 껐다. 프론트엔드를 붙이는 동안 기동할 때마다 계정이 사라지면
+    # 매번 회원가입부터 다시 해야 한다.
+    #
+    # 끈 순간부터 Flyway 체크섬 관리가 시작된다. 스키마를 바꿔야 하면 V1 을 고치지 말고
+    # 새 버전을 더한다. 디렉터리가 어중간해지면 ./gradlew resetLocalDb 로 지운다.
+    #
+    # 테스트는 이 값을 쓰지 않는다. build.gradle 의 test 태스크가 true 로 덮어써
+    # 매번 빈 데이터베이스에서 시작한다.
+    clean-on-start: false
   lock:
     type: local                  # JVM 내부 락 (단일 인스턴스 전제)
   security:
@@ -20,10 +24,9 @@ staysync:
       # 고정값이라 재기동해도 액세스 토큰이 그대로 유효하다. 매번 난수를 만들면
       # 앱을 띄울 때마다 다시 로그인해야 해서 개발이 번거로워진다.
       #
-      # 다만 위 clean-on-start 가 켜져 있어 기동할 때마다 데이터베이스가 비워진다.
-      # refresh_token 행과 user_account 행이 함께 사라지므로, 살아남은 액세스 토큰이
-      # 가리키는 사용자는 더 이상 존재하지 않는다. 재기동 후에는 다시 로그인해야 한다.
-      # local 에서만 그렇고, docker 나 운영에서는 토큰이 재기동을 넘어 유지된다.
+      # P2 7주차에 clean-on-start 를 끄면서 데이터도 남게 됐다. 키가 고정이고
+      # user_account 와 refresh_token 행도 그대로이므로 재기동 후에도 로그인 상태가
+      # 이어진다. 프론트엔드를 붙이는 동안 이게 필요했다.
       secret: local-development-only-secret-key-do-not-use-in-production
     cookie:
       # HTTPS 가 아니라 끈다. 켜 두면 브라우저가 리프레시 토큰 쿠키를 저장하지 않아
@@ -32,7 +35,8 @@ staysync:
     crypto:
       # 개발 전용 고정 키(32바이트 Base64). 공개되어 있다는 전제로만 쓴다.
       # 이 값이 바뀌면 이미 저장된 암호문을 복호화할 수 없고 검색 해시도 달라진다.
-      # local 은 clean-on-start 로 매번 데이터가 비워지므로 문제가 되지 않는다.
+      # clean-on-start 를 끈 뒤로는 데이터가 남으므로, 이 키를 바꾸면 .localdb 를
+      # resetLocalDb 로 지워야 한다.
       master-key: c3RheXN5bmMtbG9jYWwtZGV2LW9ubHkta2V5LTMyYiE=
   vector:
     type: in-memory              # pgvector 없이 메모리에서 코사인 유사도 계산
