@@ -1434,34 +1434,33 @@ H2 같은 다른 데이터베이스를 로컬용으로 쓰지 않은 이유가 �
 
 ```
 staysync/
+├── build.gradle
 ├── docker-compose.yml
-├── backend/
-│   ├── build.gradle
-│   └── src/main/java/com/staysync/
-│       ├── StaySyncApplication.java
-│       ├── shared/
-│       │   ├── event/
-│       │   ├── lock/
-│       │   ├── audit/
-│       │   └── error/
-│       ├── identity/
-│       ├── property/
-│       ├── booking/
-│       │   ├── domain/
-│       │   ├── application/
-│       │   ├── infra/
-│       │   └── web/
-│       ├── pricing/
-│       ├── channel/
-│       │   ├── port/
-│       │   ├── adapter/{ical,channex,mock}/
-│       │   ├── sync/
-│       │   └── reconcile/
-│       ├── messaging/
-│       ├── ops/
-│       ├── payment/
-│       ├── ai/{rag,pricing,guardrail,copilot}/
-│       └── analytics/
+├── src/main/java/com/staysync/
+│   ├── StaySyncApplication.java
+│   ├── shared/
+│   │   ├── outbox/
+│   │   ├── lock/
+│   │   ├── audit/
+│   │   ├── crypto/
+│   │   ├── security/
+│   │   └── error/
+│   ├── identity/
+│   ├── property/
+│   ├── booking/
+│   │   ├── domain/
+│   │   └── web/
+│   ├── pricing/
+│   ├── channel/
+│   │   ├── port/
+│   │   ├── adapter/{ical,channex,mock}/
+│   │   ├── sync/
+│   │   └── reconcile/
+│   ├── messaging/
+│   ├── ops/
+│   ├── payment/
+│   ├── ai/{rag,pricing,guardrail,copilot}/
+│   └── analytics/
 ├── frontend/
 │   └── src/
 │       ├── features/{calendar,reservations,inbox,rates,channels,ops,reports}
@@ -1474,6 +1473,10 @@ staysync/
     ├── api/
     └── erd/
 ```
+
+백엔드를 `backend/` 하위로 내리지 않고 `staysync/src/` 에 그대로 둔다. 옮기면 Gradle 설정과 경로와 CI가 전부 따라 움직이는데, 프론트엔드는 `frontend/` 를 그 옆에 두는 것만으로 분리된다. P2 7주차에 확정했고 근거는 `docs/작업지시-04-캘린더.md` 5절에 있다.
+
+모듈 안의 하위 패키지는 필요할 때 나눈다. 계층을 미리 파 두면 파일 하나짜리 디렉터리가 남는다. `booking` 은 엔티티가 여럿이라 `domain/` 과 `web/` 을 나눴고, 나머지는 최상위에 평평하게 둔다.
 
 ---
 
