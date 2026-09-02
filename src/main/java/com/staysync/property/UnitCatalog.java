@@ -21,4 +21,13 @@ public interface UnitCatalog {
 
     /** 판매 단위의 표시 이름. */
     String nameOf(Long unitId);
+
+    /**
+     * 숙소의 판매 단위를 화면 정렬 순서로 돌려준다.
+     *
+     * <p>캘린더 그리드가 쓴다. {@link #unitIdsOf} 로 식별자만 받고 이름과 수량을 다시
+     * 물으면 판매 단위 수만큼 왕복이 늘어난다. 그리드는 한 번에 전부 필요하므로
+     * 요약을 통째로 넘긴다.
+     */
+    List<UnitSummary> summariesOf(Long propertyId);
 }
