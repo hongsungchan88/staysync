@@ -12,8 +12,9 @@ import java.time.OffsetDateTime;
  * Booking.com 과 Channex 가 ARI 전송의 최소 단위로 요금제를 요구하기 때문이며,
  * 그래서 판매 단위 하나에 기본 요금제 하나가 자동으로 붙는다.
  *
- * <p>P2 7주차에는 <b>읽기만</b> 한다. 요금 편집은 9주차다. 그래서 상태를 바꾸는
- * 메서드를 두지 않았다. 필요해지는 시점에 의미 있는 이름으로 더한다.
+ * <p>P2 9주차에 쓰기가 붙었다. setter 를 두지 않고 {@link #edit} 하나로 받는다 —
+ * 일괄 편집이 요금·최소숙박·체크인금지를 늘 함께 정하므로, 필드마다 열어 두면
+ * 일부만 바뀐 중간 상태를 만들 수 있는 경로가 생긴다.
  */
 @Entity
 @Table(name = "rate_calendar")
@@ -87,5 +88,26 @@ public class RateCalendar {
 
     public boolean isStopSell() {
         return stopSell;
+    }
+
+    public boolean isClosedToArrival() {
+        return closedToArrival;
+    }
+
+    /**
+     * 일괄 편집이 셀을 이 값으로 만든다.
+     *
+     * <p>{@code source} 는 {@code MANUAL} 그대로다. 규칙이 자동으로 넣은 값과 사람이
+     * 넣은 값을 구분하는 컬럼인데, 지금 경로는 사람이 화면에서 정한 것이다. 규칙 엔진이
+     * 자동 적용되는 것은 P5 이고 그때 {@code RULE} 이 쓰인다.
+     */
+    public void edit(BigDecimal newPrice, short newMinStay, boolean newClosedToArrival) {
+        if (newPrice == null || newPrice.signum() < 0) {
+            throw new IllegalArgumentException("요금은 0 이상이어야 합니다. price=" + newPrice);
+        }
+        this.price = newPrice;
+        this.minStay = newMinStay;
+        this.closedToArrival = newClosedToArrival;
+        this.updatedAt = OffsetDateTime.now();
     }
 }

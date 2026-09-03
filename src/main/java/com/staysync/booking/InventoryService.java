@@ -85,6 +85,26 @@ public class InventoryService {
                 unitId, period.checkIn(), period.checkOut());
     }
 
+    /**
+     * 판매중지를 켜고 끈다. 요금·제약 일괄 편집이 부른다.
+     *
+     * <p>수량을 깎지는 않지만 원장 행을 바꾸는 일이므로 여기를 거친다. 프론트나
+     * 조립부가 원장에 직접 쓰면 락과 {@code FOR UPDATE} 를 우회하게 되고, 방어 계층에
+     * 예외가 하나 생기면 다음에도 생긴다.
+     *
+     * <p>부르는 쪽이 이미 같은 판매 단위의 락을 쥐고 있어도 된다.
+     * {@code ReentrantLock} 이라 같은 스레드에서는 재진입이 되며, 실제로 일괄 편집이
+     * 그렇게 부른다.
+     */
+    public void changeStopSell(Long unitId, java.util.List<java.time.LocalDate> dates,
+                               boolean stopSell) {
+        if (dates.isEmpty()) {
+            return;
+        }
+        unitLock.runExclusively(unitId, LOCK_WAIT,
+                () -> writer.applyStopSell(unitId, dates, stopSell));
+    }
+
     /** 지정 기간에 판매 가능한 최소 수량. 0 이면 그 기간은 팔 수 없다. */
     @Transactional(readOnly = true)
     public int availableFor(Long unitId, StayPeriod period) {
