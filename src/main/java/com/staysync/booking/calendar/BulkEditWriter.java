@@ -12,6 +12,7 @@ import com.staysync.pricing.RateRule;
 import com.staysync.property.UnitCatalog;
 import com.staysync.property.UnitSummary;
 import com.staysync.shared.audit.AuditRecorder;
+import com.staysync.shared.outbox.OutboxRecorder;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -43,25 +44,31 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class BulkEditWriter {
 
-    /** 감사 로그의 대상 종류. 예약이 {@code RESERVATION} 인 것과 같은 자리다. */
-    static final String AGGREGATE_TYPE = "RATE_CALENDAR";
+    /** 감사 로그와 이벤트의 대상 종류. 예약이 {@code RESERVATION} 인 것과 같은 자리다. */
+    public static final String AGGREGATE_TYPE = "RATE_CALENDAR";
+
+    /** 요금·제약이 바뀌었다는 사건. 실시간 갱신이 듣고, P3 에서 채널 전파가 듣는다. */
+    public static final String BULK_EDITED = "RATE_BULK_EDITED";
 
     private final UnitCatalog unitCatalog;
     private final RateCalendarView rateView;
     private final RateCalendarEditor rateEditor;
     private final InventoryService inventoryService;
     private final AuditRecorder audit;
+    private final OutboxRecorder outbox;
 
     BulkEditWriter(UnitCatalog unitCatalog,
                    RateCalendarView rateView,
                    RateCalendarEditor rateEditor,
                    InventoryService inventoryService,
-                   AuditRecorder audit) {
+                   AuditRecorder audit,
+                   OutboxRecorder outbox) {
         this.unitCatalog = unitCatalog;
         this.rateView = rateView;
         this.rateEditor = rateEditor;
         this.inventoryService = inventoryService;
         this.audit = audit;
+        this.outbox = outbox;
     }
 
     /**
@@ -100,6 +107,7 @@ class BulkEditWriter {
         }
 
         recordAudit(propertyId, request, result);
+        recordEvent(propertyId, result);
         return result;
     }
 
@@ -272,6 +280,22 @@ class BulkEditWriter {
 
         // 전 값은 담지 않는다. 셀 300개의 이전 요금을 한 줄에 넣으면 그건 요약이 아니다.
         audit.record(AGGREGATE_TYPE, propertyId, "RATE_BULK_EDIT", null, after);
+    }
+
+    /**
+     * 요금·제약이 바뀌었다는 사건을 남긴다. 같은 트랜잭션이다.
+     *
+     * <p>지금 듣는 것은 실시간 갱신이고, P3 에서 채널 전파가 옆에 붙는다. 페이로드에는
+     * <b>식별자와 범위만</b> 담는다 — 화면은 이걸 받고 캘린더를 다시 조회하지 값을
+     * 이벤트에서 읽지 않는다. 바뀐 셀을 전부 실으면 30일 × 10단위가 페이로드 하나에
+     * 들어간다.
+     */
+    private void recordEvent(Long propertyId, BulkEdit.Result result) {
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("propertyId", propertyId);
+        payload.put("cellCount", result.cellCount());
+        payload.put("changed", result.changed());
+        outbox.record(AGGREGATE_TYPE, propertyId, BULK_EDITED, payload);
     }
 
     private static List<String> changedFields(BulkEdit.Request request) {

@@ -4,6 +4,7 @@ import { fetchCalendar, fetchProperties } from '@/api/calendar';
 import { CalendarGrid } from './CalendarGrid';
 import { SelectionPanel } from './SelectionPanel';
 import { useReservationMove, type MoveRequest } from './useReservationMove';
+import { useCalendarStream } from './useCalendarStream';
 import type { SelectionRect } from './selection';
 import { CONFLICT_COLOR, LEGEND, channelColor } from './channels';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,9 @@ export function CalendarPage() {
     queryFn: () => fetchCalendar(propertyId!, from, to),
     enabled: propertyId !== null,
   });
+
+  // 다른 채널의 예약이나 다른 탭의 편집이 이 화면에 즉시 들어온다(계획서 8.2).
+  useCalendarStream(calendarKey, propertyId);
 
   const { move } = useReservationMove(calendarKey, setRejection);
   const onMove = useCallback(

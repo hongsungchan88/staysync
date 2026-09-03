@@ -5,14 +5,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * 소비자가 붙기 전까지 쓰는 기본 구현. 로그만 남긴다.
+ * 발행된 이벤트의 흔적을 남긴다. 소비자 중 하나다.
  *
- * <p>P3 에서 채널 워커를 만들 때는 {@link DomainEventPublisher} 를 구현한 빈에
- * {@code @Primary} 를 붙여 이 구현을 밀어낸다.
+ * <p>P2 9주차에 실시간 갱신이 붙기 전까지는 유일한 소비자였고 "소비자 없음"을 적었다.
+ * 이제는 {@link DomainEventPublishers} 가 이 구현과 실제 소비자들에게 함께 돌린다.
  *
- * <p>{@code @ConditionalOnMissingBean} 을 쓰지 않는다. 그 애너테이션은 자동 구성의
- * {@code @Bean} 메서드에서만 제대로 평가되고, 스캔되는 {@code @Component} 에 붙이면
- * 빈 등록 순서에 따라 조건이 먼저 판정되어 아무 구현도 남지 않을 수 있다.
+ * <p>남겨 둔 이유는 <b>이벤트가 실제로 나갔는지 확인할 자리</b>가 필요하기 때문이다.
+ * 화면이 갱신되지 않을 때, 이벤트가 발행되지 않은 것인지 소비자가 못 받은 것인지를
+ * 이 로그로 가른다. 시끄러워지면 레벨을 낮추면 되고 지우지는 말 것.
  */
 @Component
 class LoggingDomainEventPublisher implements DomainEventPublisher {
@@ -21,7 +21,7 @@ class LoggingDomainEventPublisher implements DomainEventPublisher {
 
     @Override
     public void publish(OutboxEvent event) {
-        log.info("이벤트 발행(소비자 없음). type={} aggregate={}#{} payload={}",
+        log.info("이벤트 발행. type={} aggregate={}#{} payload={}",
                 event.getEventType(), event.getAggregateType(), event.getAggregateId(),
                 event.getPayload());
     }
