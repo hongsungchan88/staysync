@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ComponentProps } from 'react';
 import { CalendarGrid } from './CalendarGrid';
 import { DAY_W, HEAD_H, LANE_H, LEFT_W, ROW_PAD, TEXT_H, layoutGrid } from './layout';
 import type { CalendarGrid as GridData, ReservationBar } from '@/api/schemas';
+import type { SelectionRect } from './selection';
+import type { MoveRequest } from './useReservationMove';
 import { addDays } from '@/lib/dates';
 
 /**
@@ -76,6 +79,13 @@ function grid(
   };
 }
 
+/** 선택과 이동 콜백은 이 파일의 관심사가 아니다. 필요한 테스트만 따로 넘긴다. */
+function renderGrid(data: GridData, props: Partial<ComponentProps<typeof CalendarGrid>> = {}) {
+  return render(
+    <CalendarGrid data={data} onSelect={() => {}} onMove={() => {}} {...props} />,
+  );
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -85,7 +95,7 @@ describe('가상 스크롤', () => {
     stubViewport();
     const data = grid(30, 90, (u) => [bar(u * 3 + 1, u + 1, u % 60, 3)]);
 
-    const { container } = render(<CalendarGrid data={data} />);
+    const { container } = renderGrid(data);
 
     // 7주차는 같은 데이터로 11,229개였다. 화면에 들어가는 셀은 세로 10행 × 가로 12칸
     // 남짓이라 노드가 자릿수로 줄어야 한다. 여유를 두되 자릿수는 지킨다.
@@ -103,7 +113,7 @@ describe('가상 스크롤', () => {
     const data = grid(30, 90, (u) => [bar(u + 1, u + 1, 0, 2)]);
     const layouts = layoutGrid(data);
 
-    const { container } = render(<CalendarGrid data={data} />);
+    const { container } = renderGrid(data);
 
     // 여백으로 밀어 두었으므로 안쪽 내용의 크기가 전체 데이터 기준이어야 한다.
     // 여기가 틀리면 스크롤 막대 길이가 실제 데이터와 어긋난다.
@@ -132,7 +142,7 @@ describe('가상 스크롤', () => {
     // 전제 확인. 높이가 전부 같으면 이 테스트는 아무것도 잡지 못한다.
     expect(new Set(heights).size).toBeGreaterThan(1);
 
-    render(<CalendarGrid data={data} />);
+    renderGrid(data);
     const scroller = screen.getByTestId('calendar-grid');
 
     // 여러 지점에서 확인한다. 한 곳만 보면 우연히 맞을 수 있다.
@@ -163,7 +173,7 @@ describe('가상 스크롤', () => {
     stubViewport();
     const data = grid(5, 90);
 
-    render(<CalendarGrid data={data} />);
+    renderGrid(data);
     const scroller = screen.getByTestId('calendar-grid');
 
     Object.defineProperty(scroller, 'scrollLeft', { value: 2000, configurable: true });
@@ -187,7 +197,7 @@ describe('가상 스크롤', () => {
       bar(4, 1, 2, 3),
     ]);
 
-    render(<CalendarGrid data={data} />);
+    renderGrid(data);
 
     const fold = screen.getByTestId(`folded-1-${addDays(FROM, 2)}`);
     expect(fold).toHaveTextContent('+1');
@@ -197,5 +207,124 @@ describe('가상 스크롤', () => {
 
     fireEvent.click(fold);
     expect(screen.getByTestId(`folded-list-1-${addDays(FROM, 2)}`)).toHaveTextContent('게스트4');
+  });
+});
+
+/**
+ * 완료 조건 4·8·9. 그리드 위의 조작.
+ *
+ * 좌표 계산 자체는 `selection.test.ts` 가 따로 확인한다. 여기서는 그 계산이 실제 이벤트에
+ * 이어져 있는지, 그리고 옮기면 안 되는 막대가 잡히지 않는지를 본다.
+ */
+describe('그리드 조작', () => {
+  /** jsdom 은 포인터 캡처를 구현하지 않는다. 선택은 캡처를 잡고 시작한다. */
+  function stubPointerCapture() {
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+    Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+  }
+
+  it('여러 판매 단위에 걸쳐 기간을 고를 수 있다', () => {
+    stubViewport();
+    stubPointerCapture();
+    const data = grid(5, 30);
+
+    const selections: (SelectionRect | null)[] = [];
+    renderGrid(data, { onSelect: (rect) => selections.push(rect) });
+    const scroller = screen.getByTestId('calendar-grid');
+
+    // jsdom 의 getBoundingClientRect 가 0 이라 clientX/Y 가 곧 컨테이너 기준 좌표다.
+    // 객실 01 의 3일째에서 눌러 객실 03 의 6일째까지 끈다.
+    fireEvent.pointerDown(scroller, {
+      button: 0,
+      pointerId: 1,
+      clientX: LEFT_W + 2 * DAY_W + 5,
+      clientY: HEAD_H + 5,
+    });
+    fireEvent.pointerMove(scroller, {
+      pointerId: 1,
+      clientX: LEFT_W + 5 * DAY_W + 5,
+      clientY: HEAD_H + 2 * 66 + 5,
+    });
+    fireEvent.pointerUp(scroller, { pointerId: 1 });
+
+    // 8.4 의 편집 패널이 적용 대상에 판매 단위를 여러 개 받으므로, 세로로도 걸쳐야 한다.
+    expect(selections.at(-1)).toEqual({ fromUnit: 0, toUnit: 2, fromDate: 2, toDate: 5 });
+
+    // 고른 칸이 화면에도 표시돼야 한다. 패널에만 나오면 어디를 골랐는지 알 수 없다.
+    expect(screen.getByTestId(`cell-2-${addDays(FROM, 3)}`)).toHaveAttribute('data-selected');
+    expect(screen.getByTestId(`cell-4-${addDays(FROM, 3)}`)).not.toHaveAttribute('data-selected');
+  });
+
+  it('막대를 잡으면 기간 선택이 시작되지 않는다', () => {
+    stubViewport();
+    stubPointerCapture();
+    const data = grid(3, 30, (u) => (u === 0 ? [bar(1, 1, 1, 3)] : []));
+
+    const selections: (SelectionRect | null)[] = [];
+    renderGrid(data, { onSelect: (rect) => selections.push(rect) });
+
+    // 같은 포인터 이벤트를 둘이 나눠 갖는다. 막대 위에서 누르면 이동이지 선택이 아니다.
+    fireEvent.pointerDown(screen.getByTestId('bar-1'), {
+      button: 0,
+      pointerId: 1,
+      clientX: LEFT_W + DAY_W,
+      clientY: HEAD_H + 20,
+    });
+
+    expect(selections).toHaveLength(0);
+  });
+
+  it('취소·체크아웃된 예약은 잡히지 않는다', () => {
+    stubViewport();
+    const data = grid(1, 30, () => [
+      // 화면에 들어오는 앞쪽 열에 나란히 둔다. 가로 가상 스크롤 때문에 뒤쪽 날짜의
+      // 막대는 아예 그려지지 않아 이 테스트가 확인하려는 것을 못 본다.
+      { ...bar(1, 1, 0, 1), status: 'CONFIRMED' },
+      { ...bar(2, 1, 2, 1), status: 'HOLD' },
+      { ...bar(3, 1, 4, 1), status: 'CANCELLED' },
+      { ...bar(4, 1, 6, 1), status: 'CHECKED_OUT' },
+      { ...bar(5, 1, 8, 1), status: 'CHECKED_IN' },
+    ]);
+
+    renderGrid(data);
+
+    // 백엔드 Reservation.isActive() 와 같은 집합이다. 잡히기만 하고 놓을 때마다
+    // 거절당하면 왜 안 되는지 알 수 없다.
+    expect(screen.getByTestId('bar-1')).toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-2')).toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-3')).not.toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-4')).not.toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-5')).not.toHaveAttribute('data-movable');
+
+    // 잡히지 않는 막대는 포커스도 받지 않아야 키보드로도 못 옮긴다는 것이 일관된다.
+    expect(screen.getByTestId('bar-3')).not.toHaveAttribute('tabindex');
+    expect(screen.getByTestId('bar-1')).toHaveAttribute('tabindex', '0');
+  });
+
+  it('키보드만으로 막대를 옮길 수 있다', async () => {
+    stubViewport();
+    const data = grid(1, 30, () => [bar(1, 1, 3, 2)]);
+
+    const moves: MoveRequest[] = [];
+    renderGrid(data, { onMove: (request) => moves.push(request) });
+
+    // 드래그로만 되는 조작은 마우스가 없으면 못 쓰는 기능이 된다. dnd-kit 의 키보드
+    // 센서에 칸 너비를 물려 두었으므로 한 번 누르면 하루다.
+    const target = screen.getByTestId('bar-1');
+    target.focus();
+    fireEvent.keyDown(target, { key: ' ', code: 'Space' }); // 잡기
+
+    // 잡은 뒤로는 dnd-kit 이 document 에서 키를 듣는데, 그 등록이 setTimeout 뒤에 일어난다.
+    // 곧바로 방향키를 쏘면 아직 아무도 듣고 있지 않다.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    fireEvent.keyDown(document, { key: 'ArrowRight', code: 'ArrowRight' });
+    fireEvent.keyDown(document, { key: 'ArrowRight', code: 'ArrowRight' });
+    fireEvent.keyDown(document, { key: ' ', code: 'Space' }); // 놓기
+
+    await waitFor(() => expect(moves).toEqual([{ reservationId: 1, dayDelta: 2 }]));
   });
 });

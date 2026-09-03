@@ -261,6 +261,46 @@ class ReservationLifecycleTest {
         assertLedger(f.unitId(), moved, 0, 1);
     }
 
+    /**
+     * 작업지시 05 완료 조건 8 의 서버 쪽.
+     *
+     * <p>화면에서 드래그로 잡히지 않게 막아 두었지만, 그것은 편의이지 방어선이 아니다.
+     * API 는 직접 부를 수 있고 채널 수신 경로(P3)도 이 서비스를 거친다. 옮기면 안 되는
+     * 상태를 여기서 막지 않으면 취소된 예약이 재고를 다시 차지한다.
+     */
+    @Test
+    @DisplayName("취소·체크아웃된 예약은 날짜를 옮길 수 없다")
+    void 끝난_예약은_날짜를_옮길_수_없다() {
+        Fixture f = given("끝난예약", (short) 1);
+
+        StayPeriod cancelledPeriod = period(180, 182);
+        Reservation cancelled = bookingService.registerManual(
+                f.propertyId(), f.unitId(), cancelledPeriod, BigDecimal.valueOf(100000),
+                (short) 2, (short) 0, null);
+        bookingService.cancel(cancelled.getId());
+
+        StayPeriod finishedPeriod = period(190, 192);
+        Reservation checkedOut = bookingService.registerManual(
+                f.propertyId(), f.unitId(), finishedPeriod, BigDecimal.valueOf(100000),
+                (short) 2, (short) 0, null);
+        bookingService.checkIn(checkedOut.getId());
+        bookingService.checkOut(checkedOut.getId());
+
+        assertThatThrownBy(() -> bookingService.changeStay(
+                cancelled.getId(), period(200, 202), (short) 2, (short) 0))
+                .isInstanceOf(IllegalReservationTransition.class);
+        assertThatThrownBy(() -> bookingService.changeStay(
+                checkedOut.getId(), period(210, 212), (short) 2, (short) 0))
+                .isInstanceOf(IllegalReservationTransition.class);
+
+        // 옮기려던 날짜를 차지하지 않아야 한다. 취소된 예약이 재고를 다시 먹으면
+        // 팔 수 있는 방을 못 파는 상태가 조용히 남는다.
+        assertLedger(f.unitId(), period(200, 202), 0, 0);
+        assertLedger(f.unitId(), period(210, 212), 0, 0);
+        // 체크아웃된 예약이 쥐고 있던 자리도 그대로여야 한다.
+        assertLedger(f.unitId(), finishedPeriod, 0, 1);
+    }
+
     @Test
     @DisplayName("겹치는 기간으로 하루 연장할 수 있다")
     void 하루_연장은_재고가_하나여도_된다() {
