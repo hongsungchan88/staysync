@@ -152,7 +152,14 @@ export function CalendarPage() {
           </StateSwitch>
         </main>
 
-        {calendar.data && <SelectionPanel data={calendar.data} rect={selection} />}
+        {calendar.data && propertyId !== null && (
+          <SelectionPanel
+            data={calendar.data}
+            rect={selection}
+            propertyId={propertyId}
+            calendarKey={calendarKey}
+          />
+        )}
       </div>
     </div>
   );

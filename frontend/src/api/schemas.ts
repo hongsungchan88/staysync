@@ -89,3 +89,13 @@ export const calendarGridSchema = z.object({
   reservations: z.array(reservationBarSchema),
 });
 export type CalendarGrid = z.infer<typeof calendarGridSchema>;
+
+/** 일괄 편집 결과. 백엔드 `BulkEdit.Result` 와 짝이다. */
+export const bulkEditResultSchema = z.object({
+  unitCount: z.number(),
+  dayCount: z.number(),
+  cellCount: z.number(),
+  changed: z.array(z.string()),
+  dryRun: z.boolean(),
+});
+export type BulkEditResult = z.infer<typeof bulkEditResultSchema>;

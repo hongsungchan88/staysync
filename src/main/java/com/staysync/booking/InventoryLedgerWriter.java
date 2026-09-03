@@ -48,6 +48,26 @@ class InventoryLedgerWriter {
     }
 
     /**
+     * 판매중지를 켜고 끈다.
+     *
+     * <p>수량을 건드리지 않지만 원장 행을 바꾸는 일이라 {@link InventoryService} 를
+     * 거친다. 락 순서(날짜 오름차순)와 {@code FOR UPDATE} 를 그대로 타야 예약 처리와
+     * 같은 행을 두고 경쟁할 때 어긋나지 않는다.
+     *
+     * <p>날짜가 연속이 아닐 수 있다. 요일 필터가 걸린 일괄 편집이 그렇다. 그래서
+     * {@code StayPeriod} 가 아니라 날짜 목록을 받는다.
+     */
+    @Transactional
+    void applyStopSell(Long unitId, List<LocalDate> dates, boolean stopSell) {
+        List<LocalDate> ascending = dates.stream().sorted().distinct().toList();
+        List<InventoryLedger> rows = loadOrCreate(unitId, ascending);
+        for (InventoryLedger row : rows) {
+            row.changeStopSell(stopSell);
+        }
+        ledgerRepo.saveAll(rows);
+    }
+
+    /**
      * 재고 행을 배타 잠금과 함께 읽는다. 없는 날짜는 그때 만든다.
      *
      * <p>원장을 미리 채워두지 않는 이유는 판매 단위 하나당 1년치 365행 가운데
