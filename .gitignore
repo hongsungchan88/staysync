@@ -32,6 +32,9 @@ src/main/resources/application-secret.yml
 logs/
 *.log
 
+# 도구 로컬 설정 (디자인 훅 등). 저장소 규칙이 아니라 각자 환경의 상태다.
+.impeccable/
+
 # OS
 .DS_Store
 Thumbs.db
