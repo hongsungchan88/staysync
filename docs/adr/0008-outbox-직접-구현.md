@@ -113,7 +113,7 @@ P3 에서 채널 워커를 붙일 때 이 전제를 다시 확인해야 한다.
 의존성은 `build.gradle` 에 주석으로 대기 중이다.
 
 소비자도 만들지 않았다. 계획서 4.4 의 `ChannelSyncWorker`, `OpsWorker`,
-`MessagingWorker` 는 각각 P3, P5, P5 다. 지금 만들면 할 일이 없는 워커가 된다.
+`MessagingWorker` 는 각각 P3, P4, P4 다. 지금 만들면 할 일이 없는 워커가 된다.
 `DomainEventPublisher` 인터페이스로 붙일 자리만 두고 로그만 남기는 구현을 기본으로 둔다.
 
 ## 근거
