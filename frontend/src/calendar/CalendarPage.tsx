@@ -130,7 +130,13 @@ export function CalendarPage() {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <main className="min-h-0 flex-1 p-4">
+        {/*
+          `min-w-0` 이 없으면 가로 가상 스크롤이 통째로 죽는다. flex 항목의 기본
+          `min-width` 는 `auto` 라 안쪽 내용(90일 × 66px = 5,940px)만큼 늘어나고, 그러면
+          스크롤 컨테이너의 `offsetWidth` 가 곧 전체 너비가 돼 "보이는 구간"이 전부가 된다.
+          세로가 멀쩡했던 것은 `min-h-0` 이 이미 있었기 때문이다. 재측정에서 잡혔다.
+        */}
+        <main className="min-h-0 min-w-0 flex-1 p-4">
           <StateSwitch
             isLoading={properties.isLoading || calendar.isLoading}
             error={properties.error ?? calendar.error}
