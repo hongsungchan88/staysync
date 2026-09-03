@@ -70,6 +70,18 @@ export const reservationBarSchema = z.object({
 });
 export type ReservationBar = z.infer<typeof reservationBarSchema>;
 
+/** 예약 단건 응답. 백엔드 `ReservationDtos.ReservationSummary` 와 짝이다. */
+export const reservationSummarySchema = z.object({
+  id: z.number(),
+  propertyId: z.number(),
+  unitId: z.number(),
+  status: z.string(),
+  checkIn: z.string(),
+  checkOut: z.string(),
+  nights: z.number(),
+});
+export type ReservationSummary = z.infer<typeof reservationSummarySchema>;
+
 export const calendarGridSchema = z.object({
   from: z.string(),
   to: z.string(),

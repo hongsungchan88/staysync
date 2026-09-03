@@ -1,19 +1,30 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCalendar, fetchProperties } from '@/api/calendar';
 import { CalendarGrid } from './CalendarGrid';
+import { SelectionPanel } from './SelectionPanel';
+import { useReservationMove, type MoveRequest } from './useReservationMove';
+import type { SelectionRect } from './selection';
 import { CONFLICT_COLOR, LEGEND, channelColor } from './channels';
 import { Button } from '@/components/ui/button';
 import { addDays, monthLabel, toIso } from '@/lib/dates';
 import { logout } from '@/api/auth';
 import { useTokenStore } from '@/auth/tokenStore';
 
-/** 7주차는 기본 30일을 그린다. 기간 선택은 8주차다. */
+/**
+ * 한 화면에 그리는 기간. 7주차와 같은 30일이다.
+ *
+ * 가상 스크롤이 붙어 90일도 감당하지만 기본값은 바꾸지 않았다. 기본 기간을 정하는 것은
+ * 작업지시 05 에 없는 판단이라 임의로 정하지 않는다. 90일로 재려면 측정할 때만 바꾼다
+ * (`docs/측정-02-*.md` 의 재현 방법).
+ */
 const WINDOW_DAYS = 30;
 
 export function CalendarPage() {
   const [from, setFrom] = useState(() => toIso(new Date()));
   const to = useMemo(() => addDays(from, WINDOW_DAYS - 1), [from]);
+  const [selection, setSelection] = useState<SelectionRect | null>(null);
+  const [rejection, setRejection] = useState<string | null>(null);
 
   const properties = useQuery({
     queryKey: ['properties'],
@@ -22,11 +33,26 @@ export function CalendarPage() {
 
   const propertyId = properties.data?.[0]?.id ?? null;
 
+  const calendarKey = useMemo(
+    () => ['calendar', propertyId, from, to] as const,
+    [propertyId, from, to],
+  );
+
   const calendar = useQuery({
-    queryKey: ['calendar', propertyId, from, to],
+    queryKey: calendarKey,
     queryFn: () => fetchCalendar(propertyId!, from, to),
     enabled: propertyId !== null,
   });
+
+  const { move } = useReservationMove(calendarKey, setRejection);
+  const onMove = useCallback(
+    (request: MoveRequest) => {
+      // 다시 시도할 때 앞의 거절 문구가 남아 있으면 어느 시도의 결과인지 알 수 없다.
+      setRejection(null);
+      move(request);
+    },
+    [move],
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -86,19 +112,42 @@ export function CalendarPage() {
         </div>
       </header>
 
-      <main className="min-h-0 flex-1 p-4">
-        <StateSwitch
-          isLoading={properties.isLoading || calendar.isLoading}
-          error={properties.error ?? calendar.error}
-          isEmpty={calendar.data?.units.length === 0 || properties.data?.length === 0}
-          onRetry={() => {
-            void properties.refetch();
-            void calendar.refetch();
-          }}
+      {/*
+        옮기기가 거절된 이유. 낙관적 업데이트는 실패해도 화면이 잠깐 정상으로 보이므로,
+        되돌리는 것만으로는 사용자가 무슨 일이 있었는지 알 수 없다.
+      */}
+      {rejection && (
+        <div
+          role="alert"
+          data-testid="move-rejected"
+          className="flex items-center justify-between border-b border-warn/40 bg-warn/10 px-5 py-2 text-sm text-warn"
         >
-          {calendar.data && <CalendarGrid data={calendar.data} />}
-        </StateSwitch>
-      </main>
+          <span>예약을 옮기지 못했습니다. {rejection}</span>
+          <Button size="sm" variant="ghost" onClick={() => setRejection(null)}>
+            닫기
+          </Button>
+        </div>
+      )}
+
+      <div className="flex min-h-0 flex-1">
+        <main className="min-h-0 flex-1 p-4">
+          <StateSwitch
+            isLoading={properties.isLoading || calendar.isLoading}
+            error={properties.error ?? calendar.error}
+            isEmpty={calendar.data?.units.length === 0 || properties.data?.length === 0}
+            onRetry={() => {
+              void properties.refetch();
+              void calendar.refetch();
+            }}
+          >
+            {calendar.data && (
+              <CalendarGrid data={calendar.data} onSelect={setSelection} onMove={onMove} />
+            )}
+          </StateSwitch>
+        </main>
+
+        {calendar.data && <SelectionPanel data={calendar.data} rect={selection} />}
+      </div>
     </div>
   );
 }
