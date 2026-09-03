@@ -23,6 +23,12 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code created_at} 오름차순으로 하나씩 처리하므로 성립한다. <b>병렬로 바꾸면 이
  * 보장이 깨진다.</b> 그때는 애그리게이트 단위로 분배하거나 순서 키를 따로 두어야 한다.
  *
+ * <p><b>소비자는 여럿일 수 있다.</b> P2 9주차에 실시간 갱신이 붙으면서 둘이 됐고,
+ * 계획서 4.4 의 채널·운영·메시지 워커가 P3·P4 에 더 붙는다. 한 소비자가 예외를 던지면
+ * <b>그 이벤트 전체가 실패</b>로 남아 다음 주기에 다시 나간다. 거기서 삼키면 어떤
+ * 소비자는 받고 어떤 소비자는 못 받은 채 발행 완료로 표시된다. 중복은 소비자 멱등성으로
+ * 흡수한다는 것이 4.4 의 전제이므로, 다시 받는 쪽이 못 받는 쪽보다 낫다.
+ *
  * <p>인스턴스가 하나뿐이라 ShedLock 과 {@code FOR UPDATE SKIP LOCKED} 를 쓰지 않았다.
  * 여러 대가 되면 둘 다 필요하다. 릴레이가 동시에 돌면 같은 행을 집어 중복 발행하고,
  * 그건 최소 1회 전달의 정상 범위가 아니라 매 주기 벌어지는 낭비다.
@@ -44,11 +50,11 @@ public class OutboxRelay {
     static final short RETRY_LIMIT = 10;
 
     private final OutboxEventRepository repository;
-    private final DomainEventPublisher publisher;
+    private final List<DomainEventPublisher> publishers;
 
-    OutboxRelay(OutboxEventRepository repository, DomainEventPublisher publisher) {
+    OutboxRelay(OutboxEventRepository repository, List<DomainEventPublisher> publishers) {
         this.repository = repository;
-        this.publisher = publisher;
+        this.publishers = publishers;
     }
 
     /**
@@ -101,7 +107,9 @@ public class OutboxRelay {
      */
     private boolean publishOne(OutboxEvent event) {
         try {
-            publisher.publish(event);
+            for (DomainEventPublisher publisher : publishers) {
+                publisher.publish(event);
+            }
             event.markPublished(OffsetDateTime.now());
             return true;
         } catch (RuntimeException e) {

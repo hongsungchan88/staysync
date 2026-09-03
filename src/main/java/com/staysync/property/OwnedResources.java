@@ -97,4 +97,16 @@ public class OwnedResources {
                 .map(property -> property.getOrgId().equals(orgId))
                 .orElse(false);
     }
+
+    /**
+     * 숙소를 가진 조직. 실시간 갱신이 "이 사건을 누구에게 보낼지" 고를 때 쓴다.
+     *
+     * <p>{@link #ownsProperty} 로 구독자마다 물어도 답은 같지만, 구독자 수만큼 질의가
+     * 늘고 무엇보다 <b>기본값이 반대</b>다. 저쪽은 모르면 false 라 안전하고, 여기는
+     * 모르면 빈 값이라 아무에게도 보내지 않는다. 둘 다 "모르면 보내지 않는다"로
+     * 떨어져야 한다.
+     */
+    public java.util.Optional<Long> orgIdOfProperty(Long propertyId) {
+        return propertyRepo.findById(propertyId).map(Property::getOrgId);
+    }
 }

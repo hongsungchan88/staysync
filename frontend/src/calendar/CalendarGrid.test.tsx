@@ -302,6 +302,34 @@ describe('그리드 조작', () => {
     expect(screen.getByTestId('bar-1')).toHaveAttribute('tabindex', '0');
   });
 
+  it('보이지 않는 행이 갱신돼도 스크롤 위치가 흔들리지 않는다', () => {
+    stubViewport();
+    stubPointerCapture();
+    const data = grid(30, 90, (u) => [bar(u + 1, u + 1, 0, 2)]);
+
+    const { rerender } = renderGrid(data);
+    const scroller = screen.getByTestId('calendar-grid');
+
+    // 한참 아래로 내려 둔다. 실시간 갱신이 오는 시점의 흔한 상태다.
+    Object.defineProperty(scroller, 'scrollTop', { value: 900, configurable: true, writable: true });
+    Object.defineProperty(scroller, 'scrollLeft', { value: 600, configurable: true, writable: true });
+    fireEvent.scroll(scroller);
+    const 보이던행 = screen.getAllByTestId(/^row-/).map((el) => el.dataset.testid);
+
+    // SSE 가 알린 뒤 다시 조회해 온 데이터. 화면 밖의 객실 30 에 예약이 하나 붙었다.
+    const 갱신됨: GridData = {
+      ...data,
+      reservations: [...data.reservations, bar(9999, 30, 40, 3)],
+    };
+    rerender(<CalendarGrid data={갱신됨} onSelect={() => {}} onMove={() => {}} />);
+
+    // 스크롤 위치를 건드리면 사용자가 보던 자리에서 화면이 튄다. 예약 하나가
+    // 들어올 때마다 튀면 실시간 갱신이 방해가 된다.
+    expect(scroller.scrollTop).toBe(900);
+    expect(scroller.scrollLeft).toBe(600);
+    expect(screen.getAllByTestId(/^row-/).map((el) => el.dataset.testid)).toEqual(보이던행);
+  });
+
   it('키보드만으로 막대를 옮길 수 있다', async () => {
     stubViewport();
     const data = grid(1, 30, () => [bar(1, 1, 3, 2)]);
