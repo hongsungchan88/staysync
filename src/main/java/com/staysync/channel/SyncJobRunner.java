@@ -59,6 +59,12 @@ class SyncJobRunner {
         return jobs.claimBatch(limit);
     }
 
+    /** 고아 되살리기의 트랜잭션 경계. 이유는 {@link SyncJobWorker#reviveOrphans} 에 있다. */
+    @Transactional
+    int reviveOrphans(java.time.OffsetDateTime staleBefore) {
+        return jobs.reviveOrphans(staleBefore);
+    }
+
     /**
      * 한 건을 보내고 결과를 적는다.
      *

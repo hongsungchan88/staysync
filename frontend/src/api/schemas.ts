@@ -161,3 +161,36 @@ export const mappingBoardSchema = z.object({
   ),
 });
 export type MappingBoard = z.infer<typeof mappingBoardSchema>;
+
+/**
+ * 중복예약 충돌 하나. 계획서 7.4 이고 방어 4계층의 마지막 자리다.
+ *
+ * **게스트 이름과 연락처가 없다.** 운영자가 누구를 옮길지 고르는 데 필요한 것은
+ * 예약번호와 채널, 날짜다. 서버가 담지 않으므로 화면도 보여 줄 수 없다.
+ *
+ * `resolution` 과 `resolvedAt` 은 해소한 뒤에만 있다(`non_null` 직렬화).
+ */
+export const conflictReservationSchema = z.object({
+  id: z.number(),
+  unitId: z.number(),
+  confirmationCode: z.string(),
+  channelCode: z.string().nullish(),
+  status: z.string(),
+  checkIn: z.string(),
+  checkOut: z.string(),
+});
+export type ConflictReservation = z.infer<typeof conflictReservationSchema>;
+
+export const conflictSchema = z.object({
+  id: z.number(),
+  propertyId: z.number(),
+  unitId: z.number(),
+  stayDate: z.string(),
+  severity: z.string(),
+  status: z.string(),
+  resolution: z.string().nullish(),
+  detectedAt: z.string().nullish(),
+  resolvedAt: z.string().nullish(),
+  reservations: z.array(conflictReservationSchema).default([]),
+});
+export type Conflict = z.infer<typeof conflictSchema>;

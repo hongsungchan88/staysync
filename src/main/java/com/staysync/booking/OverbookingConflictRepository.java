@@ -26,4 +26,21 @@ public interface OverbookingConflictRepository extends JpaRepository<Overbooking
                                          @Param("to") LocalDate to);
 
     List<OverbookingConflict> findByUnitIdOrderByStayDateAsc(Long unitId);
+
+    /**
+     * 조직이 아직 풀지 않은 충돌 전부. 관리 화면이 쓴다.
+     *
+     * <p>{@code overbooking_conflict} 에 {@code org_id} 가 없어 숙소로 좁힌다.
+     * {@code unit}·{@code rate_plan} 과 같은 자리다.
+     *
+     * <p>지나간 날짜도 뺀 목록이 아니다. 어제 날짜의 충돌도 사람이 어떻게 처리했는지
+     * 기록을 남겨야 해서다 — 조용히 사라지면 그날 무슨 일이 있었는지 알 수 없다.
+     */
+    @Query("""
+            select c from OverbookingConflict c
+            where c.propertyId in :propertyIds
+              and c.status = 'OPEN'
+            order by c.stayDate asc, c.id asc
+            """)
+    List<OverbookingConflict> findOpenOf(@Param("propertyIds") List<Long> propertyIds);
 }

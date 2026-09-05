@@ -33,6 +33,23 @@ public interface ChannelAdapter {
      */
     SyncResult pushAri(ChannelCredentials credentials, AriUpdateCommand command);
 
+    /**
+     * 채널이 지금 들고 있는 값을 날짜별로 읽어 온다. 정기 재동기화(계획서 6.6)가 쓴다.
+     *
+     * <p>{@link Capability#PUSH_AVAILABILITY} 를 선언한 어댑터만 호출된다. 보낼 수
+     * 없는 채널은 대조할 것도 없다 — iCal 이 그렇다.
+     *
+     * <p>돌려주는 목록에 없는 날짜는 "채널이 그 날짜를 모른다"는 뜻이고, 대조는 그걸
+     * 차이로 본다. 우리가 보낸 적이 있는데 채널에 없으면 유실된 것이기 때문이다.
+     */
+    default List<ChannelAriDay> fetchAriSnapshot(ChannelCredentials credentials,
+                                                 String externalUnitId,
+                                                 java.time.LocalDate from,
+                                                 java.time.LocalDate to) {
+        throw new UnsupportedOperationException(
+                type() + " 는 재고·요금 조회를 지원하지 않습니다.");
+    }
+
     // --- 채널 → 우리 ----------------------------------------------------
 
     /**

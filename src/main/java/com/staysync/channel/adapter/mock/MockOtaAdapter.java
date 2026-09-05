@@ -1,10 +1,12 @@
 package com.staysync.channel.adapter.mock;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.staysync.channel.port.AdapterType;
 import com.staysync.channel.port.AriUpdateCommand;
 import com.staysync.channel.port.BookingFeed;
 import com.staysync.channel.port.Capability;
+import com.staysync.channel.port.ChannelAriDay;
 import com.staysync.channel.port.ChannelAdapter;
 import com.staysync.channel.port.ChannelCredentials;
 import com.staysync.channel.port.ChannelException;
@@ -14,7 +16,9 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
@@ -105,6 +109,81 @@ public class MockOtaAdapter implements ChannelAdapter {
         return BookingFeed.of(bookings == null ? List.of() : java.util.Arrays.stream(bookings)
                 .map(MockBooking::toInbound)
                 .toList());
+    }
+
+    /**
+     * 시뮬레이터가 실제로 들고 있는 값. 정기 재동기화(계획서 6.6)가 쓴다.
+     *
+     * <p>시뮬레이터는 <b>해석하지 않고 받은 순서대로 쌓아 둔다</b>(ADR 0011). 그래서
+     * "지금 값"을 알려면 여기서 순서대로 다시 덮어써야 한다. 나중에 받은 것이 이긴다 —
+     * 채널이 실제로 하는 일과 같다.
+     *
+     * <p>시뮬레이터를 고쳐 날짜별 상태를 내놓게 만들지 않았다. 그러면 우리가 검증하려는
+     * "채널이 받은 것을 잃어버렸다"를 시뮬레이터가 대신 판단하게 되고,
+     * {@code DELETE /api/ari} 로 만드는 유실 상황이 무의미해진다.
+     */
+    @Override
+    public List<ChannelAriDay> fetchAriSnapshot(ChannelCredentials credentials,
+                                                String externalUnitId,
+                                                LocalDate from, LocalDate to) {
+        JsonNode entries = get(credentials, "/api/ari", JsonNode.class);
+        if (entries == null || !entries.isArray()) {
+            return List.of();
+        }
+
+        Map<LocalDate, ChannelAriDay> byDate = new TreeMap<>();
+        for (JsonNode entry : entries) {
+            JsonNode body = entry.path("body");
+            if (!externalUnitId.equals(body.path("external_unit_id").asText(null))) {
+                continue;
+            }
+            for (JsonNode segment : body.path("segments")) {
+                applySegment(byDate, segment, from, to);
+            }
+        }
+        return List.copyOf(byDate.values());
+    }
+
+    /** 구간 하나를 날짜별로 펼친다. 보낼 때 압축한 것을 되돌리는 셈이다. */
+    private static void applySegment(Map<LocalDate, ChannelAriDay> byDate, JsonNode segment,
+                                     LocalDate from, LocalDate to) {
+        LocalDate start = date(segment, "from");
+        LocalDate end = date(segment, "to");
+        if (start == null || end == null) {
+            return;
+        }
+        for (LocalDate date = start; !date.isAfter(end); date = date.plusDays(1)) {
+            if (date.isBefore(from) || date.isAfter(to)) {
+                continue;
+            }
+            ChannelAriDay previous = byDate.get(date);
+            byDate.put(date, new ChannelAriDay(date,
+                    intOr(segment, "availability", previous == null ? null : previous.availability()),
+                    decimalOr(segment, "rate", previous == null ? null : previous.rate()),
+                    intOr(segment, "min_stay", previous == null ? null : previous.minStay()),
+                    boolOr(segment, "stop_sell", previous == null ? null : previous.stopSell())));
+        }
+    }
+
+    private static LocalDate date(JsonNode node, String field) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? null : LocalDate.parse(value.asText());
+    }
+
+    /** {@code null} 은 "이번에 바꾸지 않음"이라 앞의 값을 지우지 않는다. */
+    private static Integer intOr(JsonNode node, String field, Integer fallback) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? fallback : value.asInt();
+    }
+
+    private static BigDecimal decimalOr(JsonNode node, String field, BigDecimal fallback) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? fallback : new BigDecimal(value.asText());
+    }
+
+    private static Boolean boolOr(JsonNode node, String field, Boolean fallback) {
+        JsonNode value = node.get(field);
+        return value == null || value.isNull() ? fallback : value.asBoolean();
     }
 
     // --- HTTP -----------------------------------------------------------------

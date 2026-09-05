@@ -121,14 +121,23 @@ class AdapterContractTest extends SyncTestBase {
                 Map.of("api_key", "probe", "base_url", UNREACHABLE, "ical_url", UNREACHABLE));
 
         switch (capability) {
-            case PUSH_AVAILABILITY, PUSH_RATE, PUSH_RESTRICTION -> adapter.pushAri(credentials,
-                    new AriUpdateCommand("x", null, List.of(new AriUpdateCommand.Segment(
-                            LocalDate.now(), LocalDate.now(), 1, null, null, null, null, null, null))));
+            case PUSH_AVAILABILITY -> {
+                adapter.pushAri(credentials, probeCommand());
+                // 재동기화 배치가 이 기능을 가진 연결에만 대조를 건다. 선언해 놓고
+                // 구현이 없으면 그 채널은 매일 새벽에 조용히 건너뛰어진다.
+                adapter.fetchAriSnapshot(credentials, "x", LocalDate.now(), LocalDate.now());
+            }
+            case PUSH_RATE, PUSH_RESTRICTION -> adapter.pushAri(credentials, probeCommand());
             case PULL_BOOKING -> adapter.pullBookings(credentials, null);
             case WEBHOOK_BOOKING -> adapter.parseWebhook(credentials, "{}", Map.of());
             default -> throw new IllegalArgumentException(
                     "확인할 호출이 없는 기능이다: " + capability);
         }
+    }
+
+    private static AriUpdateCommand probeCommand() {
+        return new AriUpdateCommand("x", null, List.of(new AriUpdateCommand.Segment(
+                LocalDate.now(), LocalDate.now(), 1, null, null, null, null, null, null)));
     }
 
     /** 호출 하나가 대응되는 기능만 본다. 나머지는 아직 인터페이스에 자리가 없다. */

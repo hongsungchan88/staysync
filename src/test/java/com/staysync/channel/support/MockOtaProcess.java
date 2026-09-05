@@ -91,15 +91,30 @@ public final class MockOtaProcess implements AutoCloseable {
         return get("/api/ari");
     }
 
+    /**
+     * 시뮬레이터가 받은 것을 전부 잃어버리게 한다.
+     *
+     * <p>"받았다고 답해 놓고 반영하지 않은 채널"을 만드는 손잡이다. 계획서 6.6 의
+     * 재동기화가 겨냥하는 상황이 이것이고, 우리 쪽 로그는 전부 성공인 채로 채널에만
+     * 값이 없다. 11주차가 이 경로를 열어 둔 이유다(시뮬레이터의 {@code forgetAri}).
+     */
+    public void forgetAri() {
+        send("DELETE", "/api/ari");
+    }
+
     private String get(String path) {
+        return send("GET", path);
+    }
+
+    private String send(String method, String path) {
         try {
             HttpResponse<String> response = HttpClient.newHttpClient().send(
                     HttpRequest.newBuilder(URI.create(baseUrl() + path))
                             .header("X-Api-Key", apiKey)
                             .timeout(Duration.ofSeconds(10))
-                            .GET().build(),
+                            .method(method, HttpRequest.BodyPublishers.noBody()).build(),
                     HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
+            if (response.statusCode() >= 300) {
                 throw new IllegalStateException(
                         "시뮬레이터 조회가 실패했습니다: " + response.statusCode());
             }
