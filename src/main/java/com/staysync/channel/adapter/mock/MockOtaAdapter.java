@@ -6,6 +6,8 @@ import com.staysync.channel.port.AdapterType;
 import com.staysync.channel.port.AriUpdateCommand;
 import com.staysync.channel.port.BookingFeed;
 import com.staysync.channel.port.Capability;
+import com.staysync.channel.InboundChannelMessage;
+import com.staysync.channel.OutboundChannelMessage;
 import com.staysync.channel.port.ChannelAriDay;
 import com.staysync.channel.port.ChannelAdapter;
 import com.staysync.channel.port.ChannelCredentials;
@@ -186,6 +188,42 @@ public class MockOtaAdapter implements ChannelAdapter {
         return value == null || value.isNull() ? fallback : value.asBoolean();
     }
 
+    // --- 메시징 (P4 14주차) -----------------------------------------------------
+
+    /**
+     * 게스트 메시지를 긁어 온다.
+     *
+     * <p>시뮬레이터가 <b>같은 식별자로 여러 번</b> 돌려주고 시각도 뒤집혀 있다.
+     * 여기서 거르지 않는다 — 그건 수신부의 일이고, 여기서 손보면 멱등성을 검증할
+     * 것이 사라진다.
+     */
+    @Override
+    public List<InboundChannelMessage> pullMessages(ChannelCredentials credentials) {
+        MockMessageBody[] found = get(credentials, "/api/messages", MockMessageBody[].class);
+        if (found == null) {
+            return List.of();
+        }
+        List<InboundChannelMessage> messages = new java.util.ArrayList<>();
+        for (MockMessageBody body : found) {
+            if (MockMessageBody.GUEST.equals(body.sender())) {
+                messages.add(body.toInbound());
+            }
+        }
+        return messages;
+    }
+
+    /**
+     * 메시지를 보낸다. 202 가 오면 <b>받았다는 뜻이지 전달됐다는 뜻이 아니다.</b>
+     *
+     * <p>실패는 {@link #translate} 가 세 갈래로 옮기고 워커가 재시도한다. 메시지
+     * 발송이 조용히 사라지면 안 되는데, 그 문제는 12주차에 이미 풀려 있다.
+     */
+    @Override
+    public SyncResult sendMessage(ChannelCredentials credentials, OutboundChannelMessage message) {
+        exchange(credentials, "/api/messages", MockMessageBody.of(message));
+        return SyncResult.ok(1);
+    }
+
     // --- HTTP -----------------------------------------------------------------
 
     private void exchange(ChannelCredentials credentials, String path, Object body) {
@@ -288,6 +326,34 @@ public class MockOtaAdapter implements ChannelAdapter {
                 return new Seg(segment.from(), segment.to(), segment.availability(),
                         segment.rate(), segment.minStay(), segment.stopSell());
             }
+        }
+    }
+
+    /**
+     * 시뮬레이터가 주고받는 메시지.
+     *
+     * <p>{@code snake_case} 를 우리 형식으로 옮긴다. 예약과 같은 이유로 시뮬레이터가
+     * 일부러 다른 이름을 쓴다 — 이름이 우연히 맞아떨어져 통과하면 매핑이 도는지
+     * 알 수 없다.
+     */
+    record MockMessageBody(@JsonProperty("message_id") String messageId,
+                           @JsonProperty("thread_id") String threadId,
+                           @JsonProperty("booking_id") String bookingId,
+                           @JsonProperty("sender") String sender,
+                           @JsonProperty("body") String body,
+                           @JsonProperty("sent_at") java.time.Instant sentAt) {
+
+        static final String GUEST = "GUEST";
+
+        static MockMessageBody of(OutboundChannelMessage message) {
+            // messageId 는 채널이 매긴다. 보낼 때는 비운다.
+            return new MockMessageBody(null, message.externalThreadId(),
+                    message.channelBookingId(), "HOST", message.body(), null);
+        }
+
+        InboundChannelMessage toInbound() {
+            return new InboundChannelMessage(messageId, threadId, bookingId, body,
+                    sentAt == null ? null : sentAt.atOffset(java.time.ZoneOffset.UTC));
         }
     }
 

@@ -83,6 +83,34 @@ public interface ChannelAdapter {
                 type() + " 는 웹훅 수신을 지원하지 않습니다.");
     }
 
+    // --- 메시징 (P4 14주차) -----------------------------------------------
+
+    /**
+     * 게스트 메시지를 긁어 온다.
+     *
+     * <p>{@link Capability#MESSAGING} 을 선언한 어댑터만 호출된다. iCal 은 메시징이
+     * 없고 그것이 정상이다 — 눈으로는 "없는 게 맞는 것"과 "빠뜨린 것"이 구분되지
+     * 않으므로 {@code AdapterContractTest} 가 둘을 가른다.
+     *
+     * <p>같은 메시지가 두 번 올 수 있다. 거르는 것은 부르는 쪽의 일이다.
+     */
+    default List<com.staysync.channel.InboundChannelMessage> pullMessages(
+            ChannelCredentials credentials) {
+        throw new UnsupportedOperationException(type() + " 는 메시지 수집을 지원하지 않습니다.");
+    }
+
+    /**
+     * 메시지를 채널로 보낸다. <b>보낸 뒤에는 되돌릴 수 없다.</b>
+     *
+     * <p>{@code sync_job} 워커만 이 메서드를 부른다. 화면이나 자동 발송이 직접 부르면
+     * 12주차의 재시도·백오프·{@code DEAD} 를 통째로 우회하게 되고, 실패한 발송이
+     * 조용히 사라진다.
+     */
+    default SyncResult sendMessage(ChannelCredentials credentials,
+                                   com.staysync.channel.OutboundChannelMessage message) {
+        throw new UnsupportedOperationException(type() + " 는 메시지 발송을 지원하지 않습니다.");
+    }
+
     /** 웹훅 서명을 검증한다. 검증하지 않는 채널은 기본값 그대로 둔다. */
     default boolean verifySignature(ChannelCredentials credentials,
                                     String rawBody,

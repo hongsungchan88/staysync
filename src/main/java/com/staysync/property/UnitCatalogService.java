@@ -12,10 +12,13 @@ class UnitCatalogService implements UnitCatalog {
 
     private final UnitRepository unitRepo;
     private final RatePlanRepository ratePlanRepo;
+    private final PropertyRepository propertyRepo;
 
-    UnitCatalogService(UnitRepository unitRepo, RatePlanRepository ratePlanRepo) {
+    UnitCatalogService(UnitRepository unitRepo, RatePlanRepository ratePlanRepo,
+                       PropertyRepository propertyRepo) {
         this.unitRepo = unitRepo;
         this.ratePlanRepo = ratePlanRepo;
+        this.propertyRepo = propertyRepo;
     }
 
     @Override
@@ -37,6 +40,13 @@ class UnitCatalogService implements UnitCatalog {
         return unitRepo.findById(unitId)
                 .map(Unit::getName)
                 .orElseThrow(() -> new UnitNotFoundException(unitId));
+    }
+
+    @Override
+    public String propertyNameOf(Long propertyId) {
+        return propertyRepo.findById(propertyId)
+                .map(com.staysync.property.domain.Property::getName)
+                .orElseThrow(() -> new PropertyNotFoundException(propertyId));
     }
 
     @Override

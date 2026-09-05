@@ -99,6 +99,16 @@ class AdapterContractTest extends SyncTestBase {
     }
 
     @Test
+    @DisplayName("Mock 만 메시징 채널이다. iCal 은 아니다")
+    void 메시징_선언이_Mock_에만_있다() {
+        // 이 선언이 인박스의 입력창을 켠다. iCal 에 잘못 켜지면 보낼 수 없는 채널에
+        // 발송 작업이 만들어져 8번 재시도한 끝에 DEAD 가 되고, 화면은 보냈다고
+        // 보여 준다. 빠뜨리면 Mock 채널의 대화에 입력창이 사라진다.
+        assertThat(AdapterType.MOCK.supports(Capability.MESSAGING)).isTrue();
+        assertThat(AdapterType.ICAL.supports(Capability.MESSAGING)).isFalse();
+    }
+
+    @Test
     @DisplayName("iCal 만 스냅샷 채널이다. Mock 은 아니다")
     void 스냅샷_선언이_iCal_에만_있다() {
         // 이 선언이 "목록에 없는 예약을 취소한다"를 켠다. Mock 에 잘못 켜지면
@@ -130,6 +140,13 @@ class AdapterContractTest extends SyncTestBase {
             case PUSH_RATE, PUSH_RESTRICTION -> adapter.pushAri(credentials, probeCommand());
             case PULL_BOOKING -> adapter.pullBookings(credentials, null);
             case WEBHOOK_BOOKING -> adapter.parseWebhook(credentials, "{}", Map.of());
+            case MESSAGING -> {
+                // 수신과 발신 둘 다 본다. 하나만 구현하고 선언하면 인박스는 뜨는데
+                // 답이 안 나가거나 그 반대가 되고, 어느 쪽이든 조용하다.
+                adapter.pullMessages(credentials);
+                adapter.sendMessage(credentials,
+                        new com.staysync.channel.OutboundChannelMessage("t-1", "b-1", "확인"));
+            }
             default -> throw new IllegalArgumentException(
                     "확인할 호출이 없는 기능이다: " + capability);
         }
@@ -143,6 +160,7 @@ class AdapterContractTest extends SyncTestBase {
     /** 호출 하나가 대응되는 기능만 본다. 나머지는 아직 인터페이스에 자리가 없다. */
     private static List<Capability> probeable() {
         return List.of(Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE,
-                Capability.PUSH_RESTRICTION, Capability.PULL_BOOKING, Capability.WEBHOOK_BOOKING);
+                Capability.PUSH_RESTRICTION, Capability.PULL_BOOKING, Capability.WEBHOOK_BOOKING,
+                Capability.MESSAGING);
     }
 }

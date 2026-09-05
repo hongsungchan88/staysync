@@ -100,7 +100,7 @@ class ChannelApiTest {
     @DisplayName("예약 목록 조회가 만들어 둔 예약을 돌려준다")
     void 예약_목록을_돌려준다() {
         rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest("BK-1", "room-9", null, null, null, null, 1)),
+                ApiKeys.signed(new ScenarioRequest("BK-1", "room-9", null, null, null, null, null, 1)),
                 Object.class);
 
         ResponseEntity<MockBooking[]> polled = rest.exchange(
@@ -116,7 +116,7 @@ class ChannelApiTest {
     @DisplayName("예약 JSON 은 snake_case 로 나간다")
     void 예약_필드는_우리_형식과_다르다() {
         rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest("BK-2", null, null, null, null, null, 1)),
+                ApiKeys.signed(new ScenarioRequest("BK-2", null, null, null, null, null, null, 1)),
                 Object.class);
 
         String raw = rest.exchange("/api/bookings", HttpMethod.GET, ApiKeys.signed(null),

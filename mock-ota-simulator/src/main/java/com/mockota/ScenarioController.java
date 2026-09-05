@@ -45,6 +45,12 @@ class ScenarioController {
         return scenarios.overbook(orDefaults(request));
     }
 
+    /** 게스트 메시지. 같은 식별자로 count 번 보내고 시각을 거꾸로 매긴다. */
+    @PostMapping("/guest-message")
+    ScenarioResult guestMessage(@RequestBody(required = false) ScenarioRequest request) {
+        return scenarios.guestMessage(orDefaults(request));
+    }
+
     private static ScenarioRequest orDefaults(ScenarioRequest request) {
         return request == null ? ScenarioRequest.defaults() : request;
     }

@@ -20,6 +20,29 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
     Optional<Reservation> findByConfirmationCode(String confirmationCode);
 
     /**
+     * 그날 체크인하는, 아직 살아 있는 예약. 시간 기반 자동 발송이 쓴다.
+     *
+     * <p><b>취소·만료된 예약은 빠진다.</b> 체크인 하루 전 알림이 취소된 예약에 나가는
+     * 것이 이 기능의 가장 흔한 사고이고, 나간 뒤에는 되돌릴 수 없다. 거르는 자리를
+     * 쿼리에 두면 부르는 쪽이 빠뜨릴 수 없다.
+     */
+    @Query("""
+            select r from Reservation r
+            where r.period.checkIn = :date and r.status in :statuses
+            order by r.id asc
+            """)
+    List<Reservation> findActiveByCheckIn(@Param("date") LocalDate date,
+                                          @Param("statuses") List<ReservationStatus> statuses);
+
+    @Query("""
+            select r from Reservation r
+            where r.period.checkOut = :date and r.status in :statuses
+            order by r.id asc
+            """)
+    List<Reservation> findActiveByCheckOut(@Param("date") LocalDate date,
+                                           @Param("statuses") List<ReservationStatus> statuses);
+
+    /**
      * 이 판매 단위에서 그 채널이 만든, 아직 재고를 쥐고 있는 예약.
      *
      * <p>스냅샷 채널(iCal)의 취소 판정이 쓴다. 발행물에 없는 것을 취소하려면 먼저

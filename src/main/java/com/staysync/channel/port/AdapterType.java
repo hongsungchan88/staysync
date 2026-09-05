@@ -37,9 +37,13 @@ public enum AdapterType {
      * 없다. 선언이 실제보다 <i>넓은</i> 쪽의 어긋남이고, 12주차의 반대 방향이다 —
      * 화면은 "예약 웹훅 지원"이라고 보여 주는데 실제로는 아무것도 받지 못한다.
      * {@code AdapterContractTest} 가 잡았다. 웹훅 수신을 만들 때 다시 넣는다.
+     *
+     * <p><b>{@link Capability#MESSAGING} 을 P4 14주차에 더했다.</b> 시뮬레이터에
+     * 메시징 표면이 생겼고 어댑터가 실제로 구현한다. 실제 게스트 메시지를 만들어 낼
+     * 곳이 이것뿐이다 — iCal 은 메시징이 없고 Channex 는 계획서 3.2 의 Could 항목이다.
      */
     MOCK(EnumSet.of(Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE,
-            Capability.PUSH_RESTRICTION, Capability.PULL_BOOKING));
+            Capability.PUSH_RESTRICTION, Capability.PULL_BOOKING, Capability.MESSAGING));
 
     private final Set<Capability> capabilities;
 

@@ -35,6 +35,16 @@ public final class MockOtaProcess implements AutoCloseable {
 
     private static final Duration STARTUP_TIMEOUT = Duration.ofSeconds(60);
 
+    /**
+     * 발송 응답에서 본문만 뽑는다.
+     *
+     * <p>JSON 파서를 들이지 않는다. 여기서 보려는 것은 "그 문장이 채널에 도착했는가"
+     * 하나이고, 그걸 위해 테스트 지원 클래스에 매퍼를 물리면 시뮬레이터의 직렬화
+     * 설정까지 따라와야 한다.
+     */
+    private static final java.util.regex.Pattern SENT_BODY =
+            java.util.regex.Pattern.compile("\"body\"\\s*:\\s*\"([^\"]*)\"");
+
     private final Process process;
     private final int port;
     private final String apiKey;
@@ -102,8 +112,56 @@ public final class MockOtaProcess implements AutoCloseable {
         send("DELETE", "/api/ari");
     }
 
+    /**
+     * 게스트 메시지를 만들어 낸다. <b>같은 식별자로 {@code count} 번 보낸다.</b>
+     *
+     * <p>중복이 정상이라는 것이 이 시나리오의 요점이다. 우리 쪽이 한 건으로
+     * 흡수하는지 보려면 그렇게 구는 상대가 필요하다.
+     *
+     * <p><b>본문 키는 {@code snake_case} 다.</b> 시뮬레이터의 ObjectMapper 가 그렇게
+     * 설정돼 있어서(11주차 결정) {@code bookingId} 로 보내면 조용히 기본값이 쓰인다 —
+     * 예약번호가 달라지고 스레드가 예약에 이어지지 않는다.
+     */
+    public void emitGuestMessage(String bookingId, String body, int count) {
+        post("/api/scenarios/guest-message",
+                "{\"booking_id\":\"%s\",\"body\":\"%s\",\"count\":%d}"
+                        .formatted(bookingId, body, count));
+    }
+
+    /** 우리가 실제로 보낸 메시지 본문들. 도착했는지는 여기서만 확인된다. */
+    public List<String> sentMessages() {
+        List<String> bodies = new ArrayList<>();
+        java.util.regex.Matcher matcher = SENT_BODY.matcher(get("/api/messages/sent"));
+        while (matcher.find()) {
+            bodies.add(matcher.group(1));
+        }
+        return bodies;
+    }
+
     private String get(String path) {
         return send("GET", path);
+    }
+
+    private String post(String path, String json) {
+        try {
+            HttpResponse<String> response = HttpClient.newHttpClient().send(
+                    HttpRequest.newBuilder(URI.create(baseUrl() + path))
+                            .header("X-Api-Key", apiKey)
+                            .header("Content-Type", "application/json")
+                            .timeout(Duration.ofSeconds(10))
+                            .POST(HttpRequest.BodyPublishers.ofString(json)).build(),
+                    HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 300) {
+                throw new IllegalStateException(
+                        "시나리오 호출이 실패했습니다: " + response.statusCode() + " " + response.body());
+            }
+            return response.body();
+        } catch (IOException e) {
+            throw new IllegalStateException("시뮬레이터에 닿지 못했습니다.", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("시나리오 호출이 중단됐습니다.", e);
+        }
     }
 
     private String send(String method, String path) {
