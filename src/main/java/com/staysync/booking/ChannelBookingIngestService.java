@@ -2,6 +2,7 @@ package com.staysync.booking;
 
 import com.staysync.shared.lock.UnitLock;
 import java.time.Duration;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
@@ -31,5 +32,15 @@ public class ChannelBookingIngestService implements ChannelBookingIntake {
     @Override
     public ChannelBookingResult ingest(ChannelBookingCommand command) {
         return unitLock.runExclusively(command.unitId(), LOCK_WAIT, () -> writer.ingest(command));
+    }
+
+    /**
+     * 스냅샷 채널의 취소. <b>목록을 락 안에서 읽는다.</b> 락 밖에서 읽으면 읽는 사이에
+     * 들어온 새 예약이 "발행물에 없다"로 판정돼 방금 받은 예약이 취소된다.
+     */
+    @Override
+    public int cancelMissing(Long unitId, String channelCode, Set<String> presentChannelBookingIds) {
+        return unitLock.runExclusively(unitId, LOCK_WAIT,
+                () -> writer.cancelMissing(unitId, channelCode, presentChannelBookingIds));
     }
 }

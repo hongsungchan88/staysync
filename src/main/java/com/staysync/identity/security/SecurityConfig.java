@@ -99,6 +99,11 @@ public class SecurityConfig {
                         .permitAll()
                         // 로그아웃과 /me 는 인증이 필요하다. anyRequest 에 걸린다.
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        // iCal 발행. 계획서 6.2 대로 URL 자체가 인증이다 — 에어비앤비
+                        // 서버가 읽어 가므로 헤더도 쿠키도 실을 수 없다. 그래서 토큰이
+                        // 추측 불가능한 난수여야 하고, 없는 토큰은 404 로 답해 존재를
+                        // 알리지 않는다. 읽기 전용이라 GET 만 연다.
+                        .requestMatchers(HttpMethod.GET, "/public/ical/*.ics").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))

@@ -19,6 +19,27 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
 
     Optional<Reservation> findByConfirmationCode(String confirmationCode);
 
+    /**
+     * 이 판매 단위에서 그 채널이 만든, 아직 재고를 쥐고 있는 예약.
+     *
+     * <p>스냅샷 채널(iCal)의 취소 판정이 쓴다. 발행물에 없는 것을 취소하려면 먼저
+     * "지금 우리가 들고 있는 것"이 무엇인지 알아야 한다.
+     *
+     * <p>이미 취소·만료된 예약은 제외한다. 포함하면 매 주기마다 같은 예약을 다시
+     * 취소하려 들고, 그때마다 감사 기록이 한 줄씩 쌓인다.
+     */
+    @Query("""
+            select r from Reservation r
+            where r.unitId = :unitId
+              and r.channelCode = :channelCode
+              and r.status in (com.staysync.booking.domain.ReservationStatus.HOLD,
+                               com.staysync.booking.domain.ReservationStatus.CONFIRMED,
+                               com.staysync.booking.domain.ReservationStatus.CHECKED_IN)
+            order by r.id asc
+            """)
+    List<Reservation> findActiveOfChannel(@Param("unitId") Long unitId,
+                                          @Param("channelCode") String channelCode);
+
     @Query("""
             select r from Reservation r
             where r.propertyId = :propertyId

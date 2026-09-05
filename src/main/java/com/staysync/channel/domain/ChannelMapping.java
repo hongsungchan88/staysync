@@ -36,17 +36,31 @@ public class ChannelMapping {
     @Column(name = "external_rate_id", length = 120)
     private String externalRateId;
 
+    /**
+     * iCal 발행 URL 의 토큰. {@code GET /public/ical/{token}.ics} 가 이 값으로 찾는다.
+     *
+     * <p><b>URL 자체가 인증이다</b>(계획서 6.2). 그래서 추측 불가능한 난수여야 하고,
+     * 목록·상세 응답과 로그에 실리면 안 된다. 꺼내 보는 경로는 전용 조회 하나다.
+     *
+     * <p>매핑마다 하나인 이유는 에어비앤비의 "다른 웹사이트에 연결하기"가 리스팅
+     * 하나에 {@code .ics} 주소 하나를 받기 때문이다(조사-02 1절).
+     */
+    @Column(name = "export_token", length = 64)
+    private String exportToken;
+
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
 
     protected ChannelMapping() {
     }
 
-    public ChannelMapping(Long connectionId, Long unitId, String externalUnitId, String externalRateId) {
+    public ChannelMapping(Long connectionId, Long unitId, String externalUnitId,
+                          String externalRateId, String exportToken) {
         this.connectionId = connectionId;
         this.unitId = unitId;
         this.externalUnitId = externalUnitId;
         this.externalRateId = externalRateId;
+        this.exportToken = exportToken;
     }
 
     public Long getId() {
@@ -67,5 +81,10 @@ public class ChannelMapping {
 
     public String getExternalRateId() {
         return externalRateId;
+    }
+
+    /** <b>응답과 로그에 담지 않는다.</b> 전용 조회 경로만 이 값을 꺼낸다. */
+    public String getExportToken() {
+        return exportToken;
     }
 }

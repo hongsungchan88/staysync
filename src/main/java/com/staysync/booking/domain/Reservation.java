@@ -296,6 +296,34 @@ public class Reservation {
      *
      * @return 실제로 반영했으면 true
      */
+    /**
+     * <b>버전이 없는 채널</b>에서 수정을 받았을 때 반영한다. iCal 이 이 경로다.
+     *
+     * <p>계획서 13.4 는 {@code hashOf(start, end, summary)} 를 버전 자리에 넣었지만,
+     * {@link #applyRevision} 은 크기를 비교한다. <b>해시에는 순서가 없어서</b> 날짜가
+     * 바뀐 뒤의 해시가 우연히 더 작으면 수정이 조용히 무시된다. 예약은 그대로 있고
+     * 로그도 깨끗하며, 드러나는 것은 체크인 날 게스트가 다른 날짜를 들고 왔을 때다.
+     *
+     * <p>대신 값이 달라졌는지만 본다. 순서 역전은 이런 채널에서 일어나지 않는다 —
+     * 매번 전체 스냅샷을 받기 때문이다. 근거는 ADR 0013.
+     *
+     * @return 실제로 달라져서 반영했으면 true
+     */
+    public boolean applyValues(StayPeriod newPeriod, BigDecimal newAmount) {
+        boolean sameDates = period.checkIn().equals(newPeriod.checkIn())
+                && period.checkOut().equals(newPeriod.checkOut());
+        boolean sameAmount = totalAmount == null
+                ? newAmount == null
+                : newAmount != null && totalAmount.compareTo(newAmount) == 0;
+        if (sameDates && sameAmount) {
+            return false;
+        }
+        this.period = newPeriod;
+        this.totalAmount = newAmount;
+        touch();
+        return true;
+    }
+
     public boolean applyRevision(int incomingRevision, StayPeriod newPeriod, BigDecimal newAmount) {
         if (incomingRevision <= this.revision) {
             return false;

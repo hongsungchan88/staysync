@@ -121,4 +121,13 @@ final class ChannelDtos {
                     mapping.getExternalUnitId(), mapping.getExternalRateId());
         }
     }
+
+    /**
+     * iCal 발행 URL.
+     *
+     * <p>토큰을 따로 담지 않는다. URL 하나면 붙여 넣을 수 있고, 토큰만 따로 실으면
+     * 그걸 로그에 찍는 코드가 생긴다.
+     */
+    record ExportUrlResponse(String url) {
+    }
 }

@@ -28,7 +28,7 @@ public record ChannelBookingCommand(
         LocalDate checkIn,
         LocalDate checkOut,
         BigDecimal totalAmount,
-        int revision,
+        Integer revision,
         boolean cancellation) {
 
     public ChannelBookingCommand {
