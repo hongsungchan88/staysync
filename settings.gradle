@@ -1,1 +1,12 @@
 rootProject.name = 'staysync'
+
+// Mock OTA 시뮬레이터. 우리 앱이 아니라 상대역이다(P3 11주차, ADR 0011).
+//
+// 멀티프로젝트로 두는 이유는 하나다 — `./gradlew test` 에 함께 실리게 하려고.
+// 독립 프로젝트로 두면 시뮬레이터가 깨져도 본체 빌드가 초록이고, 12주차는 그걸
+// 신뢰하고 쓴다. 시뮬레이터가 틀리면 12주차의 모든 판정이 틀린다.
+//
+// 대신 시뮬레이터에는 Spring Boot Gradle 플러그인을 적용하지 않는다. 적용하면
+// `bootRun` 이 두 프로젝트에 생겨서 `./gradlew bootRun` 이 둘 다 실행하려 든다.
+// 자세한 것은 mock-ota-simulator/build.gradle 에 적었다.
+include 'mock-ota-simulator'
