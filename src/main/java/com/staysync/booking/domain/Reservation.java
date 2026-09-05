@@ -254,6 +254,20 @@ public class Reservation {
         touch();
     }
 
+    /**
+     * 판매 단위를 옮긴다. 충돌 해소의 업그레이드 배정이다(계획서 7.4).
+     *
+     * <p>{@link #changeStay} 와 같은 자리다 — 재고 이동은 엔티티 바깥의 일이고
+     * 여기서는 옮길 수 있는 상태인지만 보고 값을 갈아 끼운다.
+     */
+    public void moveToUnit(Long newUnitId) {
+        if (!isActive()) {
+            throw new IllegalReservationTransition(status, status);
+        }
+        this.unitId = newUnitId;
+        touch();
+    }
+
     /** 게스트를 연결한다. 수기 등록에서 게스트를 먼저 만든 뒤 부른다. */
     public void assignGuest(Long guestId) {
         this.guestId = guestId;

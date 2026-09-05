@@ -274,6 +274,62 @@ class ReservationWriter {
         return reservation;
     }
 
+    /**
+     * 판매 단위를 옮긴다. 충돌 해소의 <b>업그레이드 배정</b>이 부른다(계획서 7.4).
+     *
+     * <p>날짜는 그대로이고 방만 바뀐다. 옛 단위의 재고를 반납하고 새 단위에서 잡는데,
+     * <b>새 단위가 모자라면 전부 없던 일이 되어야 한다.</b> 한 트랜잭션이라 새 단위
+     * 확보가 실패하면 반납까지 함께 롤백된다.
+     *
+     * <p><b>락 둘을 여기서 잡지 않는다.</b> {@code ConflictResolutionService} 가 이
+     * 빈을 부르기 <i>전에</i> 판매 단위 식별자 오름차순으로 잡는다. 여기서 잡으면
+     * 트랜잭션이 열린 채 락을 기다려 커넥션 풀이 마르고, 무엇보다 순서를 정할 자리가
+     * 트랜잭션 안이 되어 ADR 0002 가 예고한 교착이 그대로 난다.
+     *
+     * <p>{@code InventoryService} 가 안에서 다시 락을 잡지만 {@code ReentrantLock}
+     * 이라 같은 스레드에서는 재진입이 된다. 일괄 편집이 이미 그렇게 부른다.
+     */
+    @Transactional
+    Reservation moveToUnit(Long reservationId, Long targetUnitId) {
+        Reservation reservation = load(reservationId);
+        Long sourceUnitId = reservation.getUnitId();
+        if (sourceUnitId.equals(targetUnitId)) {
+            return reservation;
+        }
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+        StayPeriod period = reservation.getPeriod();
+
+        // 반납이 먼저다. 순서가 반대면 두 단위가 같은 기간을 동시에 잡는 구간이
+        // 생기고, 재고가 하나뿐인 단위에서는 늘 실패한다.
+        switch (reservation.getStatus()) {
+            case HOLD -> {
+                inventoryService.releaseHold(sourceUnitId, period, UNITS);
+                inventoryService.hold(targetUnitId, period, UNITS);
+            }
+            case CONFIRMED, CHECKED_IN -> {
+                inventoryService.release(sourceUnitId, period, UNITS);
+                inventoryService.reserve(targetUnitId, period, UNITS);
+            }
+            default -> throw new IllegalReservationTransition(
+                    reservation.getStatus(), reservation.getStatus());
+        }
+
+        reservation.moveToUnit(targetUnitId);
+        rewriteNights(reservation);
+
+        // 두 단위의 재고가 함께 바뀌었으므로 이벤트도 둘이다. 하나만 남기면
+        // 옛 단위의 늘어난 재고가 어느 채널에도 나가지 않고, 팔 수 있는 방을
+        // 못 파는 상태가 된다. 그때 우리 쪽 로그는 전부 정상이다.
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                ReservationEvents.CANCELLED,
+                ReservationEvents.releasedUnitPayload(reservation, sourceUnitId));
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(),
+                ReservationEvents.CONFIRMED, ReservationEvents.payloadOf(reservation));
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "MOVE_UNIT",
+                before, ReservationEvents.auditSnapshot(reservation));
+        return reservation;
+    }
+
     /** 확정 이벤트와 감사를 함께 남긴다. 수기 등록과 HOLD 승격이 같은 사건을 만든다. */
     private void recordConfirmed(Reservation reservation, String action,
                                  Map<String, Object> before) {

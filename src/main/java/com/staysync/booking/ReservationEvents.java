@@ -50,6 +50,22 @@ final class ReservationEvents {
         return payload;
     }
 
+    /**
+     * 판매 단위를 옮겼을 때 <b>옛 단위</b>의 재고가 늘었다는 사실을 알리는 페이로드.
+     *
+     * <p>{@link #payloadOf} 는 예약이 지금 붙어 있는 단위만 담는다. 업그레이드 배정은
+     * 두 단위의 재고를 함께 바꾸므로 이벤트가 하나면 <b>옛 단위의 늘어난 재고가 어느
+     * 채널에도 나가지 않는다.</b> 팔 수 있는 방을 못 파는 상태가 되고, 우리 쪽 로그는
+     * 전부 정상이다.
+     */
+    static Map<String, Object> releasedUnitPayload(Reservation reservation, Long releasedUnitId) {
+        Map<String, Object> payload = payloadOf(reservation);
+        payload.put("unitId", releasedUnitId);
+        // 옛 단위에서는 예약이 사라진 것이므로 취소와 같은 사건으로 읽혀야 한다.
+        payload.put("status", "CANCELLED");
+        return payload;
+    }
+
     /** 감사 기록의 전후 값. 상태와 날짜만 담는다. */
     static Map<String, Object> auditSnapshot(String status, String checkIn, String checkOut) {
         Map<String, Object> snapshot = new LinkedHashMap<>();

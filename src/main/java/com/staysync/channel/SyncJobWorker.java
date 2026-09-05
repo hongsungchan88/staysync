@@ -3,7 +3,10 @@ package com.staysync.channel;
 import com.staysync.channel.domain.SyncJob;
 import com.staysync.channel.domain.SyncJobStatus;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,6 +32,8 @@ import org.springframework.stereotype.Component;
 @Component
 public class SyncJobWorker {
 
+    private static final Logger log = LoggerFactory.getLogger(SyncJobWorker.class);
+
     /** 한 번에 집을 작업 수. 연결당 한 건씩이라 사실상 "동시에 다룰 연결 수"다. */
     static final int BATCH_LIMIT = 20;
 
@@ -41,12 +46,24 @@ public class SyncJobWorker {
     /** 채널이 알려 주지 않을 때 쓰는 한도 대기 시간. */
     static final Duration RATE_LIMIT_PAUSE = Duration.ofSeconds(60);
 
+    /**
+     * 이만큼 {@code RUNNING} 으로 남아 있으면 고아로 본다.
+     *
+     * <p>가장 긴 정상 전송보다 넉넉히 길어야 한다. 어댑터 타임아웃이 10초이고
+     * 트랜잭션이 그 바깥이라, 5분이면 살아 있는 작업을 뺏을 일이 없다.
+     */
+    static final Duration ORPHAN_AFTER = Duration.ofMinutes(5);
+
     private final SyncJobRunner runner;
     private final SyncJobRepository jobs;
+    private final Duration orphanAfter;
 
-    SyncJobWorker(SyncJobRunner runner, SyncJobRepository jobs) {
+    SyncJobWorker(SyncJobRunner runner, SyncJobRepository jobs,
+                  @org.springframework.beans.factory.annotation.Value(
+                          "${staysync.channel.orphan-after-ms:300000}") long orphanAfterMs) {
         this.runner = runner;
         this.jobs = jobs;
+        this.orphanAfter = orphanAfterMs > 0 ? Duration.ofMillis(orphanAfterMs) : ORPHAN_AFTER;
     }
 
     @Scheduled(fixedDelayString = "${staysync.channel.worker-interval-ms:1000}",
@@ -61,6 +78,8 @@ public class SyncJobWorker {
      * @return 처리한 건수(성공·실패 무관)
      */
     public int drainOnce() {
+        // 집기 전에 되살린다. 순서가 반대면 되살아난 작업이 다음 주기까지 기다린다.
+        reviveOrphans();
         List<SyncJob> claimed = runner.claim(BATCH_LIMIT);
         for (SyncJob job : claimed) {
             runner.execute(job.getId());
@@ -85,6 +104,28 @@ public class SyncJobWorker {
             total += handled;
         }
         return total;
+    }
+
+    /**
+     * <b>고아 작업을 되살린다.</b> {@code RUNNING} 인 채 앱이 죽어 유실된 작업이다.
+     *
+     * <p>이게 없으면 그 연결이 <b>영영 막힌다</b> — 클레임의 {@code NOT EXISTS} 가
+     * 같은 연결의 앞선 작업을 기다리기 때문이다. 12주차가 순서 보장을 얻으면서 같이
+     * 만든 구멍이고, 13주차의 재동기화 배치가 결국 덮지만 하루를 기다리는 것과 몇
+     * 분은 다르다.
+     *
+     * <p>여기에 둔 이유는 <b>{@code sync_job} 의 상태를 워커 밖에서 바꾸지 않는다</b>는
+     * 12주차 규칙이다. 클레임과 완료가 한곳에 있어야 {@code SKIP LOCKED} 가 의미를 갖고,
+     * 되살리기도 상태 변경이다.
+     *
+     * @return 되살린 건수
+     */
+    public int reviveOrphans() {
+        int revived = runner.reviveOrphans(OffsetDateTime.now().minus(orphanAfter));
+        if (revived > 0) {
+            log.warn("워커가 집은 뒤 끝내지 못한 작업 {}건을 되살렸다. 앱이 죽었을 수 있다", revived);
+        }
+        return revived;
     }
 
     /** 테스트가 상태를 확인할 때 쓴다. */

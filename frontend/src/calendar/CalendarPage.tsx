@@ -76,6 +76,12 @@ export function CalendarPage() {
             >
               채널 연결
             </Link>
+            <Link
+              to="/conflicts"
+              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
+            >
+              충돌
+            </Link>
             <Button
               size="sm"
               onClick={async () => {

@@ -4,6 +4,7 @@ import { LoginPage } from '@/auth/LoginPage';
 import { CalendarPage } from '@/calendar/CalendarPage';
 import { ChannelsPage } from '@/channels/ChannelsPage';
 import { ChannelMappingPage } from '@/channels/ChannelMappingPage';
+import { ConflictsPage } from '@/conflicts/ConflictsPage';
 import { useSessionBootstrap } from '@/auth/useSessionBootstrap';
 import { useTokenStore } from '@/auth/tokenStore';
 
@@ -29,7 +30,7 @@ export function App() {
 }
 
 /**
- * 화면이 넷이 되면서 React Router 를 들였다(P3 10주차).
+ * 화면이 넷이 되면서 React Router 를 들였다(P3 10주차). 13주차에 충돌 화면이 더해져 다섯이다.
  *
  * 7주차에 "화면이 둘이라 라우터가 할 일이 없고, 화면이 느는 것은 P3 채널 화면"이라고
  * 적어 둔 그 시점이다. 근거는 ADR 0009 결과 절.
@@ -62,6 +63,8 @@ function Routes() {
       <Route path="/" element={<CalendarPage />} />
       <Route path="/channels" element={<ChannelsPage />} />
       <Route path="/channels/:connectionId/mapping" element={<ChannelMappingPage />} />
+      {/* 충돌은 채널 하나의 문제가 아니라 그 날짜 그 방의 문제다. 채널 아래 두지 않는다. */}
+      <Route path="/conflicts" element={<ConflictsPage />} />
       {/* 알 수 없는 경로는 캘린더로. 404 화면을 만들 이유가 아직 없다. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </RouterRoutes>
