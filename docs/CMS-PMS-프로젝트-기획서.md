@@ -569,7 +569,11 @@ public interface ChannelAdapter {
 
 수신 절차는 다음과 같다.
 
-스케줄러가 15분마다 활성화된 iCal 연결을 조회하고 HTTP GET을 수행한다. ETag와 Last-Modified 헤더를 캐싱해 불필요한 파싱을 피하고, 타임아웃은 10초, 재시도는 지수 백오프로 3회 수행한다. ical4j로 VEVENT를 파싱해 UID를 채널 예약번호로, DTSTART와 DTEND를 체크인·체크아웃 날짜로 매핑한다. DTEND는 exclusive이므로 그대로 체크아웃일로 사용한다.
+스케줄러가 15분마다 활성화된 iCal 연결을 조회하고 HTTP GET을 수행한다. ETag와 Last-Modified 헤더를 캐싱해 불필요한 파싱을 피하고, 타임아웃은 10초, 재시도는 지수 백오프로 3회 수행한다. VEVENT를 파싱해 UID를 채널 예약번호로, DTSTART와 DTEND를 체크인·체크아웃 날짜로 매핑한다. DTEND는 exclusive이므로 그대로 체크아웃일로 사용한다.
+
+파서는 ical4j 대신 직접 구현했다. 읽는 항목이 `UID`, `DTSTART`, `DTEND`, `SUMMARY` 넷뿐이고 실질적인 처리는 접힌 줄을 펴는 것이라, 몇 줄이 하는 일에 의존성을 더할 이유가 없다고 판단했다. 실제 에어비앤비 발행물로 확인한 형식은 `docs/조사-02-에어비앤비-ical.md` 3절에 있고, 그 샘플이 파서 테스트의 픽스처다.
+
+수신에서 주의할 점이 하나 있다. 어댑터는 예약 목록이 아니라 **"변경 없음"을 표현할 수 있는 응답**을 돌려줘야 한다. iCal은 매번 전체 스냅샷을 주는 방식이므로 목록이 비면 "이 연결의 예약이 전부 사라졌다"는 뜻이 된다. 304 응답을 빈 목록으로 바꿔 돌려주면 그 연결의 예약이 통째로 취소된다. P3 13주차에 이 구분을 위해 별도 응답 타입을 두었다.
 
 이후 직전 상태와 비교해 신규 UID는 예약으로 생성하고, 날짜가 바뀐 UID는 수정하며, 사라진 UID는 취소로 처리한다. 다만 파싱 실패나 일시적 오류로 응답이 비었을 때 전체 예약이 취소되는 사고를 막기 위해, 이번 응답의 이벤트 수가 직전 대비 절반 이하로 줄면 취소 처리를 보류하고 관리자에게 알린다.
 
@@ -1364,7 +1368,7 @@ Channex 스테이징은 문의나 승인 절차가 없다. 2026년 8월 24일 �
 | 문서화 | springdoc-openapi 2.x | Swagger UI 자동 생성 |
 | 스케줄링 | @Scheduled, ShedLock | 다중 인스턴스 중복 실행 방지 |
 | 분산 락 | Redisson 3.x | |
-| iCal | ical4j 4.x | RFC 5545 파싱 및 생성 |
+| iCal | 직접 구현 | RFC 5545 파싱 및 생성. P3 13주차에 ical4j 대신 직접 구현했다 |
 | 회복성 | Resilience4j | 서킷브레이커, 재시도, 벌크헤드 |
 | AI | Spring AI 1.0.x | ChatClient, pgvector VectorStore, Tool Calling |
 | 관측성 | Micrometer, Actuator | Prometheus 메트릭 노출 |
@@ -1396,7 +1400,6 @@ dependencies {
     implementation 'net.javacrumbs.shedlock:shedlock-spring:5.16.0'
     implementation 'net.javacrumbs.shedlock:shedlock-provider-jdbc-template:5.16.0'
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
-    implementation 'org.mnode.ical4j:ical4j:4.0.6'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.6.0'
