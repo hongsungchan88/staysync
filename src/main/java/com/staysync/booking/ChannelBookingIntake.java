@@ -19,4 +19,21 @@ public interface ChannelBookingIntake {
      * 게스트와 플랫폼 양쪽에서 문제가 된다. 받아들이고 충돌로 기록해 사람이 푼다.
      */
     ChannelBookingResult ingest(ChannelBookingCommand command);
+
+    /**
+     * <b>스냅샷 채널</b>의 취소 처리. 발행물에 없는 예약을 취소한다.
+     *
+     * <p>iCal 에는 취소 통지가 없다. {@code VEVENT} 가 발행물에서 사라지는 것이 곧
+     * 취소이므로, 이번에 받은 식별자 전부를 넘기면 나머지를 취소한다.
+     *
+     * <p><b>{@code Capability.SNAPSHOT_BOOKING} 을 선언한 채널만 부른다.</b> Mock 과
+     * Channex 는 취소를 상태로 알려 주고 목록이 전체 스냅샷이라는 보장도 없어서,
+     * 여기를 부르면 <b>아직 목록에 안 나타난 예약을 취소하게 된다.</b>
+     *
+     * <p>대량 소실 방어가 걸린 주기에는 부르지 않는다. 그 판단은 수신부의 몫이다.
+     *
+     * @param presentChannelBookingIds 이번 발행물에 있던 채널 예약번호 전부
+     * @return 실제로 취소한 건수
+     */
+    int cancelMissing(Long unitId, String channelCode, java.util.Set<String> presentChannelBookingIds);
 }

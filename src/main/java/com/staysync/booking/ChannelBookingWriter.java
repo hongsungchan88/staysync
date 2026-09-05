@@ -108,10 +108,10 @@ class ChannelBookingWriter {
         }
 
         StayPeriod oldPeriod = reservation.getPeriod();
-        if (!reservation.applyRevision(command.revision(), command.period(), command.totalAmount())) {
-            // 낮은 버전이 나중에 도착했다. 전달 순서가 뒤바뀌는 것은 정상이고,
-            // 여기서 반영하면 옛 날짜로 되돌아간다.
-            log.debug("이미 반영된 버전이라 무시한다. bookingId={} incoming={} current={}",
+        if (!applyIncoming(reservation, command)) {
+            // 낮은 버전이 나중에 도착했거나(버전이 있는 채널), 값이 그대로다(없는 채널).
+            // 전달 순서가 뒤바뀌는 것은 정상이고, 여기서 반영하면 옛 날짜로 되돌아간다.
+            log.debug("반영할 것이 없어 무시한다. bookingId={} incoming={} current={}",
                     command.channelBookingId(), command.revision(), reservation.getRevision());
             return ChannelBookingResult.of(
                     ChannelBookingResult.Outcome.DUPLICATE, reservation.getId());
@@ -129,17 +129,60 @@ class ChannelBookingWriter {
 
         outbox.record("RESERVATION", reservation.getId(), "RESERVATION_DATES_CHANGED",
                 channelPayload(reservation, command));
+        // Map.of 를 쓰지 않는다. 버전이 없는 채널(iCal)은 revision 이 null 이고
+        // Map.of 는 null 을 거부한다 — 수신 전체가 NPE 로 실패하고, 폴링이 그걸
+        // 잡아 로그만 남기므로 예약이 조용히 갱신되지 않는다.
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("checkIn", command.period().checkIn().toString());
+        after.put("checkOut", command.period().checkOut().toString());
+        after.put("revision", command.revision());
         audit.recordAs(ActorKind.CHANNEL, null, "RESERVATION", reservation.getId(),
                 "CHANNEL_REVISION",
                 Map.of("checkIn", oldPeriod.checkIn().toString(),
                         "checkOut", oldPeriod.checkOut().toString()),
-                Map.of("checkIn", command.period().checkIn().toString(),
-                        "checkOut", command.period().checkOut().toString(),
-                        "revision", command.revision()));
+                after);
 
         return conflicted.isEmpty()
                 ? ChannelBookingResult.of(ChannelBookingResult.Outcome.UPDATED, reservation.getId())
                 : ChannelBookingResult.conflict(reservation.getId(), conflicted);
+    }
+
+    /**
+     * 발행물에서 사라진 예약을 취소한다. 스냅샷 채널(iCal)만 이 경로를 쓴다.
+     *
+     * <p>{@code cancel} 은 멱등하고 재고 반납까지 한 트랜잭션이다. 여기서 따로
+     * 원장을 건드리지 않는 이유가 그것이다.
+     *
+     * <p>부르는 쪽이 대량 소실 방어를 먼저 통과시킨다. 파싱이 실패했거나 발행자가
+     * 잠깐 빈 달력을 낸 주기에 이 메서드가 돌면 <b>그 채널의 예약이 전부 사라진다.</b>
+     */
+    @Transactional
+    int cancelMissing(Long unitId, String channelCode, java.util.Set<String> present) {
+        int cancelled = 0;
+        for (Reservation reservation : reservationRepo.findActiveOfChannel(unitId, channelCode)) {
+            if (present.contains(reservation.getChannelBookingId())) {
+                continue;
+            }
+            reservationWriter.cancel(reservation.getId());
+            log.info("발행물에서 사라진 예약을 취소했다. channel={} bookingId={} reservationId={}",
+                    channelCode, reservation.getChannelBookingId(), reservation.getId());
+            cancelled++;
+        }
+        return cancelled;
+    }
+
+    /**
+     * 들어온 값을 반영할지 정한다.
+     *
+     * <p><b>버전이 없는 채널은 크기를 비교하지 않는다.</b> iCal 이 그렇고, 계획서
+     * 13.4 처럼 내용 해시를 버전 자리에 넣으면 해시에 순서가 없어서 날짜가 바뀐 뒤의
+     * 해시가 우연히 작을 때 수정이 조용히 무시된다. 그런 채널은 매번 전체 스냅샷을
+     * 받으므로 순서 역전이 없고, 값이 다르면 그것이 곧 수정이다. 근거는 ADR 0013.
+     */
+    private static boolean applyIncoming(Reservation reservation, ChannelBookingCommand command) {
+        return command.revision() == null
+                ? reservation.applyValues(command.period(), command.totalAmount())
+                : reservation.applyRevision(command.revision(), command.period(), command.totalAmount());
     }
 
     // --- 새 예약 ---------------------------------------------------------------
@@ -148,7 +191,9 @@ class ChannelBookingWriter {
         Reservation reservation = Reservation.fromChannel(
                 command.propertyId(), command.unitId(), command.period(),
                 command.channelCode(), command.channelBookingId(),
-                bookingService.uniqueCode(), command.revision(),
+                bookingService.uniqueCode(),
+                // 버전이 없는 채널은 0 에서 시작한다. 이후 판정도 크기를 보지 않는다.
+                command.revision() == null ? 0 : command.revision(),
                 command.totalAmount(), BigDecimal.ZERO);
 
         // 재고를 잡기 전에 저장한다. 초과 판매 경로에서 충돌 기록이 예약 식별자를

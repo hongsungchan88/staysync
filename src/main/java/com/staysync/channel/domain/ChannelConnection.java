@@ -14,8 +14,12 @@ import org.hibernate.type.SqlTypes;
  * 매번 복호화해야 한다. 값은 유출되면 그 사람의 채널 계정 전체가 열리므로 평문으로
  * 두지 않는다(ADR 0007 의 두 번째 적용).
  *
- * <p>{@code etag}, {@code last_event_count}, {@code last_sync_*} 컬럼은 매핑하지
- * 않았다. 동기화 워커가 쓰는 값이고 그건 12주차다.
+ * <p>{@code etag} 와 {@code last_event_count} 는 P3 13주차에 매핑했다. iCal 폴링의
+ * 조건부 요청과 대량 소실 방어가 쓴다. <b>어댑터가 아니라 여기에 있어야 한다</b> —
+ * 어댑터가 메모리에 들고 있으면 재기동 직후 첫 폴링에 기준값이 없고, 그 순간이 정확히
+ * 방어가 필요한 순간이다.
+ *
+ * <p>{@code last_sync_*} 는 아직 매핑하지 않았다. 읽는 곳이 없다.
  */
 @Entity
 @Table(name = "channel_connection")
@@ -45,6 +49,19 @@ public class ChannelConnection {
 
     @Column(name = "sync_enabled", nullable = false)
     private boolean syncEnabled = true;
+
+    /** 직전 iCal 응답의 {@code ETag}. 다음 요청의 {@code If-None-Match} 에 실린다. */
+    @Column(name = "etag", length = 200)
+    private String etag;
+
+    /**
+     * 직전 발행물의 이벤트 수. 대량 소실 방어의 기준값이다(계획서 13.4).
+     *
+     * <p>{@code null} 은 "아직 한 번도 받지 못했다"는 뜻이고, 그때는 비교할 것이
+     * 없으므로 방어가 걸리지 않는다.
+     */
+    @Column(name = "last_event_count")
+    private Integer lastEventCount;
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private OffsetDateTime createdAt;
@@ -88,6 +105,28 @@ public class ChannelConnection {
 
     public boolean isSyncEnabled() {
         return syncEnabled;
+    }
+
+    public String getEtag() {
+        return etag;
+    }
+
+    public Integer getLastEventCount() {
+        return lastEventCount;
+    }
+
+    /**
+     * 폴링 한 번의 결과를 기록한다.
+     *
+     * <p>대량 소실 방어가 걸린 주기에는 <b>부르지 않는다.</b> 부르면 줄어든 수가
+     * 다음 주기의 기준값이 되어, 한 번 더 줄어들 때는 방어가 걸리지 않는다.
+     * 그렇게 두 번이면 전체가 취소된다.
+     */
+    public void recordFeed(String etag, int eventCount) {
+        if (etag != null && !etag.isBlank()) {
+            this.etag = etag;
+        }
+        this.lastEventCount = eventCount;
     }
 
     public OffsetDateTime getCreatedAt() {

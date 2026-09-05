@@ -3,6 +3,7 @@ package com.staysync.channel.adapter.mock;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.staysync.channel.port.AdapterType;
 import com.staysync.channel.port.AriUpdateCommand;
+import com.staysync.channel.port.BookingFeed;
 import com.staysync.channel.port.Capability;
 import com.staysync.channel.port.ChannelAdapter;
 import com.staysync.channel.port.ChannelCredentials;
@@ -90,12 +91,20 @@ public class MockOtaAdapter implements ChannelAdapter {
         return SyncResult.ok(command.segments().size());
     }
 
+    /**
+     * 시뮬레이터는 조건부 요청을 하지 않는다. {@code knownEtag} 를 쓰지 않고 매번
+     * 전체를 받는다 — 예약 목록이 몇 건 수준이라 아낄 것이 없다.
+     *
+     * <p><b>스냅샷이 아니다.</b> {@link AdapterType#MOCK} 이
+     * {@code SNAPSHOT_BOOKING} 을 선언하지 않으므로, 목록에 없는 예약을 취소로
+     * 다루지 않는다. 취소는 {@code status} 가 알려 준다.
+     */
     @Override
-    public List<InboundBooking> pullBookings(ChannelCredentials credentials) {
+    public BookingFeed pullBookings(ChannelCredentials credentials, String knownEtag) {
         MockBooking[] bookings = get(credentials, "/api/bookings", MockBooking[].class);
-        return bookings == null ? List.of() : java.util.Arrays.stream(bookings)
+        return BookingFeed.of(bookings == null ? List.of() : java.util.Arrays.stream(bookings)
                 .map(MockBooking::toInbound)
-                .toList();
+                .toList());
     }
 
     // --- HTTP -----------------------------------------------------------------
@@ -223,7 +232,7 @@ public class MockOtaAdapter implements ChannelAdapter {
         InboundBooking toInbound() {
             return new InboundBooking(bookingId, roomId, checkIn, checkOut, guestName,
                     adults, children, totalAmount, revision,
-                    false, "CANCELLED".equals(status), null);
+                    "CANCELLED".equals(status), null);
         }
     }
 }

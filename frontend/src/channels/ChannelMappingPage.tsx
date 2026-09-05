@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createMapping, deleteMapping, fetchMappingBoard } from '@/api/channels';
+import {
+  createMapping,
+  deleteMapping,
+  fetchExportUrl,
+  fetchMappingBoard,
+} from '@/api/channels';
 import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -91,6 +96,8 @@ export function ChannelMappingPage() {
               )}
             </div>
 
+            {unit.mapping && <ExportUrl connectionId={id} mappingId={unit.mapping.id} />}
+
             {!unit.mapping && connection && (
               <MappingForm
                 connectionId={id}
@@ -102,6 +109,52 @@ export function ChannelMappingPage() {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * iCal 발행 URL 을 눌러서 받는다.
+ *
+ * **처음부터 보여 주지 않는다.** URL 자체가 인증이라(계획서 6.2) 화면에 늘 떠 있으면
+ * 어깨너머로도 새고, 목록 응답에 실어 두면 캐시와 로그에도 남는다. 호스트가
+ * 에어비앤비의 "다른 웹사이트에 연결하기" 2단계에 붙여 넣을 때만 필요하다.
+ */
+function ExportUrl({ connectionId, mappingId }: { connectionId: number; mappingId: number }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  const load = useMutation({
+    mutationFn: () => fetchExportUrl(connectionId, mappingId),
+    onSuccess: (value) => {
+      setFailed(false);
+      setUrl(value);
+    },
+    onError: () => setFailed(true),
+  });
+
+  if (!url) {
+    return (
+      <div className="mt-3 border-t border-rule pt-3">
+        <Button size="sm" onClick={() => load.mutate()} disabled={load.isPending}>
+          발행 URL 보기
+        </Button>
+        {failed && <p className="mt-1 text-xs text-warn">발행 URL 을 받지 못했습니다.</p>}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 border-t border-rule pt-3">
+      <p className="text-xs text-muted">
+        에어비앤비 · 달력 → 예약 가능일 → 달력 연결하기 → 다른 웹사이트에 연결하기의
+        <strong className="text-ink"> 2단계(가져오기)</strong> 에 이 주소를 넣습니다.
+      </p>
+      <p className="mt-1 break-all rounded-md bg-paper p-2 font-mono text-xs text-ink">{url}</p>
+      <p className="mt-1 text-xs text-warn">
+        이 주소를 아는 사람은 누구나 이 판매 단위의 예약 일정을 읽습니다. API 키처럼
+        다루세요.
+      </p>
     </div>
   );
 }

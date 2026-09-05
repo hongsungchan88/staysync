@@ -2,7 +2,6 @@ package com.staysync.channel.port;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -34,23 +33,37 @@ public interface ChannelAdapter {
      */
     SyncResult pushAri(ChannelCredentials credentials, AriUpdateCommand command);
 
-    /** 우리 캘린더를 채널이 읽을 수 있는 형태로 발행한다. iCal 어댑터만 구현한다. */
-    default Optional<String> exportCalendar(ChannelCredentials credentials, Long unitId) {
-        return Optional.empty();
-    }
-
     // --- 채널 → 우리 ----------------------------------------------------
 
-    /** 폴링으로 예약을 수집한다. iCal 과 일부 REST 채널이 구현한다. */
-    default List<InboundBooking> pullBookings(ChannelCredentials credentials) {
-        return List.of();
+    /**
+     * 폴링으로 예약을 수집한다. iCal 과 일부 REST 채널이 구현한다.
+     *
+     * <p>{@code knownEtag} 는 직전 응답의 {@code ETag} 다. 조건부 요청을 지원하는
+     * 채널은 이걸 실어 보내고 304 를 받으면 {@link BookingFeed#unchanged()} 를
+     * 돌려준다. 지원하지 않는 채널은 무시하면 된다.
+     *
+     * <p>{@link Capability#PULL_BOOKING} 을 선언한 어댑터만 호출된다. 선언하지 않고
+     * 구현하면 폴링이 그 채널을 조용히 건너뛰고, 선언하고 구현하지 않으면 예약이 하나도
+     * 들어오지 않는다. 둘 다 로그에 아무것도 남기지 않아
+     * {@code AdapterContractTest} 가 그 어긋남을 잡는다.
+     */
+    default BookingFeed pullBookings(ChannelCredentials credentials, String knownEtag) {
+        throw new UnsupportedOperationException(
+                type() + " 는 예약 폴링을 지원하지 않습니다.");
     }
 
-    /** 웹훅 본문을 표준 예약 형태로 변환한다. */
+    /**
+     * 웹훅 본문을 표준 예약 형태로 변환한다.
+     *
+     * <p>수신 엔드포인트는 아직 없다. 12주차에 폴링으로 정했고 13주차에도 그대로다
+     * (작업지시 10 의 3절). {@link Capability#WEBHOOK_BOOKING} 을 선언한 어댑터가
+     * 생기면 그때 부르는 쪽이 붙는다.
+     */
     default List<InboundBooking> parseWebhook(ChannelCredentials credentials,
                                               String rawBody,
                                               Map<String, String> headers) {
-        return List.of();
+        throw new UnsupportedOperationException(
+                type() + " 는 웹훅 수신을 지원하지 않습니다.");
     }
 
     /** 웹훅 서명을 검증한다. 검증하지 않는 채널은 기본값 그대로 둔다. */

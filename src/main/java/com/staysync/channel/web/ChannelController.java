@@ -28,13 +28,20 @@ class ChannelController {
     private final ChannelConnectionService service;
     private final ChannelCredentialStore credentialStore;
     private final ChannelAdapterRegistry registry;
+    private final String publicBaseUrl;
 
     ChannelController(ChannelConnectionService service,
                       ChannelCredentialStore credentialStore,
-                      ChannelAdapterRegistry registry) {
+                      ChannelAdapterRegistry registry,
+                      @org.springframework.beans.factory.annotation.Value(
+                              "${staysync.public-base-url:http://localhost:8080}")
+                      String publicBaseUrl) {
         this.service = service;
         this.credentialStore = credentialStore;
         this.registry = registry;
+        this.publicBaseUrl = publicBaseUrl.endsWith("/")
+                ? publicBaseUrl.substring(0, publicBaseUrl.length() - 1)
+                : publicBaseUrl;
     }
 
     // --- 연결 ---------------------------------------------------------------
@@ -85,6 +92,23 @@ class ChannelController {
         return ResponseEntity.status(HttpStatus.CREATED).body(MappingResponse.from(
                 service.addMapping(connectionId, orgId(), request.unitId(),
                         request.externalUnitId(), request.externalRateId())));
+    }
+
+    /**
+     * 발행 URL. <b>토큰이 응답에 실리는 유일한 경로다.</b>
+     *
+     * <p>목록·상세에 담지 않는 이유는 그 응답이 화면을 그릴 때마다 오가기 때문이다.
+     * 브라우저 캐시와 프록시 로그 어디에나 남고, 새는 쪽에서는 아무 증상이 없다.
+     * 호스트가 에어비앤비의 "다른 웹사이트에 연결하기" 2단계에 붙여 넣을 때만 부른다
+     * (조사-02 1절).
+     *
+     * <p>{@code baseUrl} 은 요청의 호스트에서 만들지 않는다. 프록시 뒤에서는 그 값이
+     * 내부 주소가 되어 에어비앤비가 닿지 못하는 URL 이 나간다. 설정으로 받는다.
+     */
+    @GetMapping("/channels/{connectionId}/mappings/{mappingId}/export-url")
+    ExportUrlResponse exportUrl(@PathVariable Long connectionId, @PathVariable Long mappingId) {
+        String token = service.exportTokenOf(connectionId, orgId(), mappingId);
+        return new ExportUrlResponse(publicBaseUrl + "/public/ical/" + token + ".ics");
     }
 
     @DeleteMapping("/channels/{connectionId}/mappings/{mappingId}")

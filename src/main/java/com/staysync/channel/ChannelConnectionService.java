@@ -8,7 +8,9 @@ import com.staysync.property.UnitCatalog;
 import com.staysync.property.UnitNotFoundException;
 import com.staysync.property.UnitSummary;
 import com.staysync.shared.audit.AuditRecorder;
+import java.security.SecureRandom;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -37,6 +39,16 @@ public class ChannelConnectionService {
 
     /** 감사 기록에서 자격 증명 변경을 나타내는 표시. 값도 키 이름도 담지 않는다. */
     private static final String CREDENTIALS_CHANGED = "변경됨";
+
+    /**
+     * 발행 토큰의 바이트 수. 16진수로 64자가 되어 컬럼 길이와 맞는다.
+     *
+     * <p>URL 자체가 인증이므로 추측 가능하면 남의 예약 일정이 새어 나간다.
+     * 리프레시 토큰과 같은 폭이다.
+     */
+    private static final int EXPORT_TOKEN_BYTES = 32;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final ChannelConnectionRepository connections;
     private final ChannelMappingRepository mappings;
@@ -181,7 +193,32 @@ public class ChannelConnectionService {
         if (mappings.existsByConnectionIdAndUnitId(connectionId, unitId)) {
             throw new DuplicateChannelMappingException(unitId);
         }
-        return mappings.save(new ChannelMapping(connectionId, unitId, externalUnitId, externalRateId));
+        return mappings.save(new ChannelMapping(connectionId, unitId, externalUnitId,
+                externalRateId, newExportToken()));
+    }
+
+    /**
+     * 발행 URL 의 토큰. <b>이 경로에서만 원문이 나간다.</b>
+     *
+     * <p>목록·상세 응답에는 담지 않는다. 화면이 매핑을 그릴 때마다 토큰이 실리면
+     * 브라우저 캐시와 로그 어디에나 남고, 그건 새는 쪽에서 아무 증상이 없다.
+     * 호스트가 에어비앤비 2단계에 붙여 넣을 때만 꺼낸다(조사-02 1절).
+     *
+     * <p>채널 종류를 가리지 않고 만든다. iCal 을 가져갈 수 있는 채널이 에어비앤비만은
+     * 아니고, 종류로 갈라 두면 나중에 그 분기가 조용히 어긋난다.
+     */
+    public String exportTokenOf(Long connectionId, Long orgId, Long mappingId) {
+        get(connectionId, orgId);
+        return mappings.findById(mappingId)
+                .filter(mapping -> mapping.getConnectionId().equals(connectionId))
+                .map(ChannelMapping::getExportToken)
+                .orElseThrow(() -> new ChannelConnectionNotFoundException(connectionId));
+    }
+
+    private static String newExportToken() {
+        byte[] bytes = new byte[EXPORT_TOKEN_BYTES];
+        RANDOM.nextBytes(bytes);
+        return HexFormat.of().formatHex(bytes);
     }
 
     @Transactional
