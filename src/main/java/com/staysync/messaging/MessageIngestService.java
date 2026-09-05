@@ -83,15 +83,28 @@ public class MessageIngestService {
                 ? Optional.empty()
                 : reservations.findByChannel(channelCode, incoming.channelBookingId());
 
-        return threads.findByChannelCodeAndExternalId(channelCode, incoming.externalThreadId())
-                .map(existing -> {
-                    reservation.ifPresent(r -> existing.attachReservation(r.id(), r.guestId()));
-                    return existing;
-                })
-                .orElseGet(() -> threads.saveAndFlush(new MessageThread(
-                        propertyId, channelCode, incoming.externalThreadId(),
-                        reservation.map(ReservationBrief::id).orElse(null),
-                        reservation.map(ReservationBrief::guestId).orElse(null),
-                        reservation.map(ReservationBrief::confirmationCode).orElse(null))));
+        Optional<MessageThread> byExternalId =
+                threads.findByChannelCodeAndExternalId(channelCode, incoming.externalThreadId());
+        if (byExternalId.isPresent()) {
+            MessageThread existing = byExternalId.get();
+            reservation.ifPresent(r -> existing.attachReservation(r.id(), r.guestId()));
+            return existing;
+        }
+
+        // 자동 발송이 게스트보다 먼저 말을 걸었으면 식별자 없는 스레드가 이미 있다.
+        // 새로 만들면 같은 게스트와의 대화가 둘로 갈라진다.
+        Optional<MessageThread> orphan = reservation
+                .flatMap(r -> threads.findByReservationIdAndExternalIdIsNull(r.id()));
+        if (orphan.isPresent()) {
+            MessageThread adopted = orphan.get();
+            adopted.adoptExternalId(incoming.externalThreadId());
+            return adopted;
+        }
+
+        return threads.saveAndFlush(new MessageThread(
+                propertyId, channelCode, incoming.externalThreadId(),
+                reservation.map(ReservationBrief::id).orElse(null),
+                reservation.map(ReservationBrief::guestId).orElse(null),
+                reservation.map(ReservationBrief::confirmationCode).orElse(null)));
     }
 }

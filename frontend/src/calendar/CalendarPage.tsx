@@ -82,6 +82,12 @@ export function CalendarPage() {
             >
               충돌
             </Link>
+            <Link
+              to="/inbox"
+              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
+            >
+              인박스
+            </Link>
             <Button
               size="sm"
               onClick={async () => {

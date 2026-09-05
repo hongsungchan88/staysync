@@ -194,3 +194,54 @@ export const conflictSchema = z.object({
   reservations: z.array(conflictReservationSchema).default([]),
 });
 export type Conflict = z.infer<typeof conflictSchema>;
+
+/**
+ * 인박스. 계획서 8.5.
+ *
+ * **연락처가 없다.** 게스트 이름까지만 온다 — 인박스가 누구와의 대화인지 보여 줘야
+ * 하고 템플릿이 그 값을 쓴다. 전화번호와 이메일은 서버가 담지 않는다(ADR 0007).
+ *
+ * 예약이 붙지 않은 스레드가 있다. 채널이 예약보다 메시지를 먼저 보내는 경우이고,
+ * 그때는 예약 관련 필드의 키가 아예 빠진다(`non_null` 직렬화) — `nullish` 로 받는다.
+ */
+export const threadSummarySchema = z.object({
+  id: z.number(),
+  channelCode: z.string(),
+  subject: z.string().nullish(),
+  unreadCount: z.number(),
+  lastMessageAt: z.string().nullish(),
+  reservationId: z.number().nullish(),
+  confirmationCode: z.string().nullish(),
+  guestName: z.string().nullish(),
+  checkIn: z.string().nullish(),
+  checkOut: z.string().nullish(),
+  reservationStatus: z.string().nullish(),
+});
+export type ThreadSummary = z.infer<typeof threadSummarySchema>;
+
+export const messageSchema = z.object({
+  id: z.number(),
+  direction: z.string(),
+  /** GUEST | HOST | AI | SYSTEM. SYSTEM 은 자동 발송이 만든 것이다. */
+  sender: z.string(),
+  body: z.string(),
+  sentAt: z.string(),
+});
+export type InboxMessage = z.infer<typeof messageSchema>;
+
+export const threadSchema = z.object({
+  thread: threadSummarySchema,
+  messages: z.array(messageSchema).default([]),
+  /** 거짓이면 입력창 대신 미지원 표시를 그린다. iCal 스레드가 여기 걸린다. */
+  messagingSupported: z.boolean(),
+});
+export type InboxThread = z.infer<typeof threadSchema>;
+
+export const messageTemplateSchema = z.object({
+  id: z.number(),
+  code: z.string(),
+  name: z.string(),
+  body: z.string(),
+});
+export type MessageTemplate = z.infer<typeof messageTemplateSchema>;
+
