@@ -107,7 +107,7 @@ class BulkEditWriter {
         }
 
         recordAudit(propertyId, request, result);
-        recordEvent(propertyId, result);
+        recordEvent(propertyId, request, units, dates, result);
         return result;
     }
 
@@ -285,14 +285,25 @@ class BulkEditWriter {
     /**
      * 요금·제약이 바뀌었다는 사건을 남긴다. 같은 트랜잭션이다.
      *
-     * <p>지금 듣는 것은 실시간 갱신이고, P3 에서 채널 전파가 옆에 붙는다. 페이로드에는
-     * <b>식별자와 범위만</b> 담는다 — 화면은 이걸 받고 캘린더를 다시 조회하지 값을
-     * 이벤트에서 읽지 않는다. 바뀐 셀을 전부 실으면 30일 × 10단위가 페이로드 하나에
-     * 들어간다.
+     * <p>듣는 것이 둘이다 — 실시간 갱신(9주차)과 채널 전파(P3 12주차). 페이로드에는
+     * <b>식별자와 범위만</b> 담는다. 화면은 이걸 받고 캘린더를 다시 조회하고, 채널
+     * 전파는 그 범위의 현재 값을 읽어 보낸다. 둘 다 값을 이벤트에서 읽지 않는다 —
+     * 바뀐 셀을 전부 실으면 30일 × 10단위가 페이로드 하나에 들어간다.
+     *
+     * <p>날짜는 <b>요일 필터를 거친 실제 대상</b>의 양끝이다. 요청의 from/to 를 그대로
+     * 쓰면 "주말만" 편집에서 평일까지 전파 범위에 들어간다. 값이 안 바뀐 날을 보내는
+     * 것은 틀리지는 않지만 Channex 한도를 쓸데없이 먹는다.
      */
-    private void recordEvent(Long propertyId, BulkEdit.Result result) {
+    private void recordEvent(Long propertyId, BulkEdit.Request request,
+                             List<UnitSummary> units, List<LocalDate> dates,
+                             BulkEdit.Result result) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("propertyId", propertyId);
+        // 어느 판매 단위의 어느 기간인지. 채널 전파(P3 12주차)가 이걸 보고 그 범위의
+        // 현재 값을 읽어 채널에 보낸다. 없으면 소비자가 숙소 전체를 다시 훑어야 한다.
+        payload.put("unitIds", units.stream().map(UnitSummary::id).toList());
+        payload.put("from", dates.get(0).toString());
+        payload.put("to", dates.get(dates.size() - 1).toString());
         payload.put("cellCount", result.cellCount());
         payload.put("changed", result.changed());
         outbox.record(AGGREGATE_TYPE, propertyId, BULK_EDITED, payload);
