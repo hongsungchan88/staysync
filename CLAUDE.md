@@ -21,8 +21,12 @@ Java 21 · Spring Boot 3.5.4 · Spring Modulith 1.3 · PostgreSQL 16 · Flyway �
 
 프론트엔드는 `frontend/`에 있다. React 19 · TypeScript 5.6 · Vite 6 · TanStack Query 5 ·
 Zustand · Tailwind CSS 4 · Zod · Vitest 3. 캘린더 그리드가 TanStack Virtual 3(양방향
-가상 스크롤)과 dnd-kit(막대 드래그, 키보드 센서 포함)을 쓴다. React Router는 여전히
-넣지 않는다 — 화면이 로그인과 캘린더 둘이다.
+가상 스크롤)과 dnd-kit(막대 드래그, 키보드 센서 포함)을 쓴다. React Router 7은 P3
+10주차에 들어왔다 — 화면이 로그인·캘린더·채널 목록·채널 매핑 넷이다.
+
+**인증은 경로가 아니라 토큰 유무로 갈린다.** `/login` 경로가 없다. 토큰이 없으면 어느
+경로에 있든 로그인 화면을 그리고, 라우터는 부팅 복구 안쪽에 있어 `/channels/2/mapping`
+에서 새로고침해도 그 경로가 유지된다. 근거는 ADR 0009 결과 절.
 
 ```bash
 cd frontend && npm run dev     # 개발 서버 5173. 백엔드도 함께 띄워야 한다
@@ -179,12 +183,33 @@ SHA-256 해시로 저장하는 난수(14일)다. 갱신할 때마다 회전시�
   본문을 10MB까지 받으므로 압축 목표는 6개월치 변경이 호출 한 번으로 끝나는 것이다.
   Channex 자가 인증 항목 8이 그 기준이다. 근거는 `docs/조사-01-channex-샌드박스.md`.
 - Channex 스테이징(`staging.channex.io`)은 무료이고 구독 없이 API 키가 나온다.
-  부킹닷컴 공용 테스트 숙소가 준비되어 있어 Mock 이 아닌 실제 채널로 검증할 수 있다.
+  API 키는 발급받았고 숙소는 아직 없다. **숙소를 먼저 만들어야 채널 목록이 열리므로
+  부킹닷컴 공용 테스트 숙소가 실제로 있는지는 아직 확인하지 못했다**(조사-02 5절).
+- **에어비앤비는 미게시 초안을 유지한다.** 게시하면 검색에 노출되어 실제 게스트가
+  예약하고 결제까지 일어난다. 미게시 리스팅의 iCal 은 전 기간을 `VEVENT` 하나로 막아
+  개별 예약을 구분할 수 없으므로, 예약 수신 검증은 Channex 스테이징과 Mock 이 맡는다.
+  근거는 `docs/조사-02-에어비앤비-ical.md`.
+- **iCal `DTEND` 는 배타적이다.** `DTEND:20270906` 은 9월 5일까지 막힌 것이다. 포함으로
+  읽으면 모든 예약이 하루씩 밀리고 화면에서는 정상으로 보인다. 실제 에어비앤비가 발행한
+  샘플이 `src/test/resources/ical/airbnb-unpublished.ics` 에 있다. 13주차 파서가 쓴다.
+- **지원 기능은 `AdapterType` 이 선언한다.** 화면이 "요금 전파 미지원"을 보여 줘야 하는
+  시점(10주차)과 어댑터가 생기는 시점(11~13주차)이 달라서다. 어댑터 구현은
+  `capabilities()` 에서 이 값을 그대로 돌려준다 — 각자 적으면 둘이 어긋나고, 어긋난
+  쪽은 전파 작업을 만들지 말아야 할 채널에 만들거나 그 반대가 된다.
+- **자격 증명은 `PersonalDataCipher` 로 값만 암호화해 저장하고 응답에는 마스킹된
+  형태만 담는다.** 키는 `GUEST_DATA_KEY` 하나다. 복호화하는 자리는
+  `ChannelCredentialStore` 하나. 수정할 때 빈 값은 기존 값을 유지한다 — 화면이 저장된
+  값을 다시 받지 못하므로 그대로 반영하면 연결이 조용히 끊긴다. 근거는 ADR 0007 결과 절.
+- **같은 연결 안에서 한 `Unit` 을 두 번 매핑할 수 없다**(V3 유니크 인덱스). 같은 재고를
+  두 번 보내게 되고 증상은 12주차 워커가 돌아야 나온다. 반대로 한 `Unit` 이 채널 여럿에
+  매핑되는 것은 이 제품의 존재 이유이므로 막지 않는다.
 
 ## 마이그레이션
 
 - `db/migration/postgresql/V1__init.sql` — 기본 스키마 23개 테이블. 두 프로파일 모두 적용.
 - `db/migration/pgvector/V2__pgvector.sql` — 확장 설치와 벡터 타입 전환. `docker`만 적용.
+- `db/migration/postgresql/V3__channel_mapping_unit_unique.sql` — 채널 매핑의
+  `(connection_id, unit_id)` 유니크. 두 프로파일 모두 적용.
 
 내장 PostgreSQL 바이너리에 pgvector가 없어서 나눴다. **V1에 `CREATE EXTENSION vector`나
 `vector(1536)` 타입을 넣지 말 것.** 로컬에서 기동이 실패한다.
@@ -295,8 +320,24 @@ SSE 실시간 갱신을 붙였다. ADR 10건, 백엔드 142건 + 프론트 56건
   쏟아질 때 브라우저가 `ERR_INSUFFICIENT_RESOURCES`로 죽는다. 단위 테스트로는 잡히지
   않았고 브라우저 확인에서 나왔다.
 
-**다음** — P3 10주차. 채널 어댑터 구현과 채널 화면. 이 시점에 React Router가 들어온다.
-지도교수 중간 점검, 계획서 진척 현황과 발표자료 갱신은 Cowork 세션이 한다.
+**P3 10주차 완료.** 어댑터 레지스트리, 채널 연결·매핑과 REST API, iCal 픽스처,
+채널 화면 둘, React Router. ADR 10건(0007에 자격 증명 암호화를, 0009에 라우터를 이어
+적었다), 백엔드 157건 + 프론트 65건 통과. 브라우저 확인은 `docs/확인-02-P3-10주차.md`.
+
+- **어댑터 구현은 0개다.** 레지스트리에 등록될 것이 없고, 없는 종류를 찾으면
+  `AdapterNotRegisteredException` 으로 실패한다. `null` 을 돌려주면 호출부가 전부 방어
+  코드를 갖게 된다. 껍데기 구현을 프로덕션에 두지 않는다 — 11주차에 진짜 Mock 을 만들
+  때 그 자리를 두고 헷갈린다. 테스트용 가짜 어댑터는 테스트 소스 안에만 있다.
+- **`channel` 은 `property.UnitCatalog` 로만 판매 단위를 받는다.** `OwnedResources.unit`
+  은 `property.domain.Unit` 을 돌려주므로 부르면 `ModularityTest` 가 깨진다. 연결의
+  숙소는 이미 소유 확인을 거쳤으니 그 숙소의 판매 단위 목록에 있는지만 본다.
+- **서버 응답에서 값이 없는 필드는 키가 아예 빠진다**(`non_null` 직렬화). zod 스키마에
+  `nullable()` 을 쓰면 `null` 은 받아도 없는 키를 거절해 **파싱이 통째로 실패하고 화면이
+  오류가 된다.** 주소 없는 숙소 하나에 캘린더가 통째로 뜨지 않는 것으로 10주차 브라우저
+  확인에서 잡혔다. 응답 스키마의 선택 필드는 `nullish()` 를 쓴다.
+
+**다음** — P3 11주차. Mock OTA 시뮬레이터. 지도교수 중간 점검, 계획서 진척 현황과
+발표자료 갱신은 Cowork 세션이 한다.
 
 **아직 없는 것** — 역할별 인가(`@PreAuthorize`)는 지금도 없다. 인증 여부와 조직
 스코핑까지다. 채널 수신(`BookingIngestService`)은 P3이며 `fromChannel`과
@@ -304,8 +345,9 @@ SSE 실시간 갱신을 붙였다. ADR 10건, 백엔드 142건 + 프론트 56건
 `DomainEventPublisher` 구현을 빈으로 등록하면 `OutboxRelay`가 알아서 함께 돌린다
 (첫 입주자가 SSE 브로드캐스터다).
 
-**아직 비어 있는 모듈** — messaging, ops, payment, ai, analytics.
-각 패키지의 `package-info.java`에 담당 범위와 착수 시점을 적어뒀다.
+**아직 비어 있는 모듈** — messaging, ops, payment, ai, analytics. channel은 10주차에
+연결·매핑까지 찼고 어댑터와 워커가 남았다. 각 패키지의 `package-info.java`에 담당 범위와
+착수 시점을 적어뒀다.
 
 ## 겪은 함정
 

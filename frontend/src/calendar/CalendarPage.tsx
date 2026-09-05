@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCalendar, fetchProperties } from '@/api/calendar';
 import { CalendarGrid } from './CalendarGrid';
@@ -68,15 +69,23 @@ export function CalendarPage() {
               {properties.data?.[0]?.name ?? '숙소를 불러오는 중'}
             </span>
           </div>
-          <Button
-            size="sm"
-            onClick={async () => {
-              await logout();
-              useTokenStore.getState().clear();
-            }}
-          >
-            로그아웃
-          </Button>
+          <div className="flex items-center gap-2">
+            <Link
+              to="/channels"
+              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
+            >
+              채널 연결
+            </Link>
+            <Button
+              size="sm"
+              onClick={async () => {
+                await logout();
+                useTokenStore.getState().clear();
+              }}
+            >
+              로그아웃
+            </Button>
+          </div>
         </div>
 
         <div className="mt-3 flex items-center justify-between">
