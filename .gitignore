@@ -22,6 +22,7 @@ bin/
 .localdb-test/
 .localdb-api/
 .localdb-relay/
+.localdb-e2e/
 
 # 환경 변수와 비밀
 .env

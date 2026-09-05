@@ -2,9 +2,11 @@ package com.staysync.booking.calendar;
 
 import com.staysync.booking.GuestRepository;
 import com.staysync.booking.InventoryLedgerRepository;
+import com.staysync.booking.OverbookingConflictRepository;
 import com.staysync.booking.ReservationRepository;
 import com.staysync.booking.domain.Guest;
 import com.staysync.booking.domain.InventoryLedger;
+import com.staysync.booking.domain.OverbookingConflict;
 import com.staysync.booking.domain.Reservation;
 import com.staysync.booking.domain.ReservationStatus;
 import com.staysync.pricing.DayRate;
@@ -15,8 +17,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -65,17 +69,20 @@ public class CalendarService {
     private final InventoryLedgerRepository ledgerRepo;
     private final ReservationRepository reservationRepo;
     private final GuestRepository guestRepo;
+    private final OverbookingConflictRepository conflictRepo;
 
     CalendarService(UnitCatalog unitCatalog,
                     RateCalendarView rateCalendarView,
                     InventoryLedgerRepository ledgerRepo,
                     ReservationRepository reservationRepo,
-                    GuestRepository guestRepo) {
+                    GuestRepository guestRepo,
+                    OverbookingConflictRepository conflictRepo) {
         this.unitCatalog = unitCatalog;
         this.rateCalendarView = rateCalendarView;
         this.ledgerRepo = ledgerRepo;
         this.reservationRepo = reservationRepo;
         this.guestRepo = guestRepo;
+        this.conflictRepo = conflictRepo;
     }
 
     /**
@@ -101,9 +108,10 @@ public class CalendarService {
 
         Map<CellKey, InventoryLedger> ledger = indexLedger(unitIds, from, to);
         Map<CellKey, DayRate> rates = indexRates(units, ratePlanIds, from, to);
+        Set<CellKey> conflicts = indexConflicts(propertyId, from, to);
 
         List<CalendarGrid.UnitRow> rows = units.stream()
-                .map(unit -> toRow(unit, from, to, ledger, rates))
+                .map(unit -> toRow(unit, from, to, ledger, rates, conflicts))
                 .toList();
 
         return new CalendarGrid(from, to, rows, reservationBars(propertyId, from, to));
@@ -153,19 +161,34 @@ public class CalendarService {
         return index;
     }
 
+    /**
+     * 미해소 충돌이 있는 셀. <b>범위 쿼리 한 번</b>이다.
+     *
+     * <p>7주차에 세 번이던 것이 네 번이 됐다. 셀마다 묻지 않는다는 규칙은 그대로다 —
+     * 셀마다 물으면 30일 × 10단위가 300왕복이다.
+     */
+    private Set<CellKey> indexConflicts(Long propertyId, LocalDate from, LocalDate to) {
+        Set<CellKey> keys = new HashSet<>();
+        for (OverbookingConflict conflict : conflictRepo.findOpenIn(propertyId, from, to)) {
+            keys.add(new CellKey(conflict.getUnitId(), conflict.getStayDate()));
+        }
+        return keys;
+    }
+
     private CalendarGrid.UnitRow toRow(UnitSummary unit, LocalDate from, LocalDate to,
                                        Map<CellKey, InventoryLedger> ledger,
-                                       Map<CellKey, DayRate> rates) {
+                                       Map<CellKey, DayRate> rates,
+                                       Set<CellKey> conflicts) {
         List<CalendarGrid.DayCell> days = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
-            days.add(toCell(unit, date, ledger.get(new CellKey(unit.id(), date)),
-                    rates.get(new CellKey(unit.id(), date))));
+            CellKey key = new CellKey(unit.id(), date);
+            days.add(toCell(unit, date, ledger.get(key), rates.get(key), conflicts.contains(key)));
         }
         return new CalendarGrid.UnitRow(unit.id(), unit.name(), unit.totalUnits(), days);
     }
 
     private CalendarGrid.DayCell toCell(UnitSummary unit, LocalDate date,
-                                        InventoryLedger row, DayRate rate) {
+                                        InventoryLedger row, DayRate rate, boolean conflict) {
         // 원장에 행이 없는 날은 아직 아무도 예약하지 않은 날이다. 재고가 0 인 것과 전혀
         // 다르다. 둘을 같게 다루면 빈 그리드가 전부 매진으로 보인다.
         int avail = row == null ? unit.totalUnits() : row.available();
@@ -176,11 +199,9 @@ public class CalendarService {
         BigDecimal price = rate == null ? unit.basePrice() : rate.price();
         short minStay = rate == null ? 1 : rate.minStay();
 
-        // 충돌은 항상 false 다. overbooking_conflict 에 행을 만드는 경로가 P3 의 채널
-        // 수신에서 처음 생긴다. 지금 조회를 만들면 늘 빈 결과를 돌려주는 쿼리와 그걸
-        // 확인하는 테스트만 남는다. 필드는 두어 P3 에서 화면을 손대지 않아도 되게 한다.
-        boolean conflict = false;   // P3: overbooking_conflict 조회 결과로 채운다
-
+        // 충돌은 P3 12주차부터 실제 값이다. 채널 수신이 재고를 넘겨 받아들이면
+        // overbooking_conflict 에 행이 생기고 그 셀이 여기서 true 가 된다.
+        // 7주차에 필드만 두고 "P3 에서 채운다"고 적어 둔 자리다.
         return new CalendarGrid.DayCell(date, avail, price, minStay, stopSell, conflict);
     }
 
