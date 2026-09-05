@@ -13,9 +13,17 @@ public enum AdapterType {
     CHANNEX(EnumSet.of(Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE,
             Capability.PUSH_RESTRICTION, Capability.WEBHOOK_BOOKING, Capability.PULL_BOOKING)),
 
-    /** 자체 제작 시뮬레이터. 지연과 실패를 주입해 동기화 로직을 검증한다. */
+    /**
+     * 자체 제작 시뮬레이터. 지연과 실패를 주입해 동기화 로직을 검증한다.
+     *
+     * <p>{@link Capability#PULL_BOOKING} 은 P3 12주차에 더했다. 10주차에는 웹훅만
+     * 적었는데, 시뮬레이터가 예약 목록 조회도 함께 내놓고 있었고 12주차의 수신이
+     * 폴링으로 정해졌다(작업지시 09 의 5절 1번). 선언이 실제보다 좁으면
+     * {@code ChannelBookingPoller} 가 이 채널을 건너뛴다 — 폴링이 도는데 아무 예약도
+     * 들어오지 않고, 로그에도 아무것도 남지 않는다.
+     */
     MOCK(EnumSet.of(Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE,
-            Capability.PUSH_RESTRICTION, Capability.WEBHOOK_BOOKING));
+            Capability.PUSH_RESTRICTION, Capability.PULL_BOOKING, Capability.WEBHOOK_BOOKING));
 
     private final Set<Capability> capabilities;
 

@@ -3,6 +3,7 @@ package com.staysync.booking;
 import com.staysync.booking.domain.InsufficientInventoryException;
 import com.staysync.booking.domain.InventoryLedger;
 import com.staysync.booking.domain.StayPeriod;
+import com.staysync.property.UnitCatalog;
 import com.staysync.shared.lock.UnitLock;
 import java.time.Duration;
 import java.time.LocalDate;
@@ -38,13 +39,16 @@ public class InventoryService {
     private final InventoryLedgerRepository ledgerRepo;
     private final InventoryLedgerWriter writer;
     private final UnitLock unitLock;
+    private final UnitCatalog unitCatalog;
 
     public InventoryService(InventoryLedgerRepository ledgerRepo,
                             InventoryLedgerWriter writer,
-                            UnitLock unitLock) {
+                            UnitLock unitLock,
+                            UnitCatalog unitCatalog) {
         this.ledgerRepo = ledgerRepo;
         this.writer = writer;
         this.unitLock = unitLock;
+        this.unitCatalog = unitCatalog;
     }
 
     /**
@@ -107,6 +111,16 @@ public class InventoryService {
         }
         unitLock.runExclusively(unitId, LOCK_WAIT,
                 () -> writer.applyStopSell(unitId, dates, stopSell));
+    }
+
+    /**
+     * 판매 단위의 기본 수량.
+     *
+     * <p>원장 행이 없는 날에 쓸 값이다. 부르는 쪽이 {@code UnitCatalog} 를 따로
+     * 참조하지 않게 여기서 한 번 감싼다 — 재고를 다루는 통로는 이 클래스 하나다.
+     */
+    public short capacityOf(Long unitId) {
+        return unitCatalog.totalUnitsOf(unitId);
     }
 
     /** 지정 기간에 판매 가능한 최소 수량. 0 이면 그 기간은 팔 수 없다. */

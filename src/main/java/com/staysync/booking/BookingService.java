@@ -129,11 +129,14 @@ public class BookingService {
     /**
      * 충돌하지 않는 확인 코드를 뽑는다.
      *
+     * <p>채널 수신({@code ChannelBookingWriter})도 이 메서드를 쓴다. 확인 코드를 뽑는
+     * 규칙이 경로마다 갈리면 형식이 두 가지가 된다.
+     *
      * <p>{@code uq_confirmation} 이 최종 방어선이지만, 제약 위반 예외를 그대로 올리면
      * 사용자에게 원인 모를 500 이 나간다. 미리 확인하고 다시 뽑되 <b>시도 횟수에 상한을
      * 둔다.</b> 상한이 없으면 코드 공간이 차 있을 때 무한 반복이 된다.
      */
-    private String uniqueCode() {
+    String uniqueCode() {
         for (int attempt = 0; attempt < 10; attempt++) {
             String code = codeGenerator.generate();
             if (reservationRepo.findByConfirmationCode(code).isEmpty()) {
