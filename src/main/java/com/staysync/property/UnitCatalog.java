@@ -23,6 +23,15 @@ public interface UnitCatalog {
     String nameOf(Long unitId);
 
     /**
+     * 판매 단위 하나의 요약.
+     *
+     * <p>{@link #summariesOf} 는 숙소를 알아야 부를 수 있다. 채널 매핑처럼 판매 단위
+     * 식별자만 들고 있는 쪽을 위해 하나짜리 통로를 연다. 수량·기본 요금제·숙소를 한
+     * 번에 주므로, 필요한 값마다 따로 묻느라 왕복이 늘지 않는다.
+     */
+    UnitSummary summaryOf(Long unitId);
+
+    /**
      * 숙소의 판매 단위를 화면 정렬 순서로 돌려준다.
      *
      * <p>캘린더 그리드가 쓴다. {@link #unitIdsOf} 로 식별자만 받고 이름과 수량을 다시

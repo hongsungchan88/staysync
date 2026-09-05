@@ -5,7 +5,11 @@ import com.staysync.booking.domain.InventoryLedger;
 import com.staysync.booking.domain.StayPeriod;
 import com.staysync.shared.lock.UnitLock;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -120,6 +124,37 @@ public class InventoryService {
                     .orElse(Integer.MAX_VALUE) == 0 ? 0 : Integer.MAX_VALUE;
         }
         return rows.stream().mapToInt(this::sellable).min().orElse(0);
+    }
+
+    /**
+     * 날짜별 판매 가능 수량. 채널 전파가 쓴다.
+     *
+     * <p>{@link #availableFor} 는 기간의 최솟값 하나를 돌려준다. 채널에 보낼 때는 그걸로
+     * 부족하다 — 최솟값을 전 기간에 실으면 여유 있는 날까지 막혀 <b>팔 수 있는 방을
+     * 못 판다.</b> 그래서 날짜마다 따로 돌려준다.
+     *
+     * <p>원장 행이 없는 날은 아직 아무도 예약하지 않은 날이다. 캘린더 조립부와 같은
+     * 규칙으로 {@code totalUnits} 를 채운다 — 다르면 화면에 보이는 값과 채널에 나가는
+     * 값이 갈린다.
+     *
+     * @param totalUnits 원장 행이 없는 날에 쓸 기본 수량. 판매 단위의 판매 수량이다
+     */
+    @Transactional(readOnly = true)
+    public List<DailyAvailability> availabilityByDate(Long unitId, LocalDate from, LocalDate to,
+                                                      int totalUnits) {
+        Map<LocalDate, InventoryLedger> rows = new HashMap<>();
+        for (InventoryLedger row : ledgerRepo.findGrid(List.of(unitId), from, to)) {
+            rows.put(row.getStayDate(), row);
+        }
+
+        List<DailyAvailability> result = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            InventoryLedger row = rows.get(date);
+            result.add(new DailyAvailability(date,
+                    row == null ? totalUnits : row.available(),
+                    row != null && row.isStopSell()));
+        }
+        return result;
     }
 
     private int sellable(InventoryLedger row) {

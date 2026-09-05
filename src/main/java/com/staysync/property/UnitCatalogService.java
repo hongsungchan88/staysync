@@ -40,6 +40,13 @@ class UnitCatalogService implements UnitCatalog {
     }
 
     @Override
+    public UnitSummary summaryOf(Long unitId) {
+        return unitRepo.findById(unitId)
+                .map(this::toSummary)
+                .orElseThrow(() -> new UnitNotFoundException(unitId));
+    }
+
+    @Override
     public List<UnitSummary> summariesOf(Long propertyId) {
         return unitRepo.findByPropertyIdOrderBySortOrderAscIdAsc(propertyId).stream()
                 .map(this::toSummary)
