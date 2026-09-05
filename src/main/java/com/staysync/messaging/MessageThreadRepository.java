@@ -15,6 +15,14 @@ interface MessageThreadRepository extends JpaRepository<MessageThread, Long> {
     Optional<MessageThread> findByReservationId(Long reservationId);
 
     /**
+     * 채널 식별자가 아직 없는 스레드. 자동 발송이 게스트보다 먼저 만든 것이다.
+     *
+     * <p>게스트 메시지가 오면 이 스레드를 찾아 식별자를 채운다. 새로 만들면 같은
+     * 대화가 둘로 갈라진다.
+     */
+    Optional<MessageThread> findByReservationIdAndExternalIdIsNull(Long reservationId);
+
+    /**
      * 조직의 스레드 목록. 최근 대화가 위로 온다.
      *
      * <p>{@code message_thread} 에 {@code org_id} 가 없어 숙소로 좁힌다.

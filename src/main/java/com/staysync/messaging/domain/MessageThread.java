@@ -135,6 +135,21 @@ public class MessageThread {
         }
     }
 
+    /**
+     * 채널 측 대화 식별자를 뒤늦게 채운다.
+     *
+     * <p>자동 발송이 게스트보다 먼저 말을 걸면 그때는 채널의 대화 식별자를 모른다.
+     * 나중에 게스트 메시지가 오면 그 스레드를 찾아 여기서 채운다 — 새로 만들면
+     * <b>같은 게스트와의 대화가 둘로 갈라지고 호스트는 한쪽만 보고 답한다.</b>
+     *
+     * <p>이미 채워져 있으면 바꾸지 않는다. 덮어쓰면 다른 대화를 이 스레드로 끌어온다.
+     */
+    public void adoptExternalId(String externalId) {
+        if (this.externalId == null && externalId != null) {
+            this.externalId = externalId;
+        }
+    }
+
     /** 호스트가 대화를 열어 봤다. */
     public void markRead() {
         this.unreadCount = 0;
