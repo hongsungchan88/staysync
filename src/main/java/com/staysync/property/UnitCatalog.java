@@ -23,6 +23,16 @@ public interface UnitCatalog {
     String nameOf(Long unitId);
 
     /**
+     * 숙소의 표시 이름.
+     *
+     * <p>P4 14주차에 더했다. 메시지 템플릿의 {@code {{propertyName}}} 이 쓴다.
+     * 숙소 하나를 위해 인터페이스를 새로 만들지 않고 여기에 뒀다 — 이 타입이 이미
+     * "property 모듈이 바깥에 공개하는 읽기 전용 API" 이고, 다른 모듈이 property 에
+     * 물을 것이 이름 하나뿐이다.
+     */
+    String propertyNameOf(Long propertyId);
+
+    /**
      * 판매 단위 하나의 요약.
      *
      * <p>{@link #summariesOf} 는 숙소를 알아야 부를 수 있다. 채널 매핑처럼 판매 단위

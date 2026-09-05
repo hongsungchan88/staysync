@@ -77,7 +77,7 @@ class WebhookTest {
     @DisplayName("예약이 생기면 지정한 URL 로 POST 한다")
     void 웹훅이_실제로_나간다() {
         rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest("BK-HOOK", "room-7", null, null, null, null, 1)),
+                ApiKeys.signed(new ScenarioRequest("BK-HOOK", "room-7", null, null, null, null, null, 1)),
                 Object.class);
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !RECEIVED.isEmpty());
@@ -90,7 +90,7 @@ class WebhookTest {
     @DisplayName("웹훅 본문이 폴링 응답과 같은 형식이다")
     void 푸시와_폴링이_같은_형식이다() {
         rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest("BK-FMT", null, null, null, null, null, 1)),
+                ApiKeys.signed(new ScenarioRequest("BK-FMT", null, null, null, null, null, null, 1)),
                 Object.class);
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !RECEIVED.isEmpty());
 
@@ -110,7 +110,7 @@ class WebhookTest {
     @DisplayName("웹훅에도 자기 키를 실어 보낸다")
     void 웹훅에_키가_실린다() {
         rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest("BK-KEY", null, null, null, null, null, 1)),
+                ApiKeys.signed(new ScenarioRequest("BK-KEY", null, null, null, null, null, null, 1)),
                 Object.class);
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> !RECEIVED.isEmpty());
@@ -123,7 +123,7 @@ class WebhookTest {
     @DisplayName("중복 전송은 웹훅도 두 번 나간다")
     void 중복은_웹훅도_두_번이다() {
         rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest("BK-DUP", null, null, null, null, null, 2)),
+                ApiKeys.signed(new ScenarioRequest("BK-DUP", null, null, null, null, null, null, 2)),
                 Object.class);
 
         Awaitility.await().atMost(5, TimeUnit.SECONDS).until(() -> RECEIVED.size() >= 2);

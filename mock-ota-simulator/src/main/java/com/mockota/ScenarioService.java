@@ -27,10 +27,12 @@ public class ScenarioService {
     private static final int BARRIER_TIMEOUT_SECONDS = 10;
 
     private final BookingStore bookings;
+    private final MessageStore messages;
     private final WebhookSender webhook;
 
-    ScenarioService(BookingStore bookings, WebhookSender webhook) {
+    ScenarioService(BookingStore bookings, MessageStore messages, WebhookSender webhook) {
         this.bookings = bookings;
+        this.messages = messages;
         this.webhook = webhook;
     }
 
@@ -126,6 +128,35 @@ public class ScenarioService {
             emitted.add(emit(booking(request, request.bookingId() + "-" + (i + 1), 1)));
         }
         return new ScenarioResult("overbook", emitted.size(), 1, emitted);
+    }
+
+    /**
+     * 게스트 메시지를 만들어 낸다. <b>P4 14주차에 더한 다섯 번째 시나리오다.</b>
+     *
+     * <p>메시지를 만들어 낼 곳이 없으면 인박스는 빈 화면이고 자동 발송은 도착하는지
+     * 확인할 수 없는 곳으로 쏜다. 11주차에 시뮬레이터를 만든 이유가 그대로 반복된다.
+     *
+     * <p><b>같은 식별자로 여러 번 보내고 시각을 거꾸로 매긴다.</b> 예약과 같은 방식으로
+     * 나쁘게 군다 — 실제 채널의 웹훅은 최소 1회 전달이라 중복이 정상이고, 재전송이
+     * 섞이면 순서도 뒤집힌다. 우리 쪽의 {@code (thread_id, external_id)} 유일 제약이
+     * 그걸 한 건으로 흡수하는지 보려면 그런 상대가 필요하다.
+     *
+     * @param request {@code count} 는 같은 메시지를 몇 번 보낼지다
+     */
+    public ScenarioResult guestMessage(ScenarioRequest request) {
+        String threadId = "thread-" + request.bookingId();
+        String messageId = "msg-" + request.bookingId();
+        List<MockMessage> emitted = new ArrayList<>();
+
+        for (int i = 0; i < request.count(); i++) {
+            // 시각을 거꾸로 매긴다. 나중에 보낸 것이 더 이른 시각을 갖는다.
+            MockMessage message = new MockMessage(messageId, threadId, request.bookingId(),
+                    MockMessage.GUEST, request.body(),
+                    Instant.now().minusSeconds(i));
+            messages.receive(message);
+            emitted.add(message);
+        }
+        return new ScenarioResult("guest-message", emitted.size(), 1, List.of());
     }
 
     /** 저장하고 웹훅을 쏜다. 폴링으로도 푸시로도 같은 예약이 보이게 하는 자리다. */

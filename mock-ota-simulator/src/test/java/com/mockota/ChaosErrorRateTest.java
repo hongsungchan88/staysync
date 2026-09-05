@@ -54,7 +54,7 @@ class ChaosErrorRateTest {
         // 시나리오 엔드포인트는 채널의 표면이 아니라 테스트가 쥐는 손잡이다.
         // 손잡이까지 실패시키면 에러율 100% 에서 시험 준비 자체가 불가능해진다.
         assertThat(rest.postForEntity("/api/scenarios/duplicate",
-                ApiKeys.signed(new ScenarioRequest(null, null, null, null, null, null, 1)),
+                ApiKeys.signed(new ScenarioRequest(null, null, null, null, null, null, null, 1)),
                 String.class).getStatusCode().value())
                 .isEqualTo(HttpStatus.OK.value());
     }

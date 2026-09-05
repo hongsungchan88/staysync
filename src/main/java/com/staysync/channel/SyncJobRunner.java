@@ -145,9 +145,21 @@ class SyncJobRunner {
 
         switch (job.getJobType()) {
             case PUSH_ARI -> adapter.pushAri(creds, parseAri(job));
+            // 발송이 sync_job 을 거치는 이유는 여기 있다 — 재시도와 DEAD 가 공짜다.
+            case SEND_MESSAGE -> adapter.sendMessage(creds, parseMessage(job));
             // 수신은 폴링이 직접 돌린다(작업지시 09 의 5절 1번). 작업으로 만들지 않았다.
             case PULL_BOOKING, PULL_ICAL -> throw new ChannelException.PermanentChannelException(
                     "이 작업 종류는 아직 워커가 다루지 않습니다: " + job.getJobType());
+        }
+    }
+
+    private com.staysync.channel.OutboundChannelMessage parseMessage(SyncJob job) {
+        try {
+            return json.readValue(job.getPayload(),
+                    com.staysync.channel.OutboundChannelMessage.class);
+        } catch (Exception e) {
+            throw new ChannelException.PermanentChannelException(
+                    "메시지 페이로드를 읽지 못했습니다: " + e.getMessage());
         }
     }
 

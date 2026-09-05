@@ -40,7 +40,7 @@ class ScenarioTest {
     @DisplayName("같은 예약을 두 번 보내면 예약번호가 같은 두 건이 나온다")
     void 중복_전송은_두_건이_된다() {
         ScenarioResult result = run("duplicate",
-                new ScenarioRequest("BK-DUP", "room-1", 체크인, 체크아웃, null, null, 2));
+                new ScenarioRequest("BK-DUP", "room-1", 체크인, 체크아웃, null, null, null, 2));
 
         assertThat(result.emitted()).isEqualTo(2);
 
@@ -56,7 +56,7 @@ class ScenarioTest {
     @DisplayName("동시 예약 다발이 실제로 동시에 나간다")
     void 다발은_실제로_겹친다() {
         ScenarioResult result = run("burst",
-                new ScenarioRequest("BK-BURST", "room-1", 체크인, 체크아웃, null, null, 5));
+                new ScenarioRequest("BK-BURST", "room-1", 체크인, 체크아웃, null, null, null, 5));
 
         // CyclicBarrier 로 전원이 도착할 때까지 붙잡으므로 겹침이 타이밍 운이 아니라
         // 구조로 보장된다. 순차로 지나가면 락도 FOR UPDATE 도 아무 일을 하지 않아
@@ -81,7 +81,7 @@ class ScenarioTest {
     @DisplayName("revision 이 높은 것부터 낮은 것 순으로 나간다")
     void 순서가_역전된_채로_나간다() {
         ScenarioResult result = run("revision-reorder",
-                new ScenarioRequest("BK-REV", "room-1", 체크인, 체크아웃, null, null, 3));
+                new ScenarioRequest("BK-REV", "room-1", 체크인, 체크아웃, null, null, null, 3));
 
         assertThat(result.emitted()).isEqualTo(3);
 
@@ -98,7 +98,7 @@ class ScenarioTest {
         // 재고가 몇인지 시뮬레이터는 모른다. 알 필요도 없다 — 채널은 우리 재고를
         // 보지 않고 판다. 그게 초과 판매가 생기는 이유다.
         ScenarioResult result = run("overbook",
-                new ScenarioRequest("BK-OVER", "room-1", 체크인, 체크아웃, null, null, 4));
+                new ScenarioRequest("BK-OVER", "room-1", 체크인, 체크아웃, null, null, null, 4));
 
         assertThat(result.emitted()).isEqualTo(4);
 
