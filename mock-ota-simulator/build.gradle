@@ -1,0 +1,75 @@
+/*
+ * Mock OTA 시뮬레이터.
+ *
+ * **Spring Boot Gradle 플러그인을 적용하지 않는다.** 적용하면 이 프로젝트에도
+ * `bootRun` 이 생기고, 멀티프로젝트에서 `./gradlew bootRun` 은 이름이 같은 태스크를
+ * 모든 프로젝트에서 실행한다. 작업지시 08 의 제약이 "`./gradlew bootRun` 이 지금처럼
+ * 동작한다"이므로 그 이름을 이 프로젝트에 만들지 않는다.
+ *
+ * 대신 아래에 `runSimulator` 를 둔다. 이름이 겹치지 않아 루트에서 그대로 부를 수 있다.
+ * 실행 가능한 fat jar 는 만들지 않는다 — 이건 Gradle 로 띄우는 테스트 도구이고,
+ * 지금 jar 로 배포할 곳이 없다.
+ */
+plugins {
+    id 'java'
+    // 버전을 적지 않는다. 루트의 plugins 블록이 이미 버전을 정해 빌드 클래스패스에
+    // 올려 뒀다.
+    id 'io.spring.dependency-management'
+}
+
+group = 'com.mockota'
+version = '0.1.0-SNAPSHOT'
+
+java {
+    toolchain { languageVersion = JavaLanguageVersion.of(21) }
+}
+
+repositories { mavenCentral() }
+
+dependencyManagement {
+    imports {
+        // 루트 build.gradle 의 Spring Boot 플러그인 버전과 같아야 한다.
+        mavenBom 'org.springframework.boot:spring-boot-dependencies:3.5.4'
+    }
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // 데이터베이스도, 보안 스타터도 넣지 않는다. 상태는 메모리에 있고(ADR 0011),
+    // 자격 증명 검사는 헤더 하나를 보는 서블릿 필터로 끝난다. 흉내 내는 것이
+    // 우리 흉내가 되면 검증할 대상이 사라진다.
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+// 소스는 UTF-8 인데 이 환경의 JVM 기본값은 MS949 다. 루트와 같은 이유로 지정한다.
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    // Spring Boot Gradle 플러그인이 자동으로 넣어 주는 것을 여기서는 직접 넣는다.
+    // 없으면 생성자 파라미터 이름이 클래스 파일에 남지 않아, record 로 만든
+    // @ConfigurationProperties 바인딩과 Jackson 역직렬화가 런타임에 실패한다.
+    options.compilerArgs << '-parameters'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    systemProperty 'file.encoding', 'UTF-8'
+    systemProperty 'stdout.encoding', 'UTF-8'
+    systemProperty 'stderr.encoding', 'UTF-8'
+    testLogging { events 'passed', 'skipped', 'failed' }
+}
+
+/**
+ * 시뮬레이터를 띄운다. 백엔드와 따로 뜨고 포트가 겹치지 않는다(8081).
+ *
+ * <p>`./gradlew runSimulator` 로 루트에서 바로 부를 수 있다. 이름이 `bootRun` 과
+ * 겹치지 않는 것이 요점이다.
+ */
+tasks.register('runSimulator', JavaExec) {
+    group = 'application'
+    description = 'Mock OTA 시뮬레이터를 8081 포트로 띄운다'
+    mainClass = 'com.mockota.MockOtaApplication'
+    classpath = sourceSets.main.runtimeClasspath
+}

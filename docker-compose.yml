@@ -28,5 +28,26 @@ services:
       timeout: 3s
       retries: 10
 
+  # Mock OTA 시뮬레이터 (P3 11주차). 계획서 11.4 가 그려 둔 자리다.
+  #
+  # 지금은 주석으로 둔다. 이 파일은 docker 프로파일의 **인프라**를 띄우는 것이고,
+  # 백엔드도 여기 없다 — Gradle 로 띄운다. 시뮬레이터도 같다:
+  #
+  #     ./gradlew runSimulator      # 8081 포트
+  #
+  # 컨테이너로 띄우려면 실행 가능한 jar 가 먼저 필요한데, 시뮬레이터에는 Spring Boot
+  # Gradle 플러그인을 적용하지 않아 bootJar 가 없다(ADR 0011). 지금 jar 로 배포할
+  # 곳이 없어 만들지 않았다. 필요해지면 그때 플러그인과 Dockerfile 을 함께 넣는다.
+  #
+  # mock-ota:
+  #   build: ./mock-ota-simulator
+  #   container_name: staysync-mock-ota
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     MOCKOTA_API_KEY: mock-ota-dev-key
+  #     MOCKOTA_CHAOS_ERROR_RATE: "0.05"
+  #     MOCKOTA_CHAOS_SEED: "42"
+
 volumes:
   pgdata:
