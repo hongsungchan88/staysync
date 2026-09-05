@@ -28,7 +28,10 @@ export type MeResponse = z.infer<typeof meResponseSchema>;
 export const propertySummarySchema = z.object({
   id: z.number(),
   name: z.string(),
-  address: z.string().nullable(),
+  // 서버가 `non_null` 로 직렬화하므로 값이 없는 필드는 **키가 아예 없다.**
+  // `nullable` 은 null 은 받아도 없는 키는 거절해서, 주소 없는 숙소 하나가 캘린더
+  // 화면 전체를 오류로 만든다. 파싱이 통째로 실패하기 때문이다.
+  address: z.string().nullish(),
   timezone: z.string(),
   currency: z.string(),
   checkInTime: z.string(),
@@ -62,8 +65,8 @@ export const reservationBarSchema = z.object({
   unitId: z.number(),
   checkIn: z.string(),
   checkOut: z.string(),
-  /** 이름까지만 온다. 연락처는 응답에 없다(ADR 0007). */
-  guestName: z.string().nullable(),
+  /** 이름까지만 온다. 연락처는 응답에 없다(ADR 0007). 없으면 키가 빠진다. */
+  guestName: z.string().nullish(),
   channel: z.string(),
   status: z.string(),
   amount: z.number(),
@@ -99,3 +102,62 @@ export const bulkEditResultSchema = z.object({
   dryRun: z.boolean(),
 });
 export type BulkEditResult = z.infer<typeof bulkEditResultSchema>;
+
+// --- 채널 (P3 10주차) ------------------------------------------------------
+
+/**
+ * 어댑터가 지원하는 기능. 백엔드 `channel.port.Capability` 와 짝이다.
+ *
+ * 서버가 새 값을 추가하면 이 배열에 없는 문자열이 온다. `z.enum` 으로 막으면 파싱이
+ * 통째로 실패해 화면이 죽으므로 문자열로 받고 표시할 때만 이름을 붙인다.
+ */
+export const capabilitySchema = z.string();
+export type Capability = z.infer<typeof capabilitySchema>;
+
+export const adapterTypeSchema = z.enum(['ICAL', 'CHANNEX', 'MOCK']);
+export type AdapterType = z.infer<typeof adapterTypeSchema>;
+
+/**
+ * 채널 연결. 백엔드 `ChannelDtos.ConnectionResponse` 와 짝이다.
+ *
+ * `credentials` 는 **언제나 마스킹된 값**이다(`chnx••••1a2b`). 서버가 평문을 내보내지
+ * 않으므로 화면도 평문을 다룰 일이 없다. 수정할 때는 새 값을 입력받고, 비워 두면
+ * 서버가 기존 값을 유지한다.
+ */
+export const channelConnectionSchema = z.object({
+  id: z.number(),
+  propertyId: z.number(),
+  channelCode: z.string(),
+  adapterType: adapterTypeSchema,
+  displayName: z.string().nullish(),
+  syncEnabled: z.boolean(),
+  credentials: z.record(z.string()).default({}),
+  capabilities: z.array(capabilitySchema).default([]),
+});
+export type ChannelConnection = z.infer<typeof channelConnectionSchema>;
+
+export const channelMappingSchema = z.object({
+  id: z.number(),
+  unitId: z.number(),
+  externalUnitId: z.string(),
+  externalRateId: z.string().nullish(),
+});
+export type ChannelMapping = z.infer<typeof channelMappingSchema>;
+
+/**
+ * 매핑 화면 한 장.
+ *
+ * 서버가 `non_null` 로 직렬화하므로 **매핑되지 않은 단위에는 `mapping` 키가 아예 없다.**
+ * `nullish` 로 받는 이유다. 그 단위는 이 채널에 나가지 않는다.
+ */
+export const mappingBoardSchema = z.object({
+  connection: channelConnectionSchema,
+  units: z.array(
+    z.object({
+      unitId: z.number(),
+      unitName: z.string(),
+      mapping: channelMappingSchema.nullish(),
+    }),
+  ),
+});
+export type MappingBoard = z.infer<typeof mappingBoardSchema>;
