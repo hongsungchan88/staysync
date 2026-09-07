@@ -82,19 +82,26 @@ public class CalendarStreamHub {
     /**
      * 한 구독자에게 보낸다. <b>실패해도 예외를 올리지 않는다.</b>
      *
+     * <p>패키지 범위인 것은 테스트가 실패하는 구독자를 직접 넣어 보기 위해서다.
+     * 바깥에서 부를 일은 없다.
+     *
      * <p>{@code DomainEventPublisher} 의 계약은 "실패를 삼키지 말라"이지만, 여기서
      * 실패하는 것은 이미 끊긴 브라우저다. 릴레이에 실패로 올리면 그 이벤트가 다음
      * 주기에 다시 나가고, 살아 있는 다른 화면들이 같은 알림을 또 받는다. 끊긴 화면은
      * 다시 붙을 때 캘린더를 통째로 다시 조회하므로 그쪽으로 복구된다 — 놓친 이벤트를
      * 재생하지 않는다는 결정이 여기서도 같다.
      */
-    private void send(SseEmitter emitter, String name, Map<String, Object> payload) {
+    void send(SseEmitter emitter, String name, Map<String, Object> payload) {
         try {
             emitter.send(SseEmitter.event().name(name).data(payload));
         } catch (IOException | IllegalStateException e) {
             // 이미 끊겼거나 닫힌 연결이다. 목록에서 빼는 것으로 충분하다.
             log.debug("실시간 연결이 끊겨 있어 건너뛴다. {}", e.toString());
-            emitter.completeWithError(e);
+            // completeWithError 를 쓰지 않는다. 그러면 이 예외가 서블릿 오류 경로로
+            // 다시 올라가 GlobalExceptionHandler 까지 닿고, 끊긴 브라우저 하나가
+            // ERROR 와 스택 트레이스를 남긴다 — 진짜 오류를 덮는다(확인-05 3절 D).
+            // 이미 상대가 없는 연결에 오류 응답을 만들 이유도 없다.
+            emitter.complete();
         }
     }
 

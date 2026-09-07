@@ -211,8 +211,27 @@ function dueLabel(task: OpsTask): string {
   if (!task.dueFrom) {
     return '기한 없음';
   }
-  const from = task.dueFrom.slice(0, 16).replace('T', ' ');
-  return task.dueTo ? `${from} ~ ${task.dueTo.slice(0, 16).replace('T', ' ')}` : `${from} ~ 열림`;
+  const from = localTime(task.dueFrom);
+  return task.dueTo ? `${from} ~ ${localTime(task.dueTo)}` : `${from} ~ 열림`;
+}
+
+/**
+ * 서버가 보낸 시각을 **이 지역 시각으로** 옮겨 적는다.
+ *
+ * **ISO 문자열을 잘라 쓰면 안 된다.** 서버는 UTC(`...T02:00:00Z`)로 보내므로 앞에서
+ * 16자를 자르면 체크아웃 11시가 새벽 2시로 뜬다. 단위 테스트의 픽스처가 `+09:00` 이라
+ * 자르기가 우연히 맞아떨어져 통과했고, 브라우저 확인에서 드러났다.
+ */
+function localTime(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) {
+    return iso;
+  }
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return (
+    `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())} ` +
+    `${pad(at.getHours())}:${pad(at.getMinutes())}`
+  );
 }
 
 function group(tasks: OpsTask[]): Record<TaskStatus, OpsTask[]> {

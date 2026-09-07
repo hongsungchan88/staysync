@@ -26,8 +26,8 @@ const 태스크 = [
     taskType: 'CLEANING',
     status: 'TODO',
     assigneeName: '김청소',
-    dueFrom: '2027-04-03T11:00:00+09:00',
-    dueTo: '2027-04-04T15:00:00+09:00',
+    dueFrom: '2027-04-03T02:00:00Z',
+    dueTo: '2027-04-04T06:00:00Z',
     completedAt: null,
     overdue: true,
   },
@@ -38,7 +38,7 @@ const 태스크 = [
     reservationId: 102,
     taskType: 'CLEANING',
     status: 'IN_PROGRESS',
-    dueFrom: '2027-04-05T11:00:00+09:00',
+    dueFrom: '2027-04-05T02:00:00Z',
     completedAt: null,
     overdue: false,
   },
@@ -147,6 +147,18 @@ describe('청소 태스크 칸반', () => {
     // 멀쩡한 태스크가 빨갛게 뜬다.
     expect(screen.getByTestId('overdue-1')).toHaveTextContent('기한 지남');
     expect(screen.queryByTestId('overdue-2')).not.toBeInTheDocument();
+  });
+
+  it('기한을 이 지역 시각으로 적는다', async () => {
+    render(<OpsTasksPage />, { wrapper });
+
+    await waitFor(() => expect(screen.getByTestId('task-1')).toBeInTheDocument());
+
+    // 서버는 UTC 로 보낸다. ISO 문자열을 잘라 쓰면 체크아웃 11시가 새벽 2시로 뜬다 —
+    // 브라우저 확인에서 실제로 그렇게 나왔다.
+    const card = within(screen.getByTestId('task-1'));
+    expect(card.getByText(/2027-04-03 11:00/)).toBeInTheDocument();
+    expect(card.queryByText(/02:00/)).not.toBeInTheDocument();
   });
 
   it('기한이 열린 태스크는 빈칸이 아니라 열림으로 보인다', async () => {
