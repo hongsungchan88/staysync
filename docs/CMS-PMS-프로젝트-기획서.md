@@ -1034,25 +1034,29 @@ public sealed interface RateRule {
 ### 8.6 운영 자동화
 
 ```
-[이벤트] ReservationCheckedOut(예약 #1234, 객실 201, 2026-12-26 11:00)
+[이벤트] ReservationCheckedOut(예약 #1234, 판매 단위 #33, 2026-12-26 11:00)
     │
     ▼
 [규칙]  체크아웃 발생 시 CLEANING 태스크 생성,
         담당 = 기본 청소자, 기한 = 체크아웃 시각 ~ 다음 체크인 시각
     │
     ▼
-[결과]  OpsTask { type: CLEANING, roomId: 201,
+[결과]  OpsTask { type: CLEANING, unitId: 33,
                  dueFrom: 12-26 11:00, dueTo: 12-26 15:00,
-                 assignee: 김청소, status: TODO }
+                 assigneeName: 김청소, status: TODO }
     │
     ▼
-[알림]  담당자에게 웹푸시 또는 알림톡
+[알림]  담당자 스레드에 인박스 시스템 메시지
     │
     ▼
-[완료]  담당자가 모바일에서 완료 처리 및 사진 업로드 → 객실 상태 CLEAN
+[완료]  담당자가 칸반에서 완료 처리 → 판매 단위 청소 상태 CLEAN
 ```
 
 태스크 보드는 TODO, IN_PROGRESS, DONE, BLOCKED 칸반으로 구성하고 날짜와 담당자로 필터링한다.
+
+이 절은 15주차 구현에 맞춰 세 군데를 고쳤다. 초안은 `roomId`, 웹푸시 또는 알림톡, 완료 시 사진 업로드였다.
+
+첫째, `roomId` 는 2계층 데이터 모델에 대응하는 것이 없다. 결정문서 01 이 객실 계층을 판매 단위로 접었으므로 `unitId` 다. 둘째, 알림은 인박스 스레드의 시스템 메시지로 남긴다. 웹푸시는 서비스 워커와 구독 관리와 키가 따라오고 알림톡은 사업자 등록과 발신 프로필 심사가 필요해, 둘 다 이 프로젝트가 확보할 수 없는 것 위에 있다. 14주차에 만든 인박스와 `SYSTEM` 발신자 구분을 쓰면 새 경로를 만들지 않고도 담당자가 볼 곳이 생긴다. 셋째, 사진 업로드는 저장소와 크기 제한과 만료가 따라오므로 넣지 않았다. 첨부 파일을 미룬 14주차의 판단과 같다. 담당자도 계정이 아니라 이름 문자열이다 — 계정을 주려면 역할별 인가가 필요하고 그것은 ADR 0004 가 3~5단계로 미뤄 둔 것이다. 근거는 `ops/package-info.java` 와 작업지시-12 5절에 있다.
 
 ### 8.7 직접예약 위젯
 
@@ -1865,7 +1869,7 @@ public CalendarGridResponse grid(@PathVariable Long propertyId,
     { "id": 1234, "unitId": 1,
       "checkIn": "2026-12-24", "checkOut": "2026-12-27",
       "guestName": "홍길동", "channel": "AIRBNB_ICAL",
-      "status": "CONFIRMED", "amount": 690000, "roomId": 201 }
+      "status": "CONFIRMED", "amount": 690000 }
   ]
 }
 ```
