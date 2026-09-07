@@ -245,3 +245,32 @@ export const messageTemplateSchema = z.object({
 });
 export type MessageTemplate = z.infer<typeof messageTemplateSchema>;
 
+// --- 운영 태스크 (P4 15주차) --------------------------------------------------
+
+/** 칸반의 네 칸. 서버의 `TaskStatus` 와 같은 값이다. */
+export const TASK_STATUSES = ['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+/**
+ * 청소 태스크 한 건. 계획서 8.6.
+ *
+ * **`overdue` 를 서버가 판정한다.** 브라우저 시계로 계산하면 시각이 어긋난 기기에서
+ * 멀쩡한 태스크가 빨갛게 뜬다.
+ *
+ * `dueTo` 가 없는 것은 **기한이 열려 있다**는 뜻이다. 다음 예약이 아직 없다.
+ * 값이 없는 필드는 키가 아예 빠지므로(`non_null` 직렬화) `nullish` 로 받는다.
+ */
+export const opsTaskSchema = z.object({
+  id: z.number(),
+  unitId: z.number().nullish(),
+  unitName: z.string().nullish(),
+  reservationId: z.number().nullish(),
+  taskType: z.string(),
+  status: z.enum(TASK_STATUSES),
+  assigneeName: z.string().nullish(),
+  dueFrom: z.string().nullish(),
+  dueTo: z.string().nullish(),
+  completedAt: z.string().nullish(),
+  overdue: z.boolean(),
+});
+export type OpsTask = z.infer<typeof opsTaskSchema>;

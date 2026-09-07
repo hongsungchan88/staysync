@@ -5,6 +5,7 @@ import { CalendarPage } from '@/calendar/CalendarPage';
 import { ChannelsPage } from '@/channels/ChannelsPage';
 import { ChannelMappingPage } from '@/channels/ChannelMappingPage';
 import { ConflictsPage } from '@/conflicts/ConflictsPage';
+import { OpsTasksPage } from '@/ops/OpsTasksPage';
 import { InboxPage } from '@/inbox/InboxPage';
 import { useSessionBootstrap } from '@/auth/useSessionBootstrap';
 import { useTokenStore } from '@/auth/tokenStore';
@@ -66,6 +67,9 @@ function Routes() {
       <Route path="/channels/:connectionId/mapping" element={<ChannelMappingPage />} />
       {/* 충돌은 채널 하나의 문제가 아니라 그 날짜 그 방의 문제다. 채널 아래 두지 않는다. */}
       <Route path="/conflicts" element={<ConflictsPage />} />
+
+      {/* P4 15주차. 청소 태스크 칸반(계획서 8.6). */}
+      <Route path="/ops/tasks" element={<OpsTasksPage />} />
       {/* 계획서 8.1 의 /inbox 와 /inbox/:threadId. 같은 화면이 목록과 대화를 함께 그린다. */}
       <Route path="/inbox" element={<InboxPage />} />
       <Route path="/inbox/:threadId" element={<InboxPage />} />
