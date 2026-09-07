@@ -72,6 +72,19 @@ public class Message {
         return new Message(threadId, MessageDirection.OUTBOUND, sender, body, null, null);
     }
 
+    /**
+     * 우리끼리 보는 알림. <b>채널로 나가지 않는다.</b> P4 15주차에 더했다.
+     *
+     * <p>방향이 {@code INBOUND} 인 것이 요점이다. {@code OUTBOUND} 로 두면 게스트에게
+     * 실제로 나간 자동 발송({@code OUTBOUND} + {@code SYSTEM})과 구분되지 않고, 그러면
+     * 화면이 "보냈다"고 거짓말을 한다. 발송 작업을 만드는 경로는 {@code OUTBOUND} 만
+     * 지나므로 이 메시지는 어디로도 나가지 않는다.
+     */
+    public static Message systemNote(Long threadId, String body) {
+        return new Message(threadId, MessageDirection.INBOUND, MessageSender.SYSTEM,
+                body, null, null);
+    }
+
     public Long getId() {
         return id;
     }

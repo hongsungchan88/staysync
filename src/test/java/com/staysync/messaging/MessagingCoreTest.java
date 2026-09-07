@@ -208,7 +208,7 @@ class MessagingCoreTest extends SyncTestBase {
     /** 스레드를 예약에 이으려면 그 채널의 예약이 먼저 있어야 한다. */
     private void 예약을_넣는다(Fixture f, String channelBookingId) {
         bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
-                f.propertyId(), f.unitId(), 채널코드(f), channelBookingId,
+                f.propertyId(), f.unitId(), 채널코드(f), channelBookingId, null,
                 체크인, 체크아웃, BigDecimal.valueOf(200_000), 1, false));
     }
 

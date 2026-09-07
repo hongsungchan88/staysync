@@ -282,6 +282,10 @@ public class ChannelBookingPoller {
         ChannelBookingResult result = intake.ingest(new ChannelBookingCommand(
                 connection.getPropertyId(), mapping.getUnitId(),
                 connection.getChannelCode(), booking.bookingId(),
+                // 여기서 떨어지고 있었다. InboundBooking 에는 처음부터 있던 값이고,
+                // 빠진 탓에 채널 예약에 게스트가 붙지 않아 {{guestName}} 템플릿이
+                // 나가지 못했다(작업지시 12 의 5절 1번).
+                booking.guestName(),
                 booking.checkIn(), booking.checkOut(),
                 booking.totalAmount(), booking.revision(), booking.isCancellation()));
 

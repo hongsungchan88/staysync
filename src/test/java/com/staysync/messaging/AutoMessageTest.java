@@ -28,11 +28,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 class AutoMessageTest extends SyncTestBase {
 
     /**
-     * 채널 예약에는 게스트 레코드가 없다.
+     * 채널 예약의 게스트.
      *
-     * <p>{@code ChannelBookingCommand} 에 게스트 필드가 아예 없어서 채널로 들어온
-     * 예약은 {@code guestId} 가 비어 있다. 그래서 <b>{@code guestName} 을 쓰는 템플릿은
-     * 채널 예약에 보낼 수 없다</b> — 막히는 것이 옳고, 아래 마지막 테스트가 그걸 본다.
+     * <p><b>P4 15주차에 메웠다.</b> {@code channel.port.InboundBooking} 에는 게스트
+     * 이름이 처음부터 있었는데 {@code ChannelBookingCommand} 경계에서 떨어지고 있었고,
+     * 그래서 채널 예약은 {@code guestId} 가 비어 있었다 — {@code guestName} 을 쓰는
+     * 템플릿이 채널 예약에 나가지 못했으니 <b>자동 발송의 절반이 죽어 있었다</b>
+     * (작업지시 12 의 5절 1번).
+     *
+     * <p><b>이름을 주지 않는 채널에서는 여전히 막힌다.</b> iCal 발행물에는 이름이
+     * 없고(조사-02), 그때 게스트를 만들면 "안녕하세요 님" 이 나간다. 막히는 것이
+     * 옳고 아래 두 테스트가 양쪽을 본다.
      */
     private static final String 본문 =
             "{{propertyName}} 예약이 확정되었습니다. {{checkIn}} 뵙겠습니다.";
@@ -183,6 +189,25 @@ class AutoMessageTest extends SyncTestBase {
                 .isZero();
     }
 
+    /** 작업지시 12 의 완료 조건 14. 5절 1번의 구멍을 메운 자리다. */
+    @Test
+    @DisplayName("채널이 이름을 주면 {{guestName}} 템플릿이 채널 예약에도 나간다")
+    void 채널이_이름을_주면_치환된다() {
+        Setup s = 준비("이름 있는 채널 예약", MessageTrigger.RESERVATION_CONFIRMED,
+                "{{guestName}} 님 예약이 확정되었습니다");
+        Long reservationId = 이름있는_예약(s, "AUTO-7", LocalDate.now().plusDays(5), "김손님");
+
+        assertThat(auto.apply(MessageTrigger.RESERVATION_CONFIRMED, reservationId))
+                .as("경계에서 이름이 떨어지면 여기서 치환 실패로 막힌다")
+                .isEqualTo(1);
+
+        var thread = messaging.threadOfReservation(reservationId).orElseThrow();
+        assertThat(messaging.openThread(thread.getId(), s.orgId()).messages())
+                .singleElement()
+                .satisfies(message -> assertThat(message.getBody())
+                        .isEqualTo("김손님 님 예약이 확정되었습니다"));
+    }
+
     // --- 픽스처 -------------------------------------------------------------------
 
     private record Setup(Long orgId, Long propertyId, Long unitId, String channelCode,
@@ -207,14 +232,22 @@ class AutoMessageTest extends SyncTestBase {
     /** 채널 예약 하나. 자동 발송은 예약이 있어야 대상이 된다. */
     private Long 예약(Setup s, String channelBookingId, LocalDate 체크인) {
         return bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
-                s.propertyId(), s.unitId(), s.channelCode(), channelBookingId,
+                s.propertyId(), s.unitId(), s.channelCode(), channelBookingId, null,
+                체크인, 체크인.plusDays(2), BigDecimal.valueOf(200_000), 1, false))
+                .reservationId();
+    }
+
+    /** 게스트 이름이 실린 채널 예약. Mock 은 이름을 준다. */
+    private Long 이름있는_예약(Setup s, String channelBookingId, LocalDate 체크인, String 이름) {
+        return bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
+                s.propertyId(), s.unitId(), s.channelCode(), channelBookingId, 이름,
                 체크인, 체크인.plusDays(2), BigDecimal.valueOf(200_000), 1, false))
                 .reservationId();
     }
 
     private void 취소(Setup s, String channelBookingId) {
         bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
-                s.propertyId(), s.unitId(), s.channelCode(), channelBookingId,
+                s.propertyId(), s.unitId(), s.channelCode(), channelBookingId, null,
                 LocalDate.now().plusDays(1), LocalDate.now().plusDays(3),
                 BigDecimal.valueOf(200_000), 2, true));
     }

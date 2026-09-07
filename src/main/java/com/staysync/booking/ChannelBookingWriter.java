@@ -5,6 +5,7 @@ import com.staysync.booking.domain.OverbookingConflict;
 import com.staysync.booking.domain.Reservation;
 import com.staysync.booking.domain.ReservationStatus;
 import com.staysync.booking.domain.StayPeriod;
+import com.staysync.property.OwnedResources;
 import com.staysync.shared.audit.ActorKind;
 import com.staysync.shared.audit.AuditRecorder;
 import com.staysync.shared.outbox.OutboxRecorder;
@@ -60,6 +61,8 @@ class ChannelBookingWriter {
     private final BookingService bookingService;
     private final OutboxRecorder outbox;
     private final AuditRecorder audit;
+    private final GuestRegistrar guests;
+    private final OwnedResources owned;
 
     ChannelBookingWriter(ReservationRepository reservationRepo,
                          ReservationWriter reservationWriter,
@@ -67,7 +70,9 @@ class ChannelBookingWriter {
                          OverbookingConflictRepository conflicts,
                          BookingService bookingService,
                          OutboxRecorder outbox,
-                         AuditRecorder audit) {
+                         AuditRecorder audit,
+                         GuestRegistrar guests,
+                         OwnedResources owned) {
         this.reservationRepo = reservationRepo;
         this.reservationWriter = reservationWriter;
         this.inventory = inventory;
@@ -75,6 +80,8 @@ class ChannelBookingWriter {
         this.bookingService = bookingService;
         this.outbox = outbox;
         this.audit = audit;
+        this.guests = guests;
+        this.owned = owned;
     }
 
     @Transactional
@@ -196,6 +203,8 @@ class ChannelBookingWriter {
                 command.revision() == null ? 0 : command.revision(),
                 command.totalAmount(), BigDecimal.ZERO);
 
+        reservation.assignGuest(guestIdOf(command));
+
         // 재고를 잡기 전에 저장한다. 초과 판매 경로에서 충돌 기록이 예약 식별자를
         // 필요로 하기 때문이다.
         Reservation saved = reservationRepo.saveAndFlush(reservation);
@@ -235,6 +244,29 @@ class ChannelBookingWriter {
      *
      * @return 재고를 넘긴 날짜들. 비어 있으면 정상적으로 잡혔다
      */
+    /**
+     * 채널이 알려 준 이름으로 게스트를 만든다. P4 15주차에 더했다.
+     *
+     * <p><b>이름이 없으면 만들지 않는다.</b> iCal 발행물에는 이름이 없고(조사-02),
+     * 빈 게스트를 만들면 {@code {{guestName}}} 이 빈칸으로 치환되어 "안녕하세요 님"
+     * 이 나간다. 그 경우에는 게스트를 붙이지 않는 편이 낫다 — 치환할 값이 없으면
+     * 템플릿이 발송을 막는다(14주차 결정).
+     *
+     * <p><b>연락처는 담지 않는다.</b> 채널이 주지도 않고, 받으면 암호화 경계를
+     * 우회하는 두 번째 입구가 된다(ADR 0007). 이름만 있는 게스트가 된다.
+     *
+     * <p>같은 이름을 다시 만드는 것을 막지 않는다. 채널 예약마다 게스트 한 건이고,
+     * 이름만으로 동일인을 판정하면 다른 사람의 대화가 하나로 합쳐진다.
+     */
+    private Long guestIdOf(ChannelBookingCommand command) {
+        if (command.guestName() == null || command.guestName().isBlank()) {
+            return null;
+        }
+        return owned.orgIdOfProperty(command.propertyId())
+                .map(orgId -> guests.register(orgId, command.guestName(), null, null).getId())
+                .orElse(null);
+    }
+
     private List<LocalDate> reserveOrForce(Reservation reservation, ChannelBookingCommand command) {
         List<LocalDate> shortDates = shortDatesOf(reservation.getUnitId(), command.period());
         if (shortDates.isEmpty()) {

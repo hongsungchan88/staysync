@@ -82,13 +82,13 @@ class ChannelIngestTest {
 
         // 높은 버전이 먼저 온다. 날짜를 이틀 뒤로 옮긴다.
         ChannelBookingResult 높은쪽 = intake.ingest(new ChannelBookingCommand(
-                f.propertyId(), f.unitId(), "MOCK_IN", "BK-REV",
+                f.propertyId(), f.unitId(), "MOCK_IN", "BK-REV", null,
                 체크인.plusDays(2), 체크아웃.plusDays(2), BigDecimal.valueOf(200_000), 3, false));
         assertThat(높은쪽.outcome()).isEqualTo(ChannelBookingResult.Outcome.UPDATED);
 
         // 낮은 버전이 나중에 도착한다. 전달 순서가 뒤바뀌는 것은 정상이다.
         ChannelBookingResult 낮은쪽 = intake.ingest(new ChannelBookingCommand(
-                f.propertyId(), f.unitId(), "MOCK_IN", "BK-REV",
+                f.propertyId(), f.unitId(), "MOCK_IN", "BK-REV", null,
                 체크인, 체크아웃, BigDecimal.valueOf(200_000), 2, false));
 
         assertThat(낮은쪽.outcome()).isEqualTo(ChannelBookingResult.Outcome.DUPLICATE);
@@ -188,7 +188,7 @@ class ChannelIngestTest {
         // 체크아웃이 체크인보다 앞선 명령. StayPeriod 가 거부하지만, 그 시점은 이미
         // 예약을 저장하려 시도한 뒤여야 의미가 있다. 여기서는 명령을 만들 때 걸린다.
         assertThatThrownBy(() -> intake.ingest(new ChannelBookingCommand(
-                f.propertyId(), f.unitId(), "MOCK_IN", "BK-BAD",
+                f.propertyId(), f.unitId(), "MOCK_IN", "BK-BAD", null,
                 체크아웃, 체크인, BigDecimal.valueOf(200_000), 1, false)))
                 .isInstanceOf(IllegalArgumentException.class);
 
@@ -198,7 +198,7 @@ class ChannelIngestTest {
         // outbox 도 감사도 함께 사라져야 한다.
         long 이벤트수 = jdbc.queryForObject("SELECT count(*) FROM outbox_event", Long.class);
         assertThatThrownBy(() -> intake.ingest(new ChannelBookingCommand(
-                f.propertyId(), 99_999_999L, "MOCK_IN", "BK-NOUNIT",
+                f.propertyId(), 99_999_999L, "MOCK_IN", "BK-NOUNIT", null,
                 체크인, 체크아웃, BigDecimal.valueOf(200_000), 1, false)))
                 .isInstanceOf(RuntimeException.class);
 
@@ -249,7 +249,7 @@ class ChannelIngestTest {
 
     private ChannelBookingCommand command(Fixture f, String bookingId, int revision,
                                           boolean cancellation) {
-        return new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_IN", bookingId,
+        return new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_IN", bookingId, null,
                 체크인, 체크아웃, BigDecimal.valueOf(200_000), revision, cancellation);
     }
 

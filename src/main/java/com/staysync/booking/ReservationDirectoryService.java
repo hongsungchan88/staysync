@@ -60,6 +60,11 @@ class ReservationDirectoryService implements ReservationDirectory {
         return toBriefs(reservations.findActiveByCheckOut(date, ACTIVE));
     }
 
+    @Override
+    public Optional<LocalDate> nextCheckIn(Long unitId, LocalDate onOrAfter) {
+        return Optional.ofNullable(reservations.findNextCheckIn(unitId, onOrAfter, ACTIVE));
+    }
+
     private List<ReservationBrief> toBriefs(List<Reservation> found) {
         Map<Long, String> names = guestNames(found);
         return found.stream().map(r -> toBrief(r, names)).toList();

@@ -40,4 +40,18 @@ public interface ReservationDirectory {
 
     /** 그날 체크아웃하는, 아직 살아 있는 예약. 위와 같은 이유로 취소된 것은 빠진다. */
     List<ReservationBrief> activeByCheckOut(LocalDate date);
+
+    /**
+     * 그 판매 단위의 다음 체크인 날짜.
+     *
+     * <p>P4 15주차에 더했다. 청소 기한의 끝이 다음 체크인 시각이다(계획서 8.6).
+     * <b>다음 예약이 없으면 비어 있고, 그때 기한은 열어 둔다</b> — 없는 날짜를
+     * 지어내면 아직 오지 않은 마감이 지난 것으로 표시된다.
+     *
+     * <p>취소·만료된 예약은 다음 예약이 아니다. 그것까지 세면 청소 기한이 오지 않을
+     * 손님 때문에 앞당겨진다.
+     *
+     * @param onOrAfter 이 날짜를 포함해 그 뒤. 체크아웃 당일 다시 체크인이 있을 수 있다
+     */
+    Optional<LocalDate> nextCheckIn(Long unitId, LocalDate onOrAfter);
 }

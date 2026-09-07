@@ -63,6 +63,14 @@ class UnitCatalogService implements UnitCatalog {
                 .toList();
     }
 
+    @Override
+    public StayTimes stayTimesOf(Long propertyId) {
+        return propertyRepo.findById(propertyId)
+                .map(property -> new StayTimes(
+                        property.getCheckInTime(), property.getCheckOutTime()))
+                .orElseThrow(() -> new PropertyNotFoundException(propertyId));
+    }
+
     private UnitSummary toSummary(Unit unit) {
         // 기본 요금제는 판매 단위 등록 시 자동 생성되지만(UnitRegistrationService),
         // 없는 경우를 예외로 만들지는 않는다. 캘린더는 요금제가 없으면 base_price 로

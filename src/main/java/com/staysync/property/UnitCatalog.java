@@ -49,4 +49,14 @@ public interface UnitCatalog {
      * 요약을 통째로 넘긴다.
      */
     List<UnitSummary> summariesOf(Long propertyId);
+
+    /**
+     * 숙소의 체크인·체크아웃 시각.
+     *
+     * <p>P4 15주차에 더했다. 청소 태스크의 기한이 <b>체크아웃 시각부터 다음 체크인
+     * 시각까지</b>인데(계획서 8.6), 예약이 들고 있는 것은 날짜뿐이라 시각은 숙소에서
+     * 온다. {@code property.domain.Property} 는 모듈 내부 타입이라 ops 가 참조할 수
+     * 없으므로 값만 내보낸다.
+     */
+    StayTimes stayTimesOf(Long propertyId);
 }
