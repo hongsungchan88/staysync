@@ -94,7 +94,7 @@ class CalendarConflictTest {
     }
 
     private static ChannelBookingCommand command(Long propertyId, Long unitId, String bookingId) {
-        return new ChannelBookingCommand(propertyId, unitId, "MOCK_CF", bookingId,
+        return new ChannelBookingCommand(propertyId, unitId, "MOCK_CF", bookingId, null,
                 체크인, 체크아웃, BigDecimal.valueOf(200_000), 1, false);
     }
 }

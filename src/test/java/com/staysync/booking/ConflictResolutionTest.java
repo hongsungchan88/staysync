@@ -266,7 +266,7 @@ class ConflictResolutionTest extends SyncTestBase {
                 new com.staysync.booking.domain.StayPeriod(체크인, 체크아웃),
                 BigDecimal.valueOf(200_000), (short) 2, (short) 0, null);
         ChannelBookingResult result = intake.ingest(new ChannelBookingCommand(
-                f.propertyId(), unitId, "MOCK_CONFLICT", 채널예약번호,
+                f.propertyId(), unitId, "MOCK_CONFLICT", 채널예약번호, null,
                 체크인, 체크아웃, BigDecimal.valueOf(200_000), 1, false));
         assertThat(result.outcome())
                 .as("재고를 넘겨 받아들여야 충돌이 생긴다")

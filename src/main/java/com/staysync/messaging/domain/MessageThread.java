@@ -129,6 +129,17 @@ public class MessageThread {
         touchLastMessage(sentAt);
     }
 
+    /**
+     * 우리끼리 보는 알림이 붙었다. P4 15주차의 청소 태스크 알림이 쓴다.
+     *
+     * <p><b>미읽음을 늘린다.</b> 담당자가 볼 곳이 생기는 것이 이 알림의 목적인데
+     * 목록에서 표시가 나지 않으면 아무도 보지 않는다.
+     */
+    public void receiveSystemNote(OffsetDateTime sentAt) {
+        this.unreadCount = (short) Math.min(this.unreadCount + 1, Short.MAX_VALUE);
+        touchLastMessage(sentAt);
+    }
+
     private void touchLastMessage(OffsetDateTime sentAt) {
         if (sentAt != null && (lastMessageAt == null || sentAt.isAfter(lastMessageAt))) {
             this.lastMessageAt = sentAt;

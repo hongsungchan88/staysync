@@ -43,6 +43,22 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
                                            @Param("statuses") List<ReservationStatus> statuses);
 
     /**
+     * 그 판매 단위의 다음 체크인. 청소 기한의 끝이다.
+     *
+     * <p>취소·만료된 예약은 빠진다. 오지 않을 손님 때문에 청소 기한이 앞당겨지면
+     * 안 된다.
+     */
+    @Query("""
+            select min(r.period.checkIn) from Reservation r
+            where r.unitId = :unitId
+              and r.period.checkIn >= :onOrAfter
+              and r.status in :statuses
+            """)
+    LocalDate findNextCheckIn(@Param("unitId") Long unitId,
+                              @Param("onOrAfter") LocalDate onOrAfter,
+                              @Param("statuses") List<ReservationStatus> statuses);
+
+    /**
      * 이 판매 단위에서 그 채널이 만든, 아직 재고를 쥐고 있는 예약.
      *
      * <p>스냅샷 채널(iCal)의 취소 판정이 쓴다. 발행물에 없는 것을 취소하려면 먼저
