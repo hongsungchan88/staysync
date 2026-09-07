@@ -47,7 +47,10 @@ import org.springframework.test.context.ActiveProfiles;
  * 들어오고, 같은 판매 단위에 매핑된 연결 B 로 남은 재고가 나가야 한다.
  */
 @SpringBootTest(properties = {
-        "staysync.embedded-postgres.port=15435",
+        // 포트도 갈라야 한다. 여기는 릴레이를 실제 1초 주기로 켜 두는 유일한
+        // 컨텍스트라, 포트가 겹치면 그 릴레이가 남의 데이터베이스의 outbox 를
+        // 집어 발행해 버린다(확인-05 3절 A 를 고치면서 드러났다).
+        "staysync.embedded-postgres.port=15437",
         "staysync.embedded-postgres.data-directory=.localdb-e2e",
         // build.gradle 이 테스트 전체에서 멈춰 둔 것을 이 컨텍스트만 되살린다.
         // 값은 운영 기본값 그대로다 — 다르게 두면 재는 의미가 없다.

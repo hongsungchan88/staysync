@@ -85,7 +85,9 @@ class IcalExportApiTest extends ApiTestBase {
         // 이 응답은 인증이 URL 하나뿐이고 읽는 쪽은 에어비앤비 서버다. 문자열로 훑는다.
         assertThat(ics)
                 .doesNotContain("홍길동")
-                .doesNotContain("010")
+                // 번호 전체로 본다. 앞 세 자리만 보면 날짜와 부딪힌다 —
+                // 체크아웃이 10일이면 DTEND 의 "20261010" 이 "010" 을 담는다.
+                .doesNotContain("01012345678")
                 .doesNotContain("guest")
                 .doesNotContain("Guest");
         assertThat(ics).contains("SUMMARY:StaySync (Not available)");

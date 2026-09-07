@@ -60,6 +60,14 @@ public class OutboxRelay {
     /**
      * 주기 실행. 기본 1초다(계획서 4.4).
      *
+     * <p><b>{@code @Transactional} 이 여기에도 있어야 한다.</b> 없으면 아래
+     * {@link #relayPending()} 호출이 <b>같은 클래스 안의 자기 호출</b>이라 프록시를 거치지
+     * 않고, 스케줄러 경로에만 트랜잭션이 열리지 않는다. 그러면 {@code findPending} 이
+     * 돌려준 엔티티가 곧바로 준영속이 되어 {@link OutboxEvent#markPublished} 가
+     * 아무 데도 반영되지 않는다 — 발행은 되는데 {@code published_at} 이 비어 있어
+     * <b>매 주기 같은 이벤트가 다시 나간다.</b> 테스트는 프록시를 거쳐
+     * {@code relayPending()} 을 직접 불러 통과하므로 드러나지 않았다(확인-05 3절 A).
+     *
      * <p>주기를 설정으로 뺀 이유는 <b>테스트에서 이 스케줄러를 멈춰야 하기</b> 때문이다.
      * {@code @EnableScheduling} 이 켜져 있어 테스트 컨텍스트에서도 1초마다 돌고, 그러면
      * 테스트가 직접 부르는 {@link #relayPending()} 과 같은 이벤트를 두고 경쟁한다.
@@ -67,6 +75,7 @@ public class OutboxRelay {
      */
     @Scheduled(fixedDelayString = "${staysync.outbox.relay-interval-ms:1000}",
             initialDelayString = "${staysync.outbox.relay-interval-ms:1000}")
+    @Transactional
     public void run() {
         relayPending();
     }
@@ -94,7 +103,9 @@ public class OutboxRelay {
         if (pending.size() == BATCH_LIMIT) {
             // 조용히 잘리면 밀린 이벤트가 쌓여도 정상으로 보인다. HOLD 만료 배치와 같다.
             log.warn("이벤트 발행이 한 주기 상한 {}건에 닿았다. 남은 건은 다음 주기로 넘긴다. "
-                    + "이 로그가 계속 나오면 상한이나 주기를 조정해야 한다", BATCH_LIMIT);
+                    + "이 로그가 계속 나오면 상한이 아니라 published_at 이 남는지를 먼저 본다 "
+                    + "— 큐가 줄지 않으면 상한을 올려도 같은 이벤트를 더 많이 다시 낼 뿐이다",
+                    BATCH_LIMIT);
         }
         return published;
     }

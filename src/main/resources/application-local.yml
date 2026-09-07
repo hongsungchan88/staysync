@@ -43,10 +43,8 @@ staysync:
                                  # 내장 PostgreSQL 바이너리에는 pgvector 가 없다.
                                  # 임베딩은 REAL[] 컬럼에 저장하고 Java 에서 계산한다.
 
-spring:
-  jpa:
-    show-sql: true
-
 logging:
   level:
+    # SQL 로그의 출처는 이 하나다. spring.jpa.show-sql 을 함께 켜면 같은 문장이 두 번
+    # 찍히고, 그쪽은 표준출력으로 바로 뱉어 로거로 끌 수도 없다(확인-05 3절 E).
     org.hibernate.SQL: DEBUG

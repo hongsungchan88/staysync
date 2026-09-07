@@ -30,14 +30,38 @@
 | `POST` | `/api/scenarios/burst` | 동시 예약 다발. 같은 객실·날짜를 두고 경쟁한다 |
 | `POST` | `/api/scenarios/revision-reorder` | 높은 revision 먼저, 낮은 것 나중 |
 | `POST` | `/api/scenarios/overbook` | 재고를 무시하고 같은 날짜에 여럿 |
+| `GET` | `/api/messages` | 게스트가 보낸 메시지. 우리 쪽에서 보면 수신이다 |
+| `POST` | `/api/messages` | 우리가 보낸 메시지를 받는다. 202 |
+| `GET` | `/api/messages/sent` | 우리가 보낸 것을 되돌려 준다 |
+| `DELETE` | `/api/messages` | 주고받은 것을 전부 잊는다 |
+| `POST` | `/api/scenarios/guest-message` | 게스트 메시지. 같은 식별자로 `count` 번, 시각은 거꾸로 |
+
+메시징 경로도 `/api` 아래라 자격 증명 검사와 악조건 주입을 그대로 받는다. 메시징만
+무사통과시키면 발송 실패의 재시도·`DEAD` 처리를 검증할 수 없다.
+
+**본문을 해석하지 않는다.** 비었는지, `{{guestName}}` 이 남아 있는지 보지 않는다.
+막는 것은 우리 쪽 일이고, 여기서 걸러 주면 그 검증이 사라진다.
 
 시나리오 본문은 전부 선택이다. `{}` 로 불러도 기본값으로 돈다.
+JSON 은 `snake_case` 다 — `booking_id`, `room_id`, `check_in`, `check_out`, `count`.
 
 ```bash
 curl -X POST http://localhost:8081/api/scenarios/overbook \
   -H 'X-Api-Key: mock-ota-dev-key' -H 'Content-Type: application/json' \
   -d '{"room_id":"room-1","check_in":"2026-12-24","check_out":"2026-12-26","count":3}'
 ```
+
+게스트 메시지 하나를 손으로 만들어 볼 때는 이렇게 부른다. 예약이 없어도 된다 —
+스레드는 숙소에 붙고, 나중에 예약이 들어오면 이어 붙는다(`MessageIngestService`).
+
+```bash
+curl -X POST http://localhost:8081/api/scenarios/guest-message \
+  -H 'X-Api-Key: mock-ota-dev-key' -H 'Content-Type: application/json' \
+  -d '{"booking_id":"BK-INBOX-1","body":"체크인 시간을 늦출 수 있을까요?","count":3}'
+```
+
+`thread_id` 는 `thread-<booking_id>`, `message_id` 는 `msg-<booking_id>` 로 만들어진다.
+셋을 보내도 우리 쪽 받은편지함에는 **한 통**이어야 한다.
 
 예약이 생기면 `mockota.webhook-url` 로 POST 도 나간다. 비어 있으면 보내지 않는다.
 **폴링과 웹훅의 본문 형식은 같다** — 어댑터가 매핑을 두 벌 갖지 않게 하려는 것이다.

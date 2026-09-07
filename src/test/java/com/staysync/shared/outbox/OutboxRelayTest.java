@@ -97,6 +97,75 @@ class OutboxRelayTest {
         assertThat(relay.relayPending()).isZero();
     }
 
+    // --- 확인-05 3절 A. 스케줄러 경로 -----------------------------------------
+
+    /**
+     * 확인-05 완료 조건 1. <b>이 테스트가 스케줄러 경로를 탄다.</b>
+     *
+     * <p>{@link OutboxRelay#relayPending()} 을 직접 부르는 위 테스트들은 프록시를 거쳐
+     * 트랜잭션이 열리므로, 스케줄러가 {@code run()} 안에서 자기 호출로 프록시를
+     * 건너뛰던 결함을 잡지 못했다. 실제로 5분에 973건이 발행되고 예약은 94개였다.
+     */
+    @Test
+    @DisplayName("스케줄러 경로로 돌려도 같은 이벤트가 두 번 발행되지 않는다")
+    void 스케줄러_경로는_같은_이벤트를_두_번_내지_않는다() {
+        Long id = 이벤트기록(400L, "RESERVATION_CONFIRMED");
+
+        relay.run();
+
+        assertThat(publishedAt(id))
+                .as("발행하고 published_at 을 남기지 못하면 다음 주기에 같은 것이 또 나간다")
+                .isNotNull();
+        assertThat(publisher.attempts()).isEqualTo(1);
+
+        relay.run();
+        relay.run();
+
+        assertThat(publisher.attempts())
+                .as("두 주기를 더 돌려도 이미 발행한 이벤트는 다시 시도되지 않는다")
+                .isEqualTo(1);
+    }
+
+    /**
+     * 확인-05 완료 조건 2. 재기동을 흉내 낸다.
+     *
+     * <p>영속성 컨텍스트를 비우고 다시 읽어도 {@code published_at} 이 남아 있어야 한다.
+     * 표시가 메모리에만 있었다면 여기서 드러난다.
+     */
+    @Test
+    @DisplayName("재기동해도 이미 발행한 이벤트는 다시 나가지 않는다")
+    void 재기동해도_이미_발행한_것은_다시_나가지_않는다() {
+        이벤트기록(401L, "RESERVATION_CONFIRMED");
+        relay.run();
+        publisher.reset();
+
+        // 릴레이는 매 주기 데이터베이스에서 다시 읽는다. 재기동 후의 첫 주기와 같다.
+        assertThat(relay.relayPending()).isZero();
+        assertThat(publisher.attempts()).isZero();
+        assertThat(미발행건수()).isZero();
+    }
+
+    /** 확인-05 완료 조건 3. 큐가 비면 상한 경고가 멈춘다. */
+    @Test
+    @DisplayName("큐가 비면 상한 경고가 멈춘다")
+    void 큐가_비면_상한_경고가_멈춘다() {
+        for (int i = 0; i < OutboxRelay.BATCH_LIMIT + 1; i++) {
+            이벤트기록(402L, "RESERVATION_CONFIRMED");
+        }
+
+        relay.run();                       // 100건. 상한에 닿아 경고가 난다
+        assertThat(warnMessages()).anySatisfy(m -> assertThat(m).contains("상한"));
+
+        appender.list.clear();
+        relay.run();                       // 남은 1건
+        relay.run();                       // 빈 큐
+
+        assertThat(미발행건수()).isZero();
+        assertThat(warnMessages())
+                .as("큐가 비었는데도 경고가 계속 나오면 발행 표시가 남지 않는 것이다")
+                .noneSatisfy(m -> assertThat(m).contains("상한"));
+    }
+
     // --- 완료 조건 4 ---------------------------------------------------------
 
     @Test
@@ -247,6 +316,12 @@ class OutboxRelayTest {
     private String lastError(Long id) {
         return jdbc.queryForObject(
                 "SELECT last_error FROM outbox_event WHERE id = ?", String.class, id);
+    }
+
+    private int 미발행건수() {
+        Integer c = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM outbox_event WHERE published_at IS NULL", Integer.class);
+        return c == null ? 0 : c;
     }
 
     private boolean exists(Long id) {

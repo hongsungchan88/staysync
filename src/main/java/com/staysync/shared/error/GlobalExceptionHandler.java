@@ -10,6 +10,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 
 /** 예외를 일관된 JSON 형태로 변환한다. */
 @RestControllerAdvice
@@ -48,6 +49,22 @@ public class GlobalExceptionHandler {
         log.warn("요청 본문을 읽지 못했다: {}", e.getMessage());
         return ResponseEntity.badRequest()
                 .body(ApiError.of("MALFORMED_REQUEST", "요청 본문을 읽을 수 없습니다."));
+    }
+
+    /**
+     * 실시간 스트림을 보던 브라우저가 연결을 끊었다.
+     *
+     * <p><b>오류가 아니라 정상적인 종료다.</b> 탭을 닫거나 새로고침하면 난다.
+     * 아래 {@code Exception} 폴백으로 떨어지면 스택 트레이스를 붙여 ERROR 로 올라오고,
+     * SSE 를 열어 둔 화면 하나에 5분에 몇 건씩 쌓여 <b>진짜 오류를 덮는다</b>
+     * (확인-05 3절 D).
+     *
+     * <p>{@code void} 를 돌려주는 것이 핵심이다. 응답은 이미 끊겼으므로 본문을 쓰려
+     * 하면 같은 예외가 다시 난다.
+     */
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public void handleClientDisconnected(AsyncRequestNotUsableException e) {
+        log.debug("실시간 연결이 끊긴 뒤의 쓰기다: {}", e.getMessage());
     }
 
     @ExceptionHandler(Exception.class)

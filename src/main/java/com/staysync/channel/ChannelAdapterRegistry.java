@@ -50,6 +50,19 @@ public class ChannelAdapterRegistry {
     }
 
     /**
+     * 이 종류의 구현이 실제로 있는지.
+     *
+     * <p><b>{@link #capabilitiesOf} 와 답이 다를 수 있다.</b> 기능 선언은
+     * {@link AdapterType} 이 하고 구현은 주차마다 따로 붙는다 — {@code CHANNEX} 는
+     * {@code PULL_BOOKING} 을 선언하지만 어댑터가 아직 없다. 할 일을 고를 때 선언만
+     * 보면 <b>구현이 없는 채널을 매 주기 집어 {@link AdapterNotRegisteredException}
+     * 으로 실패한다</b>(확인-05 3절 C). 고르는 조건과 실행하는 조건이 같아야 한다.
+     */
+    public boolean isRegistered(AdapterType type) {
+        return byType.containsKey(type);
+    }
+
+    /**
      * 채널 종류가 지원하는 기능. 화면과 12주차 워커가 쓰는 조회 경로다.
      *
      * <p>구현이 아니라 {@link AdapterType} 의 선언을 돌려준다. 화면이 기능을 보여 줘야

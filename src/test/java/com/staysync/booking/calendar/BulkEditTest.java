@@ -231,6 +231,51 @@ class BulkEditTest {
                 .contains("stopSell");
     }
 
+    // --- 확인-05 3절 B. 이벤트에 날짜 범위 -------------------------------------
+
+    /**
+     * 확인-05 완료 조건 4. <b>이벤트를 만드는 쪽</b>을 고정한다.
+     *
+     * <p>범위 없이 만들어진 이벤트는 채널 전파가 포기한다 — 화면에는 값이 바뀐 것으로
+     * 보이고 채널에는 안 나간다. 전파하는 쪽에서 추측으로 메우면 틀린 구간을 밀게
+     * 되므로 <b>범위는 여기서 실려야 한다.</b>
+     *
+     * <p>날짜는 요청의 {@code from}/{@code to} 가 아니라 <b>요일 필터를 거친 실제
+     * 대상</b>의 양끝이다. 3월 1일이 월요일이므로 토요일만 고르면 3월 6일부터다.
+     */
+    @Test
+    @DisplayName("일괄 편집 이벤트에 판매 단위와 날짜 범위가 실린다")
+    void 이벤트에_범위가_실린다() {
+        Fixture f = given("이벤트범위", 2);
+        LocalDate 끝 = 시작.plusDays(29);
+
+        bulkEditService.edit(f.propertyId(), new BulkEdit.Request(
+                f.unitIds(), 시작, 끝, Set.of(DayOfWeek.SATURDAY),
+                new BulkEdit.PriceChange.Fixed(new BigDecimal("150000")),
+                null, null, null, false));
+
+        String payload = jdbc.queryForObject("""
+                SELECT payload::text FROM outbox_event
+                WHERE aggregate_type = 'RATE_CALENDAR' AND aggregate_id = ?
+                  AND event_type = 'RATE_BULK_EDITED'
+                ORDER BY id DESC LIMIT 1
+                """, String.class, f.propertyId());
+
+        assertThat(payload)
+                .as("범위가 없으면 ChannelSyncService 가 전파를 포기한다")
+                .contains("\"unitIds\"")
+                .contains("\"from\"")
+                .contains("\"to\"");
+        // 요청 범위를 그대로 실으면 평일까지 전파 구간에 들어간다.
+        assertThat(payload)
+                .contains(시작.plusDays(5).toString())      // 첫 토요일 3/6
+                .contains(시작.plusDays(26).toString())     // 마지막 토요일 3/27
+                .doesNotContain(시작.toString());
+        for (Long unitId : f.unitIds()) {
+            assertThat(payload).contains(unitId.toString());
+        }
+    }
+
     // --- 완료 조건 8 ---------------------------------------------------------
 
     @Test

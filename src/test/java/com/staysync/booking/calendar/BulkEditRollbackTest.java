@@ -40,7 +40,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
  * 그래서 이 테스트만 따로 있다.
  */
 @SpringBootTest(properties = {
-        "staysync.embedded-postgres.port=15435",
+        // 포트도 갈라야 한다. 디렉터리만 다르고 포트가 같으면 먼저 뜬 컨텍스트의
+        // PostgreSQL 이 그 포트를 잡고 있어, 뒤 컨텍스트가 자기 디렉터리 대신
+        // 남의 데이터베이스에 붙는다(확인-05 3절 A 를 고치면서 드러났다).
+        "staysync.embedded-postgres.port=15436",
         "staysync.embedded-postgres.data-directory=.localdb-bulk"
 })
 @ActiveProfiles("local")

@@ -5,11 +5,14 @@ import com.staysync.booking.ChannelBookingIntake;
 import com.staysync.booking.ChannelBookingResult;
 import com.staysync.channel.domain.ChannelConnection;
 import com.staysync.channel.domain.ChannelMapping;
+import com.staysync.channel.port.AdapterType;
 import com.staysync.channel.port.BookingFeed;
 import com.staysync.channel.port.Capability;
 import com.staysync.channel.port.ChannelAdapter;
 import com.staysync.channel.port.ChannelCredentials;
 import com.staysync.channel.port.InboundBooking;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -67,6 +70,10 @@ public class ChannelBookingPoller {
     private final ChannelCredentialStore credentials;
     private final ChannelBookingIntake intake;
     private final boolean enabled;
+
+    /** 구현 없는 채널을 기동당 한 번만 알리기 위한 표시. */
+    private final Set<AdapterType> warnedMissingAdapters =
+            Collections.synchronizedSet(EnumSet.noneOf(AdapterType.class));
 
     ChannelBookingPoller(ChannelConnectionRepository connections,
                          ChannelMappingRepository mappings,
@@ -129,6 +136,14 @@ public class ChannelBookingPoller {
             if (!connection.isSyncEnabled()) {
                 continue;
             }
+            if (!registry.isRegistered(connection.getAdapterType())) {
+                // 고르는 조건과 실행하는 조건이 어긋나던 자리다. 아래 capabilities 는
+                // AdapterType 의 선언이라 구현이 없어도 PULL_BOOKING 을 돌려주고,
+                // 그러면 매 주기 이 연결을 집어 AdapterNotRegisteredException 으로
+                // 실패한다. 확인-05 3절 C 의 connectionId=2 가 그것이었다.
+                warnOnceAboutMissingAdapter(connection);
+                continue;
+            }
             Set<Capability> capabilities = registry.capabilitiesOf(connection.getAdapterType());
             if (!capabilities.contains(Capability.PULL_BOOKING)) {
                 continue;
@@ -139,6 +154,21 @@ public class ChannelBookingPoller {
             ingested += pollOne(connection);
         }
         return ingested;
+    }
+
+    /**
+     * 구현 없는 채널을 <b>기동당 한 번만</b> 알린다.
+     *
+     * <p>조용히 넘기면 그 연결은 영영 동기화되지 않는데 로그에도 아무것도 남지 않는다 —
+     * 12주차 {@code MOCK} 결함의 모양이다. 그렇다고 주기마다 남기면 5초에 한 줄씩
+     * 쌓여 진짜 경고를 덮는다. 종류당 한 번이면 둘 다 피한다.
+     */
+    private void warnOnceAboutMissingAdapter(ChannelConnection connection) {
+        if (warnedMissingAdapters.add(connection.getAdapterType())) {
+            log.warn("등록된 어댑터가 없는 채널이라 예약을 수집하지 않는다. "
+                            + "connectionId={} type={} — 어댑터가 붙기 전까지 이 연결은 동기화되지 않는다",
+                    connection.getId(), connection.getAdapterType());
+        }
     }
 
     /** 연결 하나. 실패해도 예외를 올리지 않는다 — 다음 연결이 이 주기를 잃지 않게. */
