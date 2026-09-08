@@ -27,6 +27,16 @@ public interface ReservationDirectory {
      */
     Optional<ReservationBrief> findByChannel(String channelCode, String channelBookingId);
 
+    /**
+     * 확인 코드로 찾는다. P4 16주차에 결제가 쓴다.
+     *
+     * <p><b>확인 코드가 위젯 손님이 가진 유일한 자격이다.</b> 로그인이 없으므로 결제를
+     * 준비할 때 자기 예약을 가리킬 방법이 이것뿐이고, 추측 불가능한 난수라 iCal 발행
+     * 토큰과 같은 성질이다. 예약 식별자로 열면 1 부터 세어 남의 예약을 결제 대상으로
+     * 지정할 수 있다.
+     */
+    Optional<ReservationBrief> findByConfirmationCode(String confirmationCode);
+
     /** 여러 건을 한 번에. 스레드 목록이 예약마다 조회하면 왕복이 스레드 수만큼 는다. */
     List<ReservationBrief> findAll(Collection<Long> reservationIds);
 

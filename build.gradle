@@ -64,6 +64,14 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-resource-server'
 
+    // --- 결제 (P4 16주차) ----------------------------------------------------
+    // 포트원 V2 서버 SDK. **웹훅 서명 검증을 직접 짜지 않기 위해 넣는다.**
+    // 포트원 V2 웹훅은 Standard Webhooks 스펙이고 재생 공격 방지를 위한 타임스탬프
+    // 허용 범위까지 규격에 들어 있다. HMAC 을 손으로 맞추면 그 부분이 빠지기 쉽고,
+    // 빠져도 정상 웹훅은 전부 통과하므로 아무 증상이 없다.
+    // 결제 재조회(금액 대조)도 이 SDK 로 한다.
+    implementation 'io.portone:server-sdk:0.24.0'
+
     // --- 편의 --------------------------------------------------------------
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

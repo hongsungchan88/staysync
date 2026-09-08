@@ -55,15 +55,54 @@ function json(body: unknown, status = 200): Response {
   } as unknown as Response;
 }
 
-/** 가용은 units 로, 홀드는 holdResponse 로 답한다. */
+/** 예약 상태. 결제 확인 폴링이 이 값을 읽는다. */
+let 예약상태 = 'HOLD';
+/** 결제창에 넘어간 값. 서버가 준 것을 그대로 쓰는지 본다. */
+let 결제요청: Record<string, unknown> | null = null;
+
+/** 가용은 units 로, 홀드는 holdResponse 로 답한다. 결제 경로는 기본값으로 답한다. */
 function serve(units: unknown, holdResponse: () => Response) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
-    if (String(url).includes('/availability')) {
+    const path = String(url);
+    if (path.includes('/availability')) {
       return Promise.resolve(json(units));
     }
-    lastHold = { url: String(url), init };
+    if (path.includes('/payments/prepare')) {
+      return Promise.resolve(
+        json({
+          paymentId: 'staysync-abc',
+          storeId: 'store-test',
+          channelKey: 'channel-test',
+          amount: 200000,
+          orderName: '숙박 2027-08-05 ~ 2027-08-07',
+        }),
+      );
+    }
+    if (path.includes('/payments/status/')) {
+      return Promise.resolve(json({ status: 예약상태 }));
+    }
+    lastHold = { url: path, init };
     return Promise.resolve(holdResponse());
   });
+}
+
+/** 결제창을 흉내 낸다. 실제 SDK 는 남의 스크립트라 테스트에서 부를 수 없다. */
+function 결제창(result: { code?: string; message?: string } | undefined) {
+  window.PortOne = {
+    requestPayment: (request: Record<string, unknown>) => {
+      결제요청 = request;
+      return Promise.resolve(result);
+    },
+  } as unknown as typeof window.PortOne;
+}
+
+/** 홀드까지 간다. 결제 화면이 뜬 상태로 끝난다. */
+async function 홀드까지() {
+  await 날짜를_고른다();
+  await userEvent.click(await screen.findByRole('radio'));
+  await userEvent.type(screen.getByLabelText('이름'), '김손님');
+  await userEvent.click(screen.getByRole('button', { name: '예약 잡기' }));
+  await screen.findByText('ABC12345');
 }
 
 const 홀드성공 = () =>
@@ -82,12 +121,16 @@ async function 날짜를_고른다() {
 beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   lastHold = null;
+  예약상태 = 'HOLD';
+  결제요청 = null;
   fetchMock = vi.fn();
   vi.stubGlobal('fetch', fetchMock);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.useRealTimers();
+  delete window.PortOne;
   tokenStore.clear();
   client.clear();
 });
@@ -197,5 +240,62 @@ describe('직접예약 위젯', () => {
     // 금액이 다른 예약이 생긴다.
     expect(await screen.findByRole('alert')).toHaveTextContent('요금이 변경되었습니다');
     expect(screen.queryByText('ABC12345')).not.toBeInTheDocument();
+  });
+
+  it('결제창에 서버가 준 값을 그대로 넘긴다', async () => {
+    serve([객실], 홀드성공);
+    결제창(undefined);
+    render(<WidgetPage />, { wrapper });
+    await 홀드까지();
+
+    await userEvent.click(screen.getByRole('button', { name: '결제하기' }));
+
+    await waitFor(() => expect(결제요청).not.toBeNull());
+    // 결제 식별자는 서버가 만든다. 화면이 만들면 같은 값을 두 번 쓰거나 남의 것을
+    // 지어낼 수 있다.
+    expect(결제요청?.paymentId).toBe('staysync-abc');
+    expect(결제요청?.storeId).toBe('store-test');
+    expect(결제요청?.totalAmount).toBe(200000);
+  });
+
+  it('결제창이 성공해도 서버가 확정하기 전에는 완료로 보여 주지 않는다', async () => {
+    serve([객실], 홀드성공);
+    결제창(undefined);
+    render(<WidgetPage />, { wrapper });
+    await 홀드까지();
+
+    // 서버는 아직 HOLD 다. 웹훅이 도착하지 않았다.
+    await userEvent.click(screen.getByRole('button', { name: '결제하기' }));
+
+    expect(await screen.findByText('결제를 확인하는 중입니다…')).toBeInTheDocument();
+    // 결제창의 성공만 믿고 완료를 띄우면, 웹훅이 끝내 오지 않을 때 15분 뒤 조용히
+    // 사라질 예약을 확정으로 보여 준 것이 된다.
+    expect(screen.queryByText('예약이 확정되었습니다')).not.toBeInTheDocument();
+  });
+
+  it('서버가 확정하면 그때 완료로 바뀐다', async () => {
+    serve([객실], 홀드성공);
+    결제창(undefined);
+    render(<WidgetPage />, { wrapper });
+    await 홀드까지();
+
+    예약상태 = 'CONFIRMED';
+    await userEvent.click(screen.getByRole('button', { name: '결제하기' }));
+
+    expect(await screen.findByText('예약이 확정되었습니다', undefined, { timeout: 5000 }))
+      .toBeInTheDocument();
+  });
+
+  it('결제창이 실패하면 이유를 보여 주고 다시 시도할 수 있다', async () => {
+    serve([객실], 홀드성공);
+    결제창({ code: 'PAY_PROCESS_CANCELED', message: '결제를 취소했습니다.' });
+    render(<WidgetPage />, { wrapper });
+    await 홀드까지();
+
+    await userEvent.click(screen.getByRole('button', { name: '결제하기' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('결제를 취소했습니다');
+    // 버튼이 남아 있어야 다시 시도할 수 있다.
+    expect(screen.getByRole('button', { name: '결제하기' })).toBeEnabled();
   });
 });

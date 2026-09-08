@@ -112,6 +112,19 @@ public class SecurityConfig {
                         // 자리이므로 그 몫을 값 검증이 대신한다.
                         .requestMatchers(HttpMethod.GET, "/public/booking/*/availability").permitAll()
                         .requestMatchers(HttpMethod.POST, "/public/booking/*/hold").permitAll()
+                        // 직접예약 결제(P4 16주차). 둘 다 우리 세션을 가질 수 없다 —
+                        // 하나는 위젯 손님이, 하나는 포트원이 부른다.
+                        //
+                        // 인증 대신 지키는 것이 각각 있다. prepare 는 **확인 코드**가
+                        // 지키고(추측 불가능한 난수, iCal 발행 토큰과 같은 성질),
+                        // webhook 은 **서명**이 지킨다. 서명이 맞지 않으면 본문을
+                        // 읽지도 않는다 — 계획서 14.2 의 검증 시나리오 10.
+                        .requestMatchers(HttpMethod.POST, "/public/payments/prepare").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/public/payments/portone/webhook")
+                        .permitAll()
+                        // 확정 여부 확인. 확인 코드를 아는 사람만 물어볼 수 있고
+                        // 응답에는 상태 문자열 하나뿐이다.
+                        .requestMatchers(HttpMethod.GET, "/public/payments/status/*").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))

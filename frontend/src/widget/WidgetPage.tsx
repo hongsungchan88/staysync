@@ -4,11 +4,14 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   createHold,
   fetchAvailability,
+  fetchReservationStatus,
+  preparePayment,
   PublicApiError,
   type HoldResult,
   type PublicDay,
   type PublicUnit,
 } from '@/api/publicBooking';
+import { loadPortOne } from './portone';
 
 /**
  * 직접예약 위젯. 계획서 8.7 의 `/widget/:propertyId` 다.
@@ -97,7 +100,7 @@ export function WidgetPage() {
   if (held) {
     return (
       <Shell>
-        <Done held={held} />
+        <AfterHold held={held} />
       </Shell>
     );
   }
@@ -245,10 +248,75 @@ export function WidgetPage() {
   );
 }
 
-/** 홀드까지 끝난 화면. 결제는 아직 붙지 않았다. */
-function Done({ held }: { held: HoldResult }) {
+/**
+ * 홀드가 끝난 뒤의 화면. 결제까지 여기서 한다.
+ *
+ * <b>단계가 셋이다.</b> 잡힘 → 결제창 → 확정 확인. 마지막이 따로 있는 이유는
+ * <b>확정이 웹훅으로만 일어나기 때문이다</b> — 결제창이 성공을 돌려줘도 우리 예약은
+ * 포트원이 서버로 웹훅을 보내야 확정된다. 결제창의 성공만 믿고 "예약 완료"를 띄우면
+ * 아직 홀드인 예약을 확정으로 보여 주게 되고, 웹훅이 끝내 오지 않으면 그 예약은
+ * 15분 뒤 조용히 사라진다.
+ */
+function AfterHold({ held }: { held: HoldResult }) {
+  const [phase, setPhase] = useState<'held' | 'paying' | 'confirming' | 'done'>('held');
+  const [failed, setFailed] = useState<string | null>(null);
+
+  const pay = async () => {
+    setFailed(null);
+    setPhase('paying');
+    try {
+      const setup = await preparePayment(held.confirmationCode);
+      const portone = await loadPortOne();
+      const result = await portone.requestPayment({
+        storeId: setup.storeId,
+        channelKey: setup.channelKey,
+        paymentId: setup.paymentId,
+        orderName: setup.orderName,
+        totalAmount: setup.amount,
+        currency: 'KRW',
+        payMethod: 'CARD',
+      });
+      // 결제창은 실패했을 때만 code 를 준다. 손님이 창을 닫은 경우도 여기다.
+      if (result?.code) {
+        setFailed(result.message ?? '결제가 완료되지 않았습니다.');
+        setPhase('held');
+        return;
+      }
+      setPhase('confirming');
+      const confirmed = await waitForConfirmed(held.confirmationCode);
+      if (confirmed) {
+        setPhase('done');
+      } else {
+        // 결제는 됐는데 웹훅이 아직 안 왔을 수 있다. **실패로 단정하지 않는다** —
+        // 결제를 두 번 하게 만드는 것이 가장 나쁜 안내다.
+        setFailed('결제는 접수되었으나 확정 확인이 늦어지고 있습니다. '
+          + '잠시 뒤 확인번호로 문의해 주세요.');
+        setPhase('held');
+      }
+    } catch (error) {
+      setFailed(error instanceof PublicApiError
+        ? error.message
+        : '결제를 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.');
+      setPhase('held');
+    }
+  };
+
+  if (phase === 'done') {
+    return (
+      <section className="flex flex-col gap-3" aria-label="예약 완료">
+        <h1 className="text-lg font-semibold text-ink">예약이 확정되었습니다</h1>
+        <p className="text-sm text-body">
+          확인번호 <strong>{held.confirmationCode}</strong>
+        </p>
+        <p className="text-sm text-body">
+          결제 금액 <strong>{won(held.amount)}</strong>
+        </p>
+      </section>
+    );
+  }
+
   return (
-    <section className="flex flex-col gap-3" aria-label="예약 완료">
+    <section className="flex flex-col gap-3" aria-label="결제">
       <h1 className="text-lg font-semibold text-ink">예약을 잡았습니다</h1>
       <p className="text-sm text-body">
         확인번호 <strong>{held.confirmationCode}</strong>
@@ -261,11 +329,50 @@ function Done({ held }: { held: HoldResult }) {
         하는지 모르면 손님이 자리를 비운 사이 예약이 조용히 없어진다.
       */}
       <p className="text-sm text-clay">{localTime(held.expiresAt)}까지 결제해야 합니다.</p>
-      <p className="rounded-md border border-rule bg-sand/40 p-3 text-xs text-muted">
-        결제 단계는 아직 붙지 않았습니다.
-      </p>
+
+      {failed && (
+        <p role="alert" className={noticeClass}>
+          {failed}
+        </p>
+      )}
+
+      {phase === 'confirming' ? (
+        <p className="text-sm text-muted">결제를 확인하는 중입니다…</p>
+      ) : (
+        <button
+          type="button"
+          className="inline-flex h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-medium text-paper disabled:opacity-50"
+          disabled={phase === 'paying'}
+          onClick={pay}
+        >
+          {phase === 'paying' ? '결제창을 여는 중…' : '결제하기'}
+        </button>
+      )}
     </section>
   );
+}
+
+/**
+ * 확정될 때까지 서버에 물어본다.
+ *
+ * <b>결제창의 성공과 우리 확정 사이에는 시차가 있다.</b> 포트원이 웹훅을 보내고
+ * 우리가 결제사에 금액을 다시 물어본 뒤에야 확정되므로, 곧바로 물으면 아직 HOLD 다.
+ *
+ * 무한정 기다리지 않는다. 못 받았다고 실패로 단정하지도 않는다 — 결제를 두 번 하게
+ * 만드는 것이 가장 나쁜 안내다.
+ */
+async function waitForConfirmed(confirmationCode: string): Promise<boolean> {
+  for (let attempt = 0; attempt < 15; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      if ((await fetchReservationStatus(confirmationCode)) === 'CONFIRMED') {
+        return true;
+      }
+    } catch {
+      // 한 번 실패했다고 그만두지 않는다. 다음 주기에 다시 물어본다.
+    }
+  }
+  return false;
 }
 
 function UnitOption({
