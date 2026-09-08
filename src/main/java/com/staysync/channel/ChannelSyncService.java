@@ -30,6 +30,7 @@ import org.springframework.stereotype.Component;
  *
  * <pre>
  *   RATE_BULK_EDITED       → 요금·제약이 바뀌었다 → PUSH_RATE 지원 연결로
+ *   RESERVATION_HELD       → 재고가 줄었다(임시)  → PUSH_AVAILABILITY 지원 연결로
  *   RESERVATION_CONFIRMED  → 재고가 줄었다        → PUSH_AVAILABILITY 지원 연결로
  *   RESERVATION_CANCELLED  → 재고가 늘었다              "
  *   RESERVATION_EXPIRED    → 재고가 늘었다              "
@@ -65,7 +66,10 @@ class ChannelSyncService implements DomainEventPublisher {
             "RESERVATION_CONFIRMED",
             "RESERVATION_CANCELLED",
             "RESERVATION_EXPIRED",
-            "RESERVATION_DATES_CHANGED");
+            "RESERVATION_DATES_CHANGED",
+            // P4 16주차. 홀드도 재고를 차지한다 — available() 이 held 를 빼기 때문이다.
+            // 이것이 빠져 있어 만료(재고 증가)만 나가고 생성(재고 감소)은 안 나갔다.
+            "RESERVATION_HELD");
 
     private final ChannelConnectionRepository connections;
     private final ChannelMappingRepository mappings;
