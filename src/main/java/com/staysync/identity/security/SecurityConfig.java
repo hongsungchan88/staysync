@@ -104,6 +104,14 @@ public class SecurityConfig {
                         // 추측 불가능한 난수여야 하고, 없는 토큰은 404 로 답해 존재를
                         // 알리지 않는다. 읽기 전용이라 GET 만 연다.
                         .requestMatchers(HttpMethod.GET, "/public/ical/*.ics").permitAll()
+                        // 직접예약 위젯. 계획서 8.7 이고 로그인 없이 열린다(P4 16주차).
+                        //
+                        // **쓰기가 열린 유일한 익명 경로다.** 그래서 서버가 숙소 식별자
+                        // 외에는 아무것도 믿지 않는다 — 가용도 요금도 금액도 다시 구하고,
+                        // 화면이 보낸 금액은 대조용으로만 쓴다. 조직 스코핑을 걸 수 없는
+                        // 자리이므로 그 몫을 값 검증이 대신한다.
+                        .requestMatchers(HttpMethod.GET, "/public/booking/*/availability").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/public/booking/*/hold").permitAll()
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwt -> jwt.jwtAuthenticationConverter(converter)))
