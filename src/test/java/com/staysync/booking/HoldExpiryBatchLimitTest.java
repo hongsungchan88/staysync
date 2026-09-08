@@ -83,9 +83,16 @@ class HoldExpiryBatchLimitTest {
                 .as("남은 건이 있다는 사실이 로그로 드러나야 한다")
                 .anySatisfy(message -> assertThat(message).contains("상한"));
 
-        // 남은 한 건은 다음 주기에 처리된다
-        assertThat(holdExpiryJob.expireDueHolds(OffsetDateTime.now().plusHours(1)))
-                .isEqualTo(fixture.total() - HoldExpiryJob.BATCH_LIMIT);
+        // 남은 한 건은 다음 주기에 처리된다.
+        //
+        // **전역 반환 건수를 세지 않는다.** 이 배치는 데이터베이스 전체를 훑으므로
+        // 다른 테스트가 남긴 HOLD 까지 함께 처리하고, 그러면 이 숫자가 실행 조합에
+        // 따라 달라진다. 13주차 고아 되살리기에서 같은 모양으로 겪었고 CLAUDE.md 에
+        // 적혀 있다. 이 판매 단위의 행만 본다.
+        holdExpiryJob.expireDueHolds(OffsetDateTime.now().plusHours(1));
+        assertThat(남은_홀드수(fixture.unitId()))
+                .as("두 주기면 이 단위의 홀드가 모두 만료돼야 한다")
+                .isZero();
     }
 
     @Test
@@ -110,7 +117,7 @@ class HoldExpiryBatchLimitTest {
                 .toList();
     }
 
-    private record HoldFixture(int total) {
+    private record HoldFixture(Long unitId, int total) {
     }
 
     /**
@@ -125,7 +132,15 @@ class HoldExpiryBatchLimitTest {
         for (int i = 0; i < total; i++) {
             bookingService.hold(propertyId, unitId, period(i), BigDecimal.valueOf(100000), null);
         }
-        return new HoldFixture(total);
+        return new HoldFixture(unitId, total);
+    }
+
+    /** 그 판매 단위에 아직 살아 있는 HOLD 수. 전역 건수 대신 이것을 본다. */
+    private int 남은_홀드수(Long unitId) {
+        Integer left = jdbc.queryForObject(
+                "SELECT count(*) FROM reservation WHERE unit_id = ? AND status = 'HOLD'",
+                Integer.class, unitId);
+        return left == null ? 0 : left;
     }
 
     private Long propertyId;

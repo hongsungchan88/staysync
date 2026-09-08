@@ -22,6 +22,19 @@ final class ReservationEvents {
 
     /** 바깥이 알아야 하는 사건들. 체크인은 아직 소비자가 없어 이벤트를 만들지 않는다. */
     static final String CONFIRMED = "RESERVATION_CONFIRMED";
+
+    /**
+     * 임시 점유가 생겼다. <b>재고가 줄었다는 뜻이다.</b> P4 16주차에 더했다.
+     *
+     * <p>{@code available() = total - booked - held} 이므로 HOLD 는 채널에 나갈 재고를
+     * 곧바로 줄인다. 그런데 {@link #EXPIRED} 만 내보내고 있었다 — <b>홀드 생애주기에서
+     * 재고가 느는 쪽만 알리고 줄어드는 쪽은 알리지 않는 비대칭</b>이었다. 만료만
+     * 내보내던 것을 생성까지 맞춘다.
+     *
+     * <p>채널은 홀드의 존재를 알지 못한다. {@code ChannelSyncService} 가 페이로드가
+     * 아니라 현재 원장을 다시 읽으므로 숫자만 받는다.
+     */
+    static final String HELD = "RESERVATION_HELD";
     static final String CANCELLED = "RESERVATION_CANCELLED";
     static final String DATES_CHANGED = "RESERVATION_DATES_CHANGED";
     static final String CHECKED_OUT = "RESERVATION_CHECKED_OUT";

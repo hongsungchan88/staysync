@@ -56,6 +56,27 @@ public abstract class SyncTestBase {
     @Autowired
     protected InventoryService inventory;
 
+    /**
+     * 밀린 이벤트를 <b>다 나갈 때까지</b> 배수한다.
+     *
+     * <p>{@code relayPending()} 한 번은 {@code OutboxRelay.BATCH_LIMIT} 만큼만 낸다.
+     * 앞선 테스트가 그보다 많은 이벤트를 남겨 두면 <b>이 테스트의 이벤트가 그 뒤에
+     * 줄을 서서 한 번의 호출로는 나가지 않는다.</b> HOLD 생성 이벤트가 붙은 P4 16주차에
+     * 실제로 그렇게 깨졌다 — 홀드 상한 테스트가 만드는 101건이 뒤 테스트의 한 건을
+     * 밀어냈다. 한 번만 부르는 코드는 그 앞에 무엇이 쌓였는지에 기대게 된다.
+     */
+    protected int drainRelay() {
+        int published = 0;
+        for (int guard = 0; guard < 50; guard++) {
+            int once = relay.relayPending();
+            published += once;
+            if (once == 0) {
+                return published;
+            }
+        }
+        throw new IllegalStateException("릴레이가 비지 않는다. 발행이 수렴하지 않는 것이다.");
+    }
+
     /** 조직·숙소·판매 단위 한 벌. */
     protected record Fixture(Long orgId, Long propertyId, Long unitId) {
     }

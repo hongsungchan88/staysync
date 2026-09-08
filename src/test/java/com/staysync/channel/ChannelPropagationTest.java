@@ -95,7 +95,7 @@ class ChannelPropagationTest extends SyncTestBase {
         booking.registerManual(fixture.propertyId(), fixture.unitId(),
                 new StayPeriod(첫날, 끝날), BigDecimal.valueOf(200_000),
                 (short) 2, (short) 0, null);
-        relay.relayPending();
+        drainRelay();
         buffer.flushAll();
 
         assertThat(worker.jobsOf(판_채널.getId())).hasSize(1);
@@ -124,7 +124,7 @@ class ChannelPropagationTest extends SyncTestBase {
                 """, fixture.propertyId(), fixture.unitId(), 첫날, 끝날);
         outboxEvent(fixture, "MOCK_ORIGIN");
 
-        relay.relayPending();
+        drainRelay();
         buffer.flushAll();
 
         // 계획서 6.5 수신 경로의 5번이 "**다른** 채널로 재고 차감 전파"인 이유다.
@@ -142,7 +142,7 @@ class ChannelPropagationTest extends SyncTestBase {
                 List.of(fixture.unitId()), 첫날, 끝날, Set.of(),
                 new BulkEdit.PriceChange.Fixed(BigDecimal.valueOf(250_000)),
                 null, null, null, false));
-        relay.relayPending();
+        drainRelay();
         buffer.flushAll();
     }
 

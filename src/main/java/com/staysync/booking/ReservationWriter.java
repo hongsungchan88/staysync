@@ -95,8 +95,19 @@ class ReservationWriter {
         }
         Reservation saved = reservationRepo.saveAndFlush(reservation);
         writeNights(saved);
-        // 이벤트는 만들지 않는다. 아직 확정되지 않은 점유를 바깥이 알 이유가 없다.
-        // 감사는 남긴다. 재고를 차지한 변경이기 때문이다.
+
+        // 재고가 줄었다는 사실을 알린다. P4 16주차에 더했다.
+        //
+        // 예전 주석은 "확정되지 않은 점유를 바깥이 알 이유가 없다"였다. 그러나 채널이
+        // 알아야 하는 것은 홀드가 아니라 **재고가 바뀌었다는 사실**이고,
+        // available() = total - booked - held 이므로 HOLD 는 채널에 나갈 재고를 곧바로
+        // 줄인다. 알리지 않으면 홀드 창 동안 채널이 옛 재고를 들고 있고, 그 사이 채널
+        // 예약이 들어오면 초과 판매 충돌이 된다.
+        //
+        // 원칙을 뒤집은 것이 아니라 **비대칭을 맞춘 것이다.** 만료(EXPIRED)는 이미
+        // 채널로 나가고 있었다 — 재고가 느는 쪽만 알리고 줄어드는 쪽은 알리지 않았다.
+        outbox.record(ReservationEvents.AGGREGATE_TYPE, saved.getId(),
+                ReservationEvents.HELD, ReservationEvents.payloadOf(saved));
         audit.record(ReservationEvents.AGGREGATE_TYPE, saved.getId(), "HOLD_CREATE",
                 null, ReservationEvents.auditSnapshot(saved));
         return saved;
