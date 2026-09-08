@@ -106,6 +106,60 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
             """)
     List<Reservation> findExpiredHolds(@Param("now") OffsetDateTime now, Pageable pageable);
 
+    /**
+     * 예약일부터 체크인일까지 평균 일수. 리포트의 리드타임이다.
+     *
+     * <p>박이 아니라 <b>예약</b>이 단위다. 리드타임은 예약 하나의 성질이고, 박으로
+     * 세면 오래 묵는 예약이 평균을 끌어당긴다.
+     *
+     * <p><b>네이티브 질의다.</b> 날짜 사이의 일수는 JPQL 로 이식성 있게 쓸 수 없다.
+     * 파라미터는 전부 바인딩이고 문자열을 이어 붙이지 않는다.
+     */
+    @Query(value = """
+            SELECT avg(r.check_in - r.created_at::date)
+            FROM reservation r
+            WHERE r.property_id IN (:propertyIds)
+              AND r.status IN (:statuses)
+              AND r.check_in BETWEEN :from AND :to
+            """, nativeQuery = true)
+    Double averageLeadTimeDays(@Param("propertyIds") List<Long> propertyIds,
+                               @Param("statuses") List<String> statuses,
+                               @Param("from") LocalDate from,
+                               @Param("to") LocalDate to);
+
+    /**
+     * 취소율의 분모. <b>체크인 날짜</b> 기준이다.
+     *
+     * <p>리포트 화면은 기간 하나로 지표 여섯을 함께 보여 준다. 그 기간의 뜻이 지표마다
+     * 다르면 숫자가 서로 맞지 않는다 — 점유율은 "그 기간에 묵은 박"인데 취소율만
+     * "그 기간에 <b>예약한</b> 건"이면, 다음 달 리포트의 취소율이 <b>언제나 0</b>이다.
+     * 그 달에 예약된 건이 아직 없기 때문이다. 실제로 그렇게 나왔다.
+     *
+     * <p>그래서 <b>기간의 뜻을 숙박으로 통일한다.</b> "8월 취소율"은 8월에 묵기로 했던
+     * 예약 중 취소된 비율이다. 취소된 예약도 체크인 날짜를 그대로 들고 있다.
+     */
+    @Query("""
+            select count(r) from Reservation r
+            where r.propertyId in :propertyIds
+              and r.status not in :excluded
+              and r.period.checkIn between :from and :to
+            """)
+    long countBooked(@Param("propertyIds") List<Long> propertyIds,
+                     @Param("excluded") List<ReservationStatus> excluded,
+                     @Param("from") LocalDate from,
+                     @Param("to") LocalDate to);
+
+    /** 취소율의 분자. 같은 기준이다. */
+    @Query("""
+            select count(r) from Reservation r
+            where r.propertyId in :propertyIds
+              and r.status = com.staysync.booking.domain.ReservationStatus.CANCELLED
+              and r.period.checkIn between :from and :to
+            """)
+    long countCancelled(@Param("propertyIds") List<Long> propertyIds,
+                        @Param("from") LocalDate from,
+                        @Param("to") LocalDate to);
+
     /** 조직 스코핑된 목록. reservation 에는 org_id 가 없어 property 를 거쳐 좁힌다. */
     @Query("""
             select r from Reservation r
