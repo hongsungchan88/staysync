@@ -29,6 +29,10 @@ class PublicBookingApiTest extends ApiTestBase {
     @org.springframework.beans.factory.annotation.Autowired
     private com.staysync.booking.HoldExpiryJob holdExpiryJob;
 
+    /** 인원이 실제로 저장됐는지는 응답에 없다. 행을 직접 본다. */
+    @org.springframework.beans.factory.annotation.Autowired
+    private org.springframework.jdbc.core.JdbcTemplate jdbc;
+
     private static final LocalDate 체크인 = LocalDate.now().plusDays(40);
     private static final LocalDate 체크아웃 = 체크인.plusDays(2);
 
@@ -109,6 +113,26 @@ class PublicBookingApiTest extends ApiTestBase {
                 .andExpect(jsonPath("$.expiresAt").isNotEmpty());
     }
 
+    @Test
+    @DisplayName("위젯이 고른 인원이 예약에 그대로 남는다")
+    void 인원이_예약에_남는다() throws Exception {
+        Fixture f = 숙소하나();
+
+        홀드(f, 200_000, "네 식구").andExpect(status().isCreated());
+
+        // 넘기지 않으면 예약 기본값(성인 2, 아동 0)이 박힌다. 그러면 호스트가 보는
+        // 인원이 늘 2명이고 화면에는 아무 이상이 없다 — 청소와 정원 판단이 거기 걸린다.
+        // 홀드() 가 성인 2 아동 1 로 보낸다.
+        java.util.Map<String, Object> 예약 = jdbc.queryForMap(
+                "SELECT adults, children FROM reservation WHERE unit_id = ? AND status = 'HOLD'",
+                f.unitId());
+        org.assertj.core.api.Assertions.assertThat(((Number) 예약.get("adults")).intValue())
+                .isEqualTo(2);
+        org.assertj.core.api.Assertions.assertThat(((Number) 예약.get("children")).intValue())
+                .as("아동 수가 떨어지면 기본값 0 과 구분되지 않는다")
+                .isEqualTo(1);
+    }
+
     // --- 완료 조건 7 ---------------------------------------------------------
 
     @Test
@@ -137,7 +161,7 @@ class PublicBookingApiTest extends ApiTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"unitId":%d,"checkIn":"%s","checkOut":"%s",
-                                 "quotedAmount":200000,"guestName":""}
+                                 "quotedAmount":200000,"adults":2,"children":0,"guestName":""}
                                 """.formatted(f.unitId(), 체크인, 체크아웃)))
                 .andExpect(status().isBadRequest());
     }
@@ -152,7 +176,7 @@ class PublicBookingApiTest extends ApiTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"unitId":%d,"checkIn":"%s","checkOut":"%s",
-                                 "quotedAmount":200000,"guestName":"끼워넣기"}
+                                 "quotedAmount":200000,"adults":2,"children":0,"guestName":"끼워넣기"}
                                 """.formatted(남의것.unitId(), 체크인, 체크아웃)))
                 .andExpect(status().isNotFound());
     }
@@ -168,7 +192,7 @@ class PublicBookingApiTest extends ApiTestBase {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"unitId":%d,"checkIn":"%s","checkOut":"%s",
-                         "quotedAmount":%d,"guestName":"%s","guestPhone":"01012345678"}
+                         "quotedAmount":%d,"adults":2,"children":1,"guestName":"%s","guestPhone":"01012345678"}
                         """.formatted(f.unitId(), 체크인, 체크아웃, amount, guestName)));
     }
 

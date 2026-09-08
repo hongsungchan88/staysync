@@ -133,8 +133,8 @@ public class PublicBookingService {
      * 확인과 확보 사이에 다른 요청이 끼어들 수 있다.
      */
     public HoldResult hold(Long propertyId, Long unitId, StayPeriod period,
-                           BigDecimal quotedAmount, String guestName,
-                           String guestPhone, String guestEmail) {
+                           BigDecimal quotedAmount, short adults, short children,
+                           String guestName, String guestPhone, String guestEmail) {
         List<PublicDay> nights = nightsOf(propertyId, unitId, period);
 
         for (PublicDay night : nights) {
@@ -157,7 +157,10 @@ public class PublicBookingService {
         }
 
         Long guestId = registerGuest(propertyId, guestName, guestPhone, guestEmail);
-        Reservation held = booking.hold(propertyId, unitId, period, amount, guestId);
+        // 인원을 그대로 넘긴다. 넘기지 않으면 예약 기본값(성인 2)이 박혀 호스트가 보는
+        // 인원이 늘 2명이 된다 — 청소와 정원 판단이 거기에 걸린다.
+        Reservation held = booking.hold(propertyId, unitId, period, amount, guestId,
+                adults, children);
 
         log.info("직접예약 홀드를 만들었다. reservationId={} propertyId={} unitId={} 금액={}",
                 held.getId(), propertyId, unitId, amount);

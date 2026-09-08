@@ -5,6 +5,8 @@ import com.staysync.booking.PublicBookingService.HoldResult;
 import com.staysync.booking.PublicBookingService.PublicUnit;
 import com.staysync.booking.domain.StayPeriod;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -80,8 +82,8 @@ class PublicBookingController {
                                     @Valid @RequestBody HoldRequest request) {
         HoldResult result = service.hold(propertyId, request.unitId(),
                 new StayPeriod(request.checkIn(), request.checkOut()),
-                request.quotedAmount(), request.guestName(),
-                request.guestPhone(), request.guestEmail());
+                request.quotedAmount(), request.adults(), request.children(),
+                request.guestName(), request.guestPhone(), request.guestEmail());
         return ResponseEntity.status(HttpStatus.CREATED).body(result);
     }
 
@@ -96,6 +98,8 @@ class PublicBookingController {
             @NotNull LocalDate checkIn,
             @NotNull LocalDate checkOut,
             @NotNull BigDecimal quotedAmount,
+            @Min(1) @Max(30) short adults,
+            @Min(0) @Max(30) short children,
             @NotBlank @Size(max = 120) String guestName,
             @Size(max = 40) String guestPhone,
             @Size(max = 200) String guestEmail) {
