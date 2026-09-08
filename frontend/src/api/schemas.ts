@@ -274,3 +274,37 @@ export const opsTaskSchema = z.object({
   overdue: z.boolean(),
 });
 export type OpsTask = z.infer<typeof opsTaskSchema>;
+
+// --- 리포트 (P4 16주차) --------------------------------------------------------
+
+/** 채널 하나의 몫. 서버가 매출 내림차순으로 보낸다. */
+export const channelShareSchema = z.object({
+  channelCode: z.string(),
+  reservations: z.number(),
+  revenue: z.number(),
+  /** 0.0 ~ 1.0. 전체 매출이 0이면 0이다. */
+  revenueShare: z.number(),
+});
+export type ChannelShare = z.infer<typeof channelShareSchema>;
+
+/**
+ * 리포트 지표 여섯. 계획서 8.8.
+ *
+ * **비율은 0.0 ~ 1.0 으로 온다.** 백분율로 바꾸는 것은 화면의 몫이다.
+ *
+ * **분모가 0이면 서버가 0을 보낸다.** 예약이 없는 기간을 보는 것은 정상이고 —
+ * 새 숙소를 등록한 직후가 그렇다 — 그때 화면이 터지면 안 된다. "값이 없다"와
+ * "0이다"를 구분해 보여 주는 것이 화면의 몫이라 `soldNights` 를 함께 받는다.
+ */
+export const reportMetricsSchema = z.object({
+  soldNights: z.number(),
+  availableNights: z.number(),
+  roomRevenue: z.number(),
+  occupancyRate: z.number(),
+  adr: z.number(),
+  revPar: z.number(),
+  leadTimeDays: z.number(),
+  cancellationRate: z.number(),
+  channelMix: z.array(channelShareSchema).default([]),
+});
+export type ReportMetrics = z.infer<typeof reportMetricsSchema>;

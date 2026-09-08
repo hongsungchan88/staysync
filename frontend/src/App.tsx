@@ -7,6 +7,7 @@ import { ChannelMappingPage } from '@/channels/ChannelMappingPage';
 import { ConflictsPage } from '@/conflicts/ConflictsPage';
 import { OpsTasksPage } from '@/ops/OpsTasksPage';
 import { InboxPage } from '@/inbox/InboxPage';
+import { ReportsPage } from '@/reports/ReportsPage';
 import { useSessionBootstrap } from '@/auth/useSessionBootstrap';
 import { useTokenStore } from '@/auth/tokenStore';
 
@@ -73,6 +74,8 @@ function Routes() {
       {/* 계획서 8.1 의 /inbox 와 /inbox/:threadId. 같은 화면이 목록과 대화를 함께 그린다. */}
       <Route path="/inbox" element={<InboxPage />} />
       <Route path="/inbox/:threadId" element={<InboxPage />} />
+      {/* P4 16주차. 운영 리포트(계획서 8.8). 지표 여섯이 한 화면이다. */}
+      <Route path="/reports" element={<ReportsPage />} />
       {/* 알 수 없는 경로는 캘린더로. 404 화면을 만들 이유가 아직 없다. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </RouterRoutes>
