@@ -107,3 +107,48 @@ export async function createHold(
   });
   return holdResultSchema.parse(body);
 }
+
+// --- 결제 (P4 16주차) ---------------------------------------------------------
+
+/**
+ * 결제창을 열기 위해 서버가 주는 값.
+ *
+ * **비밀 값이 들어 있지 않다.** `storeId` 와 `channelKey` 는 결제창 SDK 로 나가는
+ * 값이라 비밀이 아니고, API 시크릿과 웹훅 시크릿은 서버 밖으로 나오지 않는다.
+ *
+ * `paymentId` 는 서버가 만든다. 화면이 만들면 같은 값을 두 번 쓰거나 남의 결제
+ * 식별자를 지어낼 수 있다.
+ */
+export const paymentSetupSchema = z.object({
+  paymentId: z.string(),
+  storeId: z.string(),
+  channelKey: z.string(),
+  amount: z.number(),
+  orderName: z.string(),
+});
+export type PaymentSetup = z.infer<typeof paymentSetupSchema>;
+
+export async function preparePayment(confirmationCode: string): Promise<PaymentSetup> {
+  const body = await publicRequest<unknown>('/public/payments/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirmationCode }),
+  });
+  return paymentSetupSchema.parse(body);
+}
+
+export const paymentStatusSchema = z.object({ status: z.string() });
+
+/**
+ * 예약이 확정됐는지.
+ *
+ * **결제창이 성공을 돌려줘도 그것으로 확정을 판단하지 않는다.** 확정은 포트원이
+ * 웹훅을 보내야 일어나고 둘 사이에 시차가 있다. 화면이 결제창의 성공만 믿으면
+ * 아직 홀드인 예약을 확정으로 보여 준다.
+ */
+export async function fetchReservationStatus(confirmationCode: string): Promise<string> {
+  const body = await publicRequest<unknown>(
+    `/public/payments/status/${encodeURIComponent(confirmationCode)}`,
+  );
+  return paymentStatusSchema.parse(body).status;
+}

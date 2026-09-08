@@ -61,6 +61,11 @@ class ReservationDirectoryService implements ReservationDirectory {
     }
 
     @Override
+    public Optional<ReservationBrief> findByConfirmationCode(String confirmationCode) {
+        return reservations.findByConfirmationCode(confirmationCode).map(this::toBrief);
+    }
+
+    @Override
     public Optional<LocalDate> nextCheckIn(Long unitId, LocalDate onOrAfter) {
         return Optional.ofNullable(reservations.findNextCheckIn(unitId, onOrAfter, ACTIVE));
     }
@@ -80,7 +85,8 @@ class ReservationDirectoryService implements ReservationDirectory {
                 r.getConfirmationCode(), r.getChannelCode(), r.getChannelBookingId(),
                 r.getStatus().name(),
                 r.getPeriod().checkIn(), r.getPeriod().checkOut(),
-                r.getGuestId() == null ? null : names.get(r.getGuestId()));
+                r.getGuestId() == null ? null : names.get(r.getGuestId()),
+                r.getTotalAmount());
     }
 
     /** 이름만 읽는다. 연락처는 암호문이고 복호화하는 자리는 {@code GuestRegistrar} 다. */

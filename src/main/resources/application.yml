@@ -52,6 +52,18 @@ staysync:
       # 게스트 연락처 암호화 키. JWT_SECRET 과 같이 저장소에 두지 않는다.
       # 값이 없으면 기동에 실패한다. local 프로파일만 개발용 고정값을 덮어쓴다.
       master-key: ${GUEST_DATA_KEY:}
+  portone:
+    # 직접예약 테스트 결제(P4 16주차). 값은 .env 로 주입한다.
+    #
+    # 앞의 둘은 브라우저의 결제창 SDK 로 나가는 값이라 비밀이 아니다. 뒤의 둘은
+    # 서버 밖으로 나가지 않는다 — 위젯에 내려보내는 응답에 섞이면 안 된다.
+    #
+    # JWT_SECRET 과 달리 **없어도 기동은 된다.** 결제는 테스트 모드 부가 기능이고
+    # 값이 없어도 나머지는 전부 정상이다. 대신 결제를 실제로 쓰려는 순간 막힌다.
+    store-id: ${PORTONE_STORE_ID:}
+    channel-key: ${PORTONE_CHANNEL_KEY:}
+    api-secret: ${PORTONE_API_SECRET:}
+    webhook-secret: ${PORTONE_WEBHOOK_SECRET:}
   ical:
     poll-interval-minutes: 15
     shrink-guard-ratio: 0.5      # 이벤트 수가 직전의 절반 이하로 줄면 취소 처리를 보류
