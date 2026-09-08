@@ -26,6 +26,13 @@ export default defineConfig({
         target: 'http://localhost:8080',
         changeOrigin: false,
       },
+      // 직접예약 위젯과 iCal 발행이 사는 공개 경로다. 없으면 위젯이 개발 서버에서
+      // 가용 조회부터 404 를 받는다 — 로그인이 필요 없는 화면이라 증상이 인증
+      // 문제로 보이지 않는다.
+      '/public': {
+        target: 'http://localhost:8080',
+        changeOrigin: false,
+      },
     },
   },
   test: {

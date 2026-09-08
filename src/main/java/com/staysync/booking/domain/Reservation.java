@@ -103,11 +103,16 @@ public class Reservation {
     /** 직접예약. 결제 완료 전까지 임시 점유 상태로 둔다. */
     public static Reservation directHold(Long propertyId, Long unitId, StayPeriod period,
                                          String confirmationCode, BigDecimal totalAmount,
-                                         OffsetDateTime expiresAt) {
+                                         OffsetDateTime expiresAt, short adults, short children) {
         Reservation r = new Reservation(propertyId, unitId, period,
                 "DIRECT", confirmationCode, ReservationStatus.HOLD);
         r.totalAmount = totalAmount;
         r.holdExpiresAt = expiresAt;
+        // 인원은 필드 기본값(성인 2, 아동 0)이 있으나 위젯이 실제로 고른 값을 넣는다.
+        // 기본값을 그대로 두면 호스트가 보는 인원이 늘 2명이 되고, 청소·정원 판단이
+        // 거기에 걸린다. P4 16주차에 더했다.
+        r.adults = adults;
+        r.children = children;
         return r;
     }
 

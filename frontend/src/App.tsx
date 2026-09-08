@@ -8,6 +8,7 @@ import { ConflictsPage } from '@/conflicts/ConflictsPage';
 import { OpsTasksPage } from '@/ops/OpsTasksPage';
 import { InboxPage } from '@/inbox/InboxPage';
 import { ReportsPage } from '@/reports/ReportsPage';
+import { WidgetPage } from '@/widget/WidgetPage';
 import { useSessionBootstrap } from '@/auth/useSessionBootstrap';
 import { useTokenStore } from '@/auth/tokenStore';
 
@@ -51,6 +52,17 @@ function Routes() {
   const bootstrapped = useSessionBootstrap();
   const accessToken = useTokenStore((s) => s.accessToken);
 
+  // **위젯은 토큰 검사보다 앞이다.** 계획서 8.7 의 공개 화면이라 세션이 없는 것이
+  // 정상이고, 뒤에 두면 예약하러 온 손님에게 호스트용 로그인 화면이 뜬다.
+  // 부팅 복구를 기다릴 이유도 없다 — 복구할 세션이 없다.
+  if (isWidgetPath()) {
+    return (
+      <RouterRoutes>
+        <Route path="/widget/:propertyId" element={<WidgetPage />} />
+      </RouterRoutes>
+    );
+  }
+
   if (!bootstrapped) {
     return (
       <div className="flex h-full items-center justify-center text-sm text-muted">
@@ -80,4 +92,15 @@ function Routes() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </RouterRoutes>
   );
+}
+
+/**
+ * 지금 경로가 위젯인지.
+ *
+ * 라우터의 `useLocation` 을 쓰지 않는 이유는 이 판정이 **라우터를 그리기 전에**
+ * 필요해서다. 세션 복구와 로그인 화면이 라우터 바깥에 있고(ADR 0009), 위젯은 그
+ * 둘보다도 앞이어야 한다.
+ */
+function isWidgetPath(): boolean {
+  return window.location.pathname.startsWith('/widget/');
 }

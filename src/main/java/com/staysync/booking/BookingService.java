@@ -65,13 +65,30 @@ public class BookingService {
                         totalAmount, adults, children, guestId));
     }
 
-    /** 임시 점유를 만든다. 직접예약 위젯(P4)이 쓸 경로이며 지금은 서비스로만 열려 있다. */
+    /**
+     * 임시 점유를 만든다. 인원을 모르는 자리가 쓴다.
+     *
+     * <p>인원은 예약 기본값(성인 2, 아동 0)이 된다. <b>인원을 아는 쪽은 아래를
+     * 쓴다</b> — 직접예약 위젯이 그렇다.
+     */
     public Reservation hold(Long propertyId, Long unitId, StayPeriod period,
                             BigDecimal totalAmount, Long guestId) {
+        return hold(propertyId, unitId, period, totalAmount, guestId, (short) 2, (short) 0);
+    }
+
+    /**
+     * 임시 점유를 만든다. 직접예약 위젯(P4 16주차)이 부르는 첫 REST 경로다.
+     *
+     * <p><b>HOLD 수명은 설정값이다</b>({@code staysync.hold-expiry-minutes}, 기본 15분).
+     * 계획서 5.4 가 정한 값이고 상수가 아니므로 환경마다 조절할 수 있다.
+     */
+    public Reservation hold(Long propertyId, Long unitId, StayPeriod period,
+                            BigDecimal totalAmount, Long guestId,
+                            short adults, short children) {
         OffsetDateTime expiresAt = OffsetDateTime.now().plusMinutes(holdExpiryMinutes);
         return unitLock.runExclusively(unitId, LOCK_WAIT, () ->
                 writer.createHold(propertyId, unitId, period, uniqueCode(),
-                        totalAmount, expiresAt, guestId));
+                        totalAmount, expiresAt, guestId, adults, children));
     }
 
     public Reservation confirm(Long reservationId) {

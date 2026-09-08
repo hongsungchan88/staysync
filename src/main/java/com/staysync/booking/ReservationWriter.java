@@ -85,11 +85,13 @@ class ReservationWriter {
     @Transactional
     Reservation createHold(Long propertyId, Long unitId, StayPeriod period,
                           String confirmationCode, BigDecimal totalAmount,
-                          OffsetDateTime expiresAt, Long guestId) {
+                          OffsetDateTime expiresAt, Long guestId,
+                          short adults, short children) {
         inventoryService.hold(unitId, period, UNITS);
 
         Reservation reservation = Reservation.directHold(
-                propertyId, unitId, period, confirmationCode, totalAmount, expiresAt);
+                propertyId, unitId, period, confirmationCode, totalAmount, expiresAt,
+                adults, children);
         if (guestId != null) {
             reservation.assignGuest(guestId);
         }
