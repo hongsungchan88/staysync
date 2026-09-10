@@ -375,46 +375,60 @@ def stage_checkout(api: Api, properties: list[dict]) -> None:
 
 
 def connect_channels(api: Api, properties: list[dict]) -> dict:
-    """Mock 채널과 에어비앤비 iCal 연결.
+    """채널 연결.
 
-    **채널 코드를 라벨 맵에 있는 값으로 둔다.** Mock 시뮬레이터가 부킹닷컴 역할이라
-    `BOOKING_COM` 이고, iCal 이 `AIRBNB_ICAL` 이다. 임의의 코드를 쓰면 수신된 예약의
-    막대가 캘린더에서 회색으로 그려진다.
+    **채널 코드를 라벨 맵에 있는 값으로 둔다.** 임의의 코드를 쓰면 수신된 예약의
+    막대가 캘린더에서 회색으로 그려지고 리포트에 코드가 그대로 뜬다.
 
-    **Mock 연결에는 매핑까지 붙인다.** 대본 2번(시뮬레이터에서 예약 발생 → 캘린더
-    반영)이 매핑을 타고 들어온다. 매핑이 없으면 수신된 예약이 어느 판매 단위인지
-    몰라 버려진다.
+    <h2>연결마다 판매 단위를 갈라 매핑한다</h2>
+
+    **같은 room 을 두 연결이 매핑하면 시뮬레이터의 예약 하나를 둘이 각각 수신해
+    예약이 두 건이 된다.** 수신 멱등성은 `(channel_code, channel_booking_id)` 라
+    채널 코드가 다르면 서로 다른 예약으로 잡힌다.
+
+    <h2>메시징 되는 어댑터가 Mock 하나뿐이다</h2>
+
+    iCal 에는 메시징이 없다(CLAUDE.md). 그래서 인박스에 채널을 가르려면 **Mock 연결을
+    채널 코드만 달리해 더 만드는 수밖에 없다.** 시뮬레이터가 게스트 메시지를 만들어 낼
+    유일한 곳이라는 것이 14주차에 시뮬레이터에 메시징을 더한 이유 그대로다.
+
+    에어비앤비 메시징 연결은 **강릉에 둔다.** 제주에는 이미 iCal 쪽 `AIRBNB_ICAL` 이
+    있어 `uq_channel_conn (property_id, channel_code)` 에 걸린다.
     """
-    first = properties[0]
-    mock = api.post(f"/api/properties/{first['id']}/channels", {
-        "channelCode": "BOOKING_COM",
-        "adapterType": "MOCK",
-        "displayName": "부킹닷컴 (시뮬레이터)",
-        "credentials": {"api_key": "mock-ota-dev-key"},
-    })
+    jeju, gangneung = properties[0], properties[1]
     rooms = {}
-    for i, unit in enumerate(first["units"], start=1):
-        room = f"mock-room-{i}"
-        api.post(f"/api/channels/{mock['id']}/mappings", {
-            "unitId": unit["id"], "externalUnitId": room,
-        })
-        rooms[unit["id"]] = room
-    print(f"  부킹닷컴(Mock) 연결 [{mock['id']}] + 매핑 {len(rooms)}개 → 대본 2·3번이 이걸 탄다")
 
-    ical = api.post(f"/api/properties/{first['id']}/channels", {
-        "channelCode": "AIRBNB_ICAL",
-        "adapterType": "ICAL",
-        "displayName": "에어비앤비",
-        "credentials": {
-            "ical_url": "https://www.airbnb.com/calendar/ical/demo-listing.ics",
-        },
-    })
-    api.post(f"/api/channels/{ical['id']}/mappings", {
-        "unitId": first["units"][0]["id"], "externalUnitId": "airbnb-listing-1",
-    })
-    print(f"  에어비앤비 iCal 연결 [{ical['id']}] + 매핑 1개")
-    return {"mockConnectionId": mock["id"], "rooms": rooms,
-            "firstUnitId": first["units"][0]["id"]}
+    def connect(prop, code, adapter, label, creds, mappings):
+        conn = api.post(f"/api/properties/{prop['id']}/channels", {
+            "channelCode": code, "adapterType": adapter,
+            "displayName": label, "credentials": creds,
+        })
+        for room, unit in mappings:
+            api.post(f"/api/channels/{conn['id']}/mappings", {
+                "unitId": unit["id"], "externalUnitId": room,
+            })
+            rooms[room] = {"unit": unit, "channel": code, "property": prop}
+        print(f"  [{conn['id']}] {label} ({code}) — "
+              f"{', '.join(r for r, _ in mappings)}")
+        return conn
+
+    mock_key = {"api_key": "mock-ota-dev-key"}
+
+    # 대본 2·3번이 이걸 탄다. 본채 하나만 매핑한다.
+    connect(jeju, "BOOKING_COM", "MOCK", "부킹닷컴 (시뮬레이터)", mock_key,
+            [("mock-room-1", jeju["units"][0])])
+    # 인박스 채널을 가르기 위한 연결. 별채를 맡는다.
+    connect(jeju, "NAVER", "MOCK", "네이버 (시뮬레이터)", mock_key,
+            [("mock-room-2", jeju["units"][1])])
+    # 대본 2번의 "같은 방의 다른 채널" 이 이것이다. 본채가 부킹닷컴과 여기 둘 다에 있다.
+    connect(jeju, "AIRBNB_ICAL", "ICAL", "에어비앤비", {
+        "ical_url": "https://www.airbnb.com/calendar/ical/demo-listing.ics",
+    }, [("airbnb-listing-1", jeju["units"][0])])
+    # 에어비앤비 메시징. iCal 은 메시징이 없어 Mock 으로 세우고 강릉에 둔다.
+    connect(gangneung, "AIRBNB_ICAL", "MOCK", "에어비앤비 (메시지)", mock_key,
+            [("mock-room-4", gangneung["units"][0])])
+
+    return {"rooms": rooms, "conflictRoom": "mock-room-1"}
 
 
 # --- 시뮬레이터를 거치는 것 -------------------------------------------------------
@@ -466,10 +480,9 @@ def seed_conflicts(api: Api, channels: dict, properties: list[dict]) -> None:
     나머지 둘이 넘친다. **넘친 예약을 거절하지 않는다** — 받아들이고
     `overbooking_conflict` 에 남기는 것이 정해 둔 처리다(CLAUDE.md).
     """
-    room = channels["rooms"][channels["firstUnitId"]]
     scenario("overbook", {
         "booking_id": "DEMO-OVERBOOK",
-        "room_id": room,
+        "room_id": channels["conflictRoom"],
         "check_in": CONFLICT_IN.isoformat(),
         "check_out": (CONFLICT_IN + timedelta(days=CONFLICT_NIGHTS)).isoformat(),
         "guest_name": "Booking.com Guest",
@@ -490,49 +503,104 @@ def seed_inbox(api: Api, channels: dict) -> None:
     **예약을 먼저 만들고 그 예약번호로 메시지를 보낸다.** 순서가 반대면 스레드가
     예약에 이어지지 않아 화면에 게스트 이름도 날짜도 안 뜬다.
 
+    **채널을 가른다.** 대본 5번이 "채널별로 흩어진 메시지를 한 화면에"인데 한 채널만
+    뜨면 그 말이 죽는다. 스레드의 채널은 **그 메시지를 수신한 연결**이 정하므로,
+    room 을 어느 연결에 매핑했는지가 그대로 채널이 된다.
+
+    **게스트 이름은 시뮬레이터가 보낸 값이 그대로 게스트 레코드가 된다.** 한글을
+    그대로 보내면 된다 — 파이썬은 JSON 을 UTF-8 로 보낸다. (Git Bash 에서 curl 로
+    보낼 때만 cp949 로 망가져 400 이 난다.)
+
     첫 건은 `msg-inbox.json` 의 시나리오다 — **같은 메시지를 3통 보내고 우리 쪽
-    유일 제약이 1통으로 흡수한다.** 대본 5번의 "같은 메시지 3통이 1통으로 들어온다"가
-    그것이다.
+    유일 제약이 1통으로 흡수한다.**
     """
-    room = channels["rooms"][channels["firstUnitId"]]
     threads = [
-        ("DEMO-MSG-1", "체크인 시간을 조금 늦출 수 있을까요?", 3, 40),
-        ("DEMO-MSG-2", "주차 공간이 따로 있나요? 차를 가져가려고 합니다.", 1, 44),
-        ("DEMO-MSG-3", "수건을 두 장 더 받을 수 있을까요?", 1, 48),
-        ("DEMO-MSG-4", "근처에 아침 먹을 만한 곳 추천해 주실 수 있나요?", 1, 52),
+        ("DEMO-MSG-1", "mock-room-1", "체크인 시간을 조금 늦출 수 있을까요?", 3, 40, "김도현"),
+        ("DEMO-MSG-2", "mock-room-1", "주차 공간이 따로 있나요? 차를 가져가려고 합니다.", 1, 44, "이수민"),
+        ("DEMO-MSG-3", "mock-room-2", "수건을 두 장 더 받을 수 있을까요?", 1, 48, "박지훈"),
+        ("DEMO-MSG-4", "mock-room-4", "근처에 아침 먹을 만한 곳 추천해 주실 수 있나요?", 1, 52, "최유나"),
     ]
 
-    for booking_id, _, _, offset in threads:
+    for booking_id, room, _, _, offset, guest in threads:
         check_in = TODAY + timedelta(days=offset)
+        info = channels["rooms"][room]
         scenario("duplicate", {
             "booking_id": booking_id,
             "room_id": room,
             "check_in": check_in.isoformat(),
             "check_out": (check_in + timedelta(days=2)).isoformat(),
-            "guest_name": "Booking.com Guest",
-            "total_amount": 360000,
+            "guest_name": guest,
+            "total_amount": info["unit"]["base"] * 2,
             "count": 1,
         })
-    print(f"  예약 {len(threads)}건을 시뮬레이터에 넣었다 (체크인은 위젯 창 뒤로 뺐다)")
+    mix = {}
+    for _, room, _, _, _, _ in threads:
+        code = channels["rooms"][room]["channel"]
+        mix[code] = mix.get(code, 0) + 1
+    print(f"  예약 {len(threads)}건을 시뮬레이터에 넣었다 — 채널 {mix}")
 
     # **`GET /api/reservations` 를 쓰지 않는다.** `from`/`to` 를 주면 500 이 난다 —
     # `search` 질의의 `(:from is null or ...)` 가 PostgreSQL 에서 형을 못 정한다.
-    # 화면이 부르지 않는 경로라 시연에는 영향이 없지만 여기서는 피해 간다.
     wait_for("채널 예약",
-             lambda: count_reservations("BOOKING_COM", TODAY + timedelta(days=35),
+             lambda: count_reservations(None, TODAY + timedelta(days=35),
                                         TODAY + timedelta(days=60)) >= len(threads),
-             timeout=45)
+             timeout=60)
 
-    for booking_id, body, count, _ in threads:
+    for booking_id, _, body, count, _, _ in threads:
         scenario("guest-message", {
             "booking_id": booking_id, "body": body, "count": count,
         })
-    print(f"  게스트 메시지를 보냈다 (첫 건은 같은 메시지 {threads[0][2]}통 — 대본 5번)")
+    print(f"  게스트 메시지를 보냈다 (첫 건은 같은 메시지 {threads[0][3]}통 — 대본 5번)")
 
-    wait_for("인박스 스레드",
-             lambda: len(api.get("/api/inbox")) >= len(threads), timeout=60)
+    wait_for("인박스 스레드", lambda: linked_threads() >= len(threads), timeout=90)
+    prune_orphan_threads()
     got = api.get("/api/inbox")
     print(f"  인박스 스레드 {len(got)}건")
+
+
+def linked_threads() -> int:
+    """예약에 이어진 스레드 수. 빈 스레드는 세지 않는다."""
+    import pg8000.native
+    con = pg8000.native.Connection(**DB)
+    try:
+        return con.run("SELECT count(*) FROM message_thread "
+                       "WHERE reservation_id IS NOT NULL")[0][0]
+    finally:
+        con.close()
+
+
+def prune_orphan_threads() -> None:
+    """연결 셋이 같은 메시지를 다 읽어서 생긴 **빈 스레드**를 치운다.
+
+    예약 수신은 매핑으로 걸러진다 — 그 연결에 없는 room 의 예약은 버린다. 그런데
+    **메시지 수신에는 그런 필터가 없다.** 연결마다 시뮬레이터의 메시지 저장소를
+    통째로 읽으므로, Mock 연결이 셋이면 같은 메시지를 셋이 다 가져가 스레드가 셋이
+    된다. 그중 예약과 채널 코드가 맞는 하나만 예약에 이어지고 나머지 둘은 게스트도
+    날짜도 없는 빈 스레드로 남는다.
+
+    **먼저 시뮬레이터의 메시지 저장소를 비운다.** 그러지 않으면 다음 폴링(10초)에
+    그대로 다시 만들어진다. 비운 뒤에 지우면 되살아나지 않는다.
+
+    예약 수신에는 영향이 없다 — 비우는 것은 메시지뿐이고, MOCK 은
+    SNAPSHOT_BOOKING 이 아니라서 목록이 비어도 예약을 취소하지 않는다.
+    """
+    Api(SIM).call("DELETE", "/api/messages", headers={"X-Api-Key": SIM_API_KEY})
+
+    import pg8000.native
+    con = pg8000.native.Connection(**DB)
+    try:
+        # 이 시드가 만든 것만 지운다. 예약에 안 이어진 스레드가 실제로는 정상일 수
+        # 있다 — 게스트가 예약 전에 문의하는 경우다.
+        gone = con.run("""
+            DELETE FROM message_thread
+             WHERE reservation_id IS NULL
+               AND external_id LIKE 'thread-DEMO-MSG-%'
+            RETURNING id
+        """)
+        print(f"  빈 스레드 {len(gone)}건을 치웠다 "
+              f"(연결 셋이 같은 메시지를 다 읽어 생긴 것)")
+    finally:
+        con.close()
 
 
 # --- SQL 보정 (표시용 두 컬럼) ---------------------------------------------------
@@ -608,9 +676,16 @@ def verify(api: Api) -> None:
         problems.append("충돌이 없다. /conflicts 가 빈 화면이다")
 
     threads = api.get("/api/inbox")
-    print(f"[5번] 인박스 스레드 {len(threads)}건")
+    ch = sorted({t.get("channelCode", "?") for t in threads})
+    names = [t.get("guestName") for t in threads]
+    print(f"[5번] 인박스 스레드 {len(threads)}건  채널 {ch}")
+    print(f"      게스트 {names}")
     if len(threads) < 3:
         problems.append(f"인박스 스레드가 {len(threads)}건뿐이다")
+    if len(ch) < 2:
+        problems.append(f"인박스가 한 채널뿐이다({ch}). 대본 5번이 '채널별로 흩어진' 이다")
+    if any(n and n.isascii() for n in names):
+        problems.append(f"게스트 이름에 영문 더미가 남아 있다: {names}")
 
     tasks = api.get("/api/ops/tasks")
     print(f"[6번] 청소 태스크 {len(tasks)}건 (체크아웃 전이라 0 이 맞다)")
