@@ -29,7 +29,7 @@ const 지표 = {
   cancellationRate: 0.5,
   channelMix: [
     { channelCode: 'DIRECT', reservations: 2, revenue: 400000, revenueShare: 0.8 },
-    { channelCode: 'MOCK', reservations: 1, revenue: 100000, revenueShare: 0.2 },
+    { channelCode: 'BOOKING_COM', reservations: 1, revenue: 100000, revenueShare: 0.2 },
   ],
 };
 
@@ -150,15 +150,31 @@ describe('리포트 화면', () => {
 
     const 표 = await screen.findByRole('table');
 
-    // 매출 내림차순이다. 화면이 큰 것부터 보여 준다 — 서버가 그 순서로 보낸다.
+    // **캘린더 범례와 같은 라벨을 쓴다.** 코드를 그대로 띄우면 같은 채널이 두 화면에서
+    // 다른 이름으로 불린다.
     const 줄들 = within(표).getAllByRole('row');
-    expect(줄들[1]?.textContent).toContain('DIRECT');
-    expect(줄들[2]?.textContent).toContain('MOCK');
+    // 매출 내림차순이다. 화면이 큰 것부터 보여 준다 — 서버가 그 순서로 보낸다.
+    expect(줄들[1]?.textContent).toContain('직접예약');
+    expect(줄들[2]?.textContent).toContain('부킹닷컴');
 
-    const 첫줄 = within(표).getByRole('row', { name: /DIRECT/ });
+    const 첫줄 = within(표).getByRole('row', { name: /직접예약/ });
     // 건수는 예약 수이고 박 수가 아니다.
     expect(within(첫줄).getByText('2건')).toBeInTheDocument();
     expect(within(첫줄).getByText('80.0%')).toBeInTheDocument();
+  });
+
+  it('모르는 채널 코드는 코드 그대로 보여 준다', async () => {
+    respond({
+      ...지표,
+      channelMix: [
+        { channelCode: 'SOMETHING_NEW', reservations: 1, revenue: 100000, revenueShare: 1 },
+      ],
+    });
+    render(<ReportsPage />, { wrapper });
+
+    // 라벨이 없다고 빈칸으로 두면 그 매출이 어디서 왔는지 알 수 없다.
+    const 표 = await screen.findByRole('table');
+    expect(within(표).getByText('SOMETHING_NEW')).toBeInTheDocument();
   });
 
   it('기간과 숙소 필터가 요청에 실린다', async () => {

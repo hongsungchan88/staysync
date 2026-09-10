@@ -109,4 +109,18 @@ public class OwnedResources {
     public java.util.Optional<Long> orgIdOfProperty(Long propertyId) {
         return propertyRepo.findById(propertyId).map(Property::getOrgId);
     }
+
+    /**
+     * 숙소 이름. 직접예약 위젯이 쓴다(P4 16주차).
+     *
+     * <p><b>이름만 돌려준다.</b> {@link #property} 는 {@code property.domain.Property}
+     * 를 돌려주므로 booking 이 부르면 {@code ModularityTest} 가 깨진다. 공개 위젯이
+     * 필요로 하는 것은 화면에 적을 이름 한 줄뿐이라 문자열로 좁혀서 연다.
+     *
+     * <p>조직을 묻지 않는다. 위젯은 로그인이 없는 경로이고, 숙소 이름은 그 숙소를
+     * 예약하러 온 사람에게 보여 주려는 값이다.
+     */
+    public java.util.Optional<String> propertyNameOf(Long propertyId) {
+        return propertyRepo.findById(propertyId).map(Property::getName);
+    }
 }

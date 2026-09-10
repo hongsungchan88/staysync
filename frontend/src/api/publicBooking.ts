@@ -39,6 +39,18 @@ export const publicUnitSchema = z.object({
 });
 export type PublicUnit = z.infer<typeof publicUnitSchema>;
 
+/**
+ * 위젯이 그릴 것 전부.
+ *
+ * **숙소 이름이 함께 온다.** 남의 사이트에 iframe 으로 얹히면 주변 맥락이 사라지므로
+ * 위젯 스스로 어느 숙소인지 밝혀야 한다.
+ */
+export const publicAvailabilitySchema = z.object({
+  propertyName: z.string(),
+  units: z.array(publicUnitSchema).default([]),
+});
+export type PublicAvailability = z.infer<typeof publicAvailabilitySchema>;
+
 /** 홀드 결과. 결제창이 이 금액으로 열린다. */
 export const holdResultSchema = z.object({
   reservationId: z.number(),
@@ -69,12 +81,12 @@ export async function fetchAvailability(
   propertyId: number,
   from: string,
   to: string,
-): Promise<PublicUnit[]> {
+): Promise<PublicAvailability> {
   const query = new URLSearchParams({ from, to });
   const body = await publicRequest<unknown>(
     `/public/booking/${propertyId}/availability?${query}`,
   );
-  return z.array(publicUnitSchema).parse(body);
+  return publicAvailabilitySchema.parse(body);
 }
 
 /**

@@ -2,7 +2,7 @@ package com.staysync.booking.web;
 
 import com.staysync.booking.PublicBookingService;
 import com.staysync.booking.PublicBookingService.HoldResult;
-import com.staysync.booking.PublicBookingService.PublicUnit;
+import com.staysync.booking.PublicBookingService.PublicAvailability;
 import com.staysync.booking.domain.StayPeriod;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
@@ -65,7 +65,7 @@ class PublicBookingController {
     }
 
     @GetMapping("/{propertyId}/availability")
-    List<PublicUnit> availability(
+    PublicAvailability availability(
             @PathVariable Long propertyId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {

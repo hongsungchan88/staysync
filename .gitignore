@@ -40,3 +40,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# 파이썬 캐시 (tools/ 의 일회용 스크립트)
+__pycache__/
+*.pyc

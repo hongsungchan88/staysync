@@ -65,7 +65,7 @@ function serve(units: unknown, holdResponse: () => Response) {
   fetchMock.mockImplementation((url: string, init?: RequestInit) => {
     const path = String(url);
     if (path.includes('/availability')) {
-      return Promise.resolve(json(units));
+      return Promise.resolve(json({ propertyName: '제주 애월 돌담집', units }));
     }
     if (path.includes('/payments/prepare')) {
       return Promise.resolve(
@@ -144,6 +144,16 @@ describe('직접예약 위젯', () => {
 
     // 2박 20만원. 화면은 서버가 준 날짜별 요금을 더하기만 한다.
     expect(await screen.findByText('2박 200,000원')).toBeInTheDocument();
+  });
+
+  it('어느 숙소인지 화면에 밝힌다', async () => {
+    serve([객실], 홀드성공);
+    render(<WidgetPage />, { wrapper });
+
+    await 날짜를_고른다();
+
+    // iframe 으로 남의 사이트에 얹히면 주변 맥락이 사라진다. 위젯이 스스로 밝혀야 한다.
+    expect(await screen.findByText('제주 애월 돌담집')).toBeInTheDocument();
   });
 
   it('요청에 액세스 토큰을 싣지 않는다', async () => {

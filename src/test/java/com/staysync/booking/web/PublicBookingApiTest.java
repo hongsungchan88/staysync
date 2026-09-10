@@ -47,8 +47,10 @@ class PublicBookingApiTest extends ApiTestBase {
                         .param("from", 체크인.toString())
                         .param("to", 체크아웃.toString()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(f.unitId()))
-                .andExpect(jsonPath("$[0].days[0].price").value(100000));
+                .andExpect(jsonPath("$.units[0].id").value(f.unitId()))
+                .andExpect(jsonPath("$.units[0].days[0].price").value(100000))
+                // 공개 페이지라 어느 숙소인지 화면에서 확인할 수 있어야 한다.
+                .andExpect(jsonPath("$.propertyName").value("위젯 테스트 숙소"));
     }
 
     @Test

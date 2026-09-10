@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchProperties } from '@/api/calendar';
 import { fetchReport } from '@/api/reports';
+import { channelLabel } from '@/calendar/channels';
 import type { ChannelShare } from '@/api/schemas';
 import { Input } from '@/components/ui/input';
 
@@ -184,7 +185,11 @@ function ChannelMix({ mix }: { mix: ChannelShare[] }) {
           <tbody>
             {mix.map((share) => (
               <tr key={share.channelCode} className="border-b border-rule/60">
-                <td className="py-1 text-ink">{share.channelCode}</td>
+                {/*
+                  캘린더 범례와 같은 라벨을 쓴다. 여기서 따로 만들면 같은 채널이 두
+                  화면에서 다른 이름으로 불린다 — 모르는 코드는 코드 그대로 나온다.
+                */}
+                <td className="py-1 text-ink">{channelLabel(share.channelCode)}</td>
                 <td className="py-1 text-right text-ink">{share.reservations}건</td>
                 <td className="py-1 text-right text-ink">{won(share.revenue)}</td>
                 <td className="py-1 text-right text-muted">{percent(share.revenueShare)}</td>

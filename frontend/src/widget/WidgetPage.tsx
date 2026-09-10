@@ -57,7 +57,8 @@ export function WidgetPage() {
     enabled: Number.isFinite(id) && rangeReady,
   });
 
-  const units = availability.data ?? [];
+  const units = availability.data?.units ?? [];
+  const propertyName = availability.data?.propertyName;
   const selected = units.find((unit) => unit.id === unitId) ?? null;
   const quote = useMemo(() => (selected ? quoteOf(selected) : null), [selected]);
 
@@ -108,6 +109,8 @@ export function WidgetPage() {
   return (
     <Shell>
       <h1 className="text-lg font-semibold text-ink">예약하기</h1>
+      {/* 공개 페이지라 어느 숙소를 예약하는지 손님이 화면에서 확인할 수 있어야 한다. */}
+      {propertyName && <p className="-mt-3 text-sm text-body">{propertyName}</p>}
 
       <section className="flex flex-col gap-3" aria-label="날짜와 인원">
         <div className="flex flex-wrap gap-3">

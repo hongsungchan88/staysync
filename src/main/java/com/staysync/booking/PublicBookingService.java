@@ -60,6 +60,16 @@ public class PublicBookingService {
     public record PublicUnit(Long id, String name, List<PublicDay> days) {
     }
 
+    /**
+     * 위젯이 그릴 것 전부.
+     *
+     * <p><b>숙소 이름을 함께 싣는다.</b> 공개 페이지라 손님이 어느 숙소를 예약하는지
+     * 화면에서 확인할 수 있어야 한다 — 남의 사이트에 iframe 으로 얹히면 주변 맥락이
+     * 사라지므로 위젯 스스로 밝혀야 한다.
+     */
+    public record PublicAvailability(String propertyName, List<PublicUnit> units) {
+    }
+
     /** 홀드 결과. 결제창이 이 값으로 열린다. */
     public record HoldResult(Long reservationId, String confirmationCode,
                              BigDecimal amount, java.time.OffsetDateTime expiresAt) {
@@ -74,10 +84,10 @@ public class PublicBookingService {
      * 없는 숙소와 남의 숙소를 구분해 알려 줄 이유가 없으므로 둘 다 404 다.
      */
     @Transactional(readOnly = true)
-    public List<PublicUnit> availability(Long propertyId, LocalDate from, LocalDate to) {
+    public PublicAvailability availability(Long propertyId, LocalDate from, LocalDate to) {
         requireRange(from, to);
         // 숙소가 실재하는지 확인한다. 조직은 묻지 않는다 — 공개 경로라 주체가 없다.
-        owned.orgIdOfProperty(propertyId)
+        String propertyName = owned.propertyNameOf(propertyId)
                 .orElseThrow(() -> new com.staysync.property.PropertyNotFoundException(propertyId));
 
         CalendarGrid grid = calendar.assemble(propertyId, from, to);
@@ -93,7 +103,7 @@ public class PublicBookingService {
             }
             units.add(new PublicUnit(row.id(), row.name(), days));
         }
-        return units;
+        return new PublicAvailability(propertyName, units);
     }
 
     /**
@@ -179,7 +189,7 @@ public class PublicBookingService {
     private List<PublicDay> nightsOf(Long propertyId, Long unitId, StayPeriod period) {
         // 마지막 밤까지. 체크아웃일은 재고를 차지하지 않는다.
         LocalDate lastNight = period.checkOut().minusDays(1);
-        List<PublicUnit> units = availability(propertyId, period.checkIn(), lastNight);
+        List<PublicUnit> units = availability(propertyId, period.checkIn(), lastNight).units();
 
         return units.stream()
                 .filter(unit -> unit.id().equals(unitId))
