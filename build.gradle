@@ -11,6 +11,17 @@ java {
     toolchain { languageVersion = JavaLanguageVersion.of(21) }
 }
 
+// 배포용 jar 이름을 고정한다. deploy/app/Dockerfile 이 이 이름으로 COPY 한다.
+bootJar {
+    archiveFileName = 'staysync.jar'
+    // 내장 PostgreSQL 바이너리 넷(81MB)은 local 프로파일 전용이다. 배포 jar 에서
+    // 빼면 172MB → 91MB 다. 클래스(embedded-postgres-2.2.2.jar)는 남겨야 한다 —
+    // EmbeddedPostgresConfig 가 참조하고, enabled=false 면 빈이 만들어지지 않을 뿐이다.
+    classpath = sourceSets.main.runtimeClasspath.filter {
+        !it.name.startsWith('embedded-postgres-binaries-')
+    }
+}
+
 configurations {
     compileOnly { extendsFrom annotationProcessor }
 

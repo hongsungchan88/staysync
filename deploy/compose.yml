@@ -1,0 +1,67 @@
+# 배포용 compose. 작업지시-15 2절 B, 5절 1번.
+#
+# 저장소 루트의 docker-compose.yml 은 **개발용**이고 인프라 둘만 띄운다. 이 파일은
+# 서버(/opt/staysync)에서 `docker compose up -d` 한 번으로 전체가 뜨는 것이 목적이다.
+#
+# 5432 를 호스트에 열지 않는다. 앱은 compose 기본 네트워크 안에서 서비스 이름으로
+# 붙는다. 인터넷에 열린 PostgreSQL 은 며칠이면 발견된다(4절).
+#
+# Redis 는 없다. 작업지시는 넷을 적었지만 코드에 Redis 를 읽는 곳이 없다 —
+# UnitLock 구현은 LocalUnitLock 하나고 build.gradle 의 redis 의존성도 주석이다.
+# 붙는 것이 없는 컨테이너를 2GB 에 올릴 이유가 없다. Redis 락이 실제로 생기면
+# 그때 서비스를 더한다. 이 판단은 작업지시-15 8절에 적었다.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: ./app
+    image: staysync-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # 컨테이너에서 힙을 안 정하면 JVM 이 호스트 메모리 기준으로 잡는다(4절).
+      # 2GB 에서 PostgreSQL·Caddy 와 나눠 쓰므로 이 값이 상한이다. 실측은 확인-09.
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx640m -XX:MaxMetaspaceSize=160m
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./web:/srv:ro
+      - caddy_data:/data
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  caddy_data:
