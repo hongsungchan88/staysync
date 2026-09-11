@@ -1,0 +1,5 @@
+# 서버(Linux)로 그대로 올라가는 파일은 LF 로 고정한다. Windows 의 autocrlf 가 CRLF 로
+# 바꾸면 bash 가 `set -euo pipefail\r` 에서 죽고 Caddyfile 도 못 읽는다.
+deploy/** text eol=lf
+*.sh text eol=lf
+gradlew text eol=lf
