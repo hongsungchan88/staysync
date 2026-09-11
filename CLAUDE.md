@@ -55,6 +55,14 @@ API 요청이 전부 실패한다. 프록시를 두는 이유는 편의가 아�
 |---|---|---|---|---|
 | `local` (기본) | 내장 PostgreSQL 16 (zonky embedded-postgres) | JVM 내부 | 메모리 코사인 | 불필요 |
 | `docker` | PostgreSQL 16 + pgvector + Redis | Redis | pgvector HNSW | 필요 |
+| `prod` | PostgreSQL 16 + pgvector (compose 의 `postgres`) | JVM 내부 | pgvector | 서버 |
+
+**`lock.type` 과 `vector.type` 은 아무도 읽지 않는다.** Redis 락 구현이 없고
+(`UnitLock` 구현은 `LocalUnitLock` 하나, `build.gradle` 의 redis 의존성은 주석) ai
+모듈이 비어 있다. 두 키는 문서 역할이다. 배포 compose 에 Redis 가 없는 이유다.
+
+`prod` 는 P5 17주차의 배포 프로파일이다. 시크릿은 전부 서버 `.env` 에서 오고 비면
+기동이 막힌다. 배포 절차는 `docs/확인-09-배포.md`, 산출물은 `deploy/`.
 
 `local`의 `clean-on-start`는 **P2 7주차에 껐다.** 프론트엔드를 붙이는 동안 기동할 때마다
 계정이 사라지면 매번 회원가입부터 다시 해야 한다. 데이터가 재기동을 넘어 유지된다.
@@ -247,6 +255,8 @@ ADR 0002 결과 절이 예고한 자리다.
   `message_template`, `message_rule`, `message_dispatch`. 두 프로파일 모두 적용.
 - `db/migration/postgresql/V7__ops_task.sql` — 청소 태스크의 `assignee_name`.
   두 프로파일 모두 적용.
+
+`docker` 와 `prod` 는 V2 를 포함한다. **`prod` 가 pgvector 가 실제로 있는 첫 환경이다.**
 
 **P4 16주차는 마이그레이션을 더하지 않았다.** `payment` 테이블은 V1 에 이미 있었고
 `uq_payment_tx UNIQUE (provider, provider_tx_id)` 가 그대로 결제 멱등성을 맡는다.
@@ -613,8 +623,29 @@ ADR 13건(0012 에 고아 되살리기와 재동기화를 이어 적었다), 백
   돌리면 15.1초로 넘어가 실패한다. 단독으로는 통과한다 — 결함이 아니라 부하다.
   **다른 것과 병렬로 돌리지 말 것.**
 
-**다음** — P4 를 닫는 일. 완료 조건 15·16 을 판정하고 `p4-complete` 태그를 단다.
-지도교수 보고와 발표자료 갱신은 Cowork 세션이 한다.
+**P5 17주차 — 배포(계획서에 없던 주차). 저장소 안의 일은 끝났고 서버는 아직이다.**
+9월 11일 업체 회의에서 10월 말 배포가 정해졌다. 작업지시-15.
+
+- **채널 수신 예약이 리포트에서 빠지던 결함을 고쳤다**(확인-08 3절 1번).
+  `ChannelBookingWriter` 가 `reservation_night` 를 쓰지 않았다. 재고 원장은 정상이라
+  캘린더는 맞고 리포트만 조용히 적게 셌다. **`ReportTest` 의 채널 예약 픽스처가
+  수기 예약의 `channel_code` 를 UPDATE 로 바꿔 흉내 내고 있어 못 잡았다** — 이제 실제
+  수신 경로를 탄다. 픽스처가 서버가 실제로 하는 일과 다르면 그 테스트는 아무것도
+  보증하지 않는다(15주차의 시각 픽스처와 같은 모양이다).
+- **배포 산출물은 `deploy/` 다.** compose(app·postgres·caddy), Caddyfile, JRE
+  Dockerfile, `push.sh`. **이미지 빌드는 서버가 하지만 실제로는 COPY 한 줄이다** —
+  jar 와 프론트 번들은 개발 PC 에서 만든다. 개발 PC 에 Docker 가 없고 2GB 서버에서
+  bootJar 를 돌리지 않기 위해서다. 배포 jar 는 내장 PG 바이너리를 빼 91MB 다.
+- **체크인·체크아웃이 화면에 생겼다.** 캘린더에서 막대를 누르면 `SelectionPanel`
+  자리에 `ReservationPanel` 이 열린다. 새 화면이 아니다. 낙관적 업데이트를 하지 않고
+  응답의 상태로 버튼을 간다. 키보드로 여는 길은 아직 없다.
+- **서버 작업(Lightsail·도메인·초기 데이터·백업)은 절차서만 있다** —
+  `docs/확인-09-배포.md`. `[미실행]` 표시가 그 자리다. AWS 계정·도메인·업체 iCal
+  주소가 사람 손에 있어 그 뒤에 한다. 완료 조건 3~8·10·11·13 이 거기 걸려 있다.
+
+**다음** — 확인-09 의 2절부터 서버 작업. 그 안에서 포트원 웹훅을 고정 URL 로 등록해
+P4 완료 조건 15·16 을 판정하고 `p4-complete` 태그를 단다. 지도교수 보고와 발표자료
+갱신은 Cowork 세션이 한다.
 
 **P3 완료 조건 셋째의 절반이 아직 사람 손을 기다린다** —
 `docs/확인-04-P3완료조건-셋째.md` 3절이다. 이번 주 작업과는 무관하다.
