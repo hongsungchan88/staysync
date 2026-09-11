@@ -357,7 +357,14 @@ class ReservationWriter {
                 .orElseThrow(() -> new ReservationNotFoundException(reservationId));
     }
 
-    private void writeNights(Reservation reservation) {
+    /**
+     * 박 행을 쓴다. 리포트의 판매 객실박·매출·채널 믹스가 이 테이블을 읽는다.
+     *
+     * <p>패키지에 열어 둔 이유는 {@code ChannelBookingWriter} 다. 채널 수신이 이걸
+     * 부르지 않아 채널 예약이 리포트에서 통째로 빠졌다(확인-08 3절 1번). 재고 원장은
+     * 정상이라 캘린더는 맞게 보이고 리포트만 조용히 적게 셌다.
+     */
+    void writeNights(Reservation reservation) {
         List<ReservationNight> nights = ReservationNight.split(
                 reservation.getId(), reservation.getUnitId(),
                 reservation.getPeriod(), reservation.getTotalAmount());
@@ -365,7 +372,7 @@ class ReservationWriter {
     }
 
     /** 날짜가 바뀌면 옛 박 행은 의미가 없다. 지우고 다시 쓴다. */
-    private void rewriteNights(Reservation reservation) {
+    void rewriteNights(Reservation reservation) {
         nightRepo.deleteByReservationId(reservation.getId());
         nightRepo.flush();
         writeNights(reservation);
