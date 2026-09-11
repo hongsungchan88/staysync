@@ -82,7 +82,7 @@ function grid(
 /** 선택과 이동 콜백은 이 파일의 관심사가 아니다. 필요한 테스트만 따로 넘긴다. */
 function renderGrid(data: GridData, props: Partial<ComponentProps<typeof CalendarGrid>> = {}) {
   return render(
-    <CalendarGrid data={data} onSelect={() => {}} onMove={() => {}} {...props} />,
+    <CalendarGrid data={data} onSelect={() => {}} onMove={() => {}} onBarClick={() => {}} {...props} />,
   );
 }
 
@@ -321,7 +321,9 @@ describe('그리드 조작', () => {
       ...data,
       reservations: [...data.reservations, bar(9999, 30, 40, 3)],
     };
-    rerender(<CalendarGrid data={갱신됨} onSelect={() => {}} onMove={() => {}} />);
+    rerender(
+      <CalendarGrid data={갱신됨} onSelect={() => {}} onMove={() => {}} onBarClick={() => {}} />,
+    );
 
     // 스크롤 위치를 건드리면 사용자가 보던 자리에서 화면이 튄다. 예약 하나가
     // 들어올 때마다 튀면 실시간 갱신이 방해가 된다.
