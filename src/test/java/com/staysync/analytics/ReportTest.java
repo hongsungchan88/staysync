@@ -3,6 +3,8 @@ package com.staysync.analytics;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.staysync.booking.BookingService;
+import com.staysync.booking.ChannelBookingCommand;
+import com.staysync.booking.ChannelBookingIntake;
 import com.staysync.booking.domain.Reservation;
 import com.staysync.booking.domain.StayPeriod;
 import com.staysync.property.UnitRegistrationService;
@@ -41,6 +43,9 @@ class ReportTest {
 
     @Autowired
     private BookingService booking;
+
+    @Autowired
+    private ChannelBookingIntake intake;
 
     @Autowired
     private UnitRegistrationService unitRegistration;
@@ -208,6 +213,30 @@ class ReportTest {
                 .isEqualByComparingTo("0.6667");
     }
 
+    @Test
+    @DisplayName("채널로 수신된 예약이 판매 객실박과 채널 믹스에 반영된다")
+    void 채널_수신_예약이_리포트에_잡힌다() {
+        // 확인-08 3절 1번. 채널 수신은 박 행을 쓰지 않아 캘린더에는 있고 리포트에는
+        // 없었다. 13·14 가 채널 예약을 UPDATE 로 흉내 내서 못 잡았던 자리다.
+        Fixture f = given("리포트채널수신", (short) 1);
+        채널예약(f, 첫날.plusDays(10), 첫날.plusDays(12), 300_000);
+
+        ReportMetrics m = reports.of(f.orgId(), f.propertyId(), 첫날, 끝날);
+
+        assertThat(m.soldNights()).isEqualTo(2);
+        assertThat(m.channelMix()).singleElement().satisfies(share -> {
+            assertThat(share.channelCode()).isEqualTo("MOCK_REPORT");
+            assertThat(share.reservations()).isEqualTo(1);
+            assertThat(share.revenue()).isEqualByComparingTo("300000");
+        });
+
+        // 채널이 날짜를 바꾸면 박 행도 따라가야 한다. 옛 박이 남으면 두 배로 센다.
+        intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_REPORT",
+                "BK-" + f.unitId(), null, 첫날.plusDays(20), 첫날.plusDays(21),
+                BigDecimal.valueOf(150_000), 2, false));
+        assertThat(reports.of(f.orgId(), f.propertyId(), 첫날, 끝날).soldNights()).isEqualTo(1);
+    }
+
     // --- 완료 조건 14 --------------------------------------------------------
 
     @Test
@@ -249,10 +278,15 @@ class ReportTest {
                 (short) 2, (short) 0, null);
     }
 
-    /** 채널이 만든 예약. 채널 믹스가 DIRECT 하나로 뭉치지 않는지 보려면 필요하다. */
+    /**
+     * 채널이 만든 예약. <b>실제 수신 경로를 탄다.</b> 예전에는 수기 예약의
+     * {@code channel_code} 를 UPDATE 로 바꿔 흉내 냈고, 그래서 채널 수신이 박 행을
+     * 안 쓰는 것을 13·14 가 못 잡았다. 픽스처는 서버가 실제로 하는 일과 같아야 한다.
+     */
     private void 채널예약(Fixture f, LocalDate 체크인, LocalDate 체크아웃, int 금액) {
-        Reservation r = 예약(f, 체크인, 체크아웃, 금액);
-        jdbc.update("UPDATE reservation SET channel_code = 'MOCK_REPORT' WHERE id = ?", r.getId());
+        // 채널 예약번호는 (channel_code, channel_booking_id) 로 전역 유일이라 픽스처마다 갈라야 한다.
+        intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_REPORT",
+                "BK-" + f.unitId(), null, 체크인, 체크아웃, BigDecimal.valueOf(금액), 1, false));
     }
 
     private Fixture given(String name, short totalUnits) {

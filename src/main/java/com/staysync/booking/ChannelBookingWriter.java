@@ -133,6 +133,8 @@ class ChannelBookingWriter {
             inventory.release(reservation.getUnitId(), oldPeriod, UNITS);
             conflicted = reserveOrForce(reservation, command);
         }
+        // 날짜든 금액이든 바뀌었으면 박 행도 옛것이다. 금액만 바뀌어도 박당 단가가 달라진다.
+        reservationWriter.rewriteNights(reservation);
 
         outbox.record("RESERVATION", reservation.getId(), "RESERVATION_DATES_CHANGED",
                 channelPayload(reservation, command));
@@ -208,6 +210,8 @@ class ChannelBookingWriter {
         // 재고를 잡기 전에 저장한다. 초과 판매 경로에서 충돌 기록이 예약 식별자를
         // 필요로 하기 때문이다.
         Reservation saved = reservationRepo.saveAndFlush(reservation);
+        // 리포트가 읽는 박 행. 빠뜨리면 캘린더는 맞고 리포트만 적게 센다(확인-08).
+        reservationWriter.writeNights(saved);
         List<LocalDate> conflicted = reserveOrForce(saved, command);
 
         outbox.record("RESERVATION", saved.getId(), "RESERVATION_CONFIRMED",
