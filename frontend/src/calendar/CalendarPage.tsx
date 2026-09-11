@@ -7,6 +7,7 @@ import { SelectionPanel } from './SelectionPanel';
 import { useReservationMove, type MoveRequest } from './useReservationMove';
 import { useCalendarStream } from './useCalendarStream';
 import type { SelectionRect } from './selection';
+import type { ReservationBar } from '@/api/schemas';
 import { CONFLICT_COLOR, LEGEND, channelColor } from './channels';
 import { Button } from '@/components/ui/button';
 import { addDays, monthLabel, toIso } from '@/lib/dates';
@@ -26,6 +27,14 @@ export function CalendarPage() {
   const [from, setFrom] = useState(() => toIso(new Date()));
   const to = useMemo(() => addDays(from, WINDOW_DAYS - 1), [from]);
   const [selection, setSelection] = useState<SelectionRect | null>(null);
+  // 누른 예약 막대. 새로 범위를 끌면 닫힌다 — 패널 자리가 하나라 나중 조작이 이긴다.
+  const [bar, setBar] = useState<ReservationBar | null>(null);
+  const onSelect = useCallback((rect: SelectionRect | null) => {
+    setSelection(rect);
+    if (rect !== null) {
+      setBar(null);
+    }
+  }, []);
   const [rejection, setRejection] = useState<string | null>(null);
 
   const properties = useQuery({
@@ -184,7 +193,12 @@ export function CalendarPage() {
             }}
           >
             {calendar.data && (
-              <CalendarGrid data={calendar.data} onSelect={setSelection} onMove={onMove} />
+              <CalendarGrid
+                data={calendar.data}
+                onSelect={onSelect}
+                onMove={onMove}
+                onBarClick={setBar}
+              />
             )}
           </StateSwitch>
         </main>
@@ -193,6 +207,8 @@ export function CalendarPage() {
           <SelectionPanel
             data={calendar.data}
             rect={selection}
+            bar={bar}
+            onCloseBar={() => setBar(null)}
             propertyId={propertyId}
             calendarKey={calendarKey}
           />

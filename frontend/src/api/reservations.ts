@@ -22,3 +22,22 @@ export async function moveReservation(
   });
   return reservationSummarySchema.parse(body);
 }
+
+export type Transition = 'check-in' | 'check-out';
+
+/**
+ * 체크인·체크아웃. 4주차 상태 머신의 전이를 화면에서 부르기만 한다(작업지시-15 2절 E).
+ *
+ * 전이가 되는지는 서버가 판정한다. CONFIRMED 가 아닌데 체크인하거나 CHECKED_IN 이
+ * 아닌데 체크아웃하면 도메인이 거절하고, 그 이유가 그대로 화면에 뜬다. 체크아웃하면
+ * 청소 태스크가 생기는 것은 Outbox 소비자(15주차)가 한다 — 여기서 부르지 않는다.
+ */
+export async function transitionReservation(
+  reservationId: number,
+  transition: Transition,
+): Promise<ReservationSummary> {
+  const body = await apiRequest<unknown>(`/api/reservations/${reservationId}/${transition}`, {
+    method: 'POST',
+  });
+  return reservationSummarySchema.parse(body);
+}

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
-import type { CalendarGrid, BulkEditResult } from '@/api/schemas';
+import type { CalendarGrid, BulkEditResult, ReservationBar } from '@/api/schemas';
 import { bulkEdit, type BulkEditInput, type PriceMode } from '@/api/bulkEdit';
 import { ApiError } from '@/api/client';
 import type { SelectionRect } from './selection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { ReservationPanel } from './ReservationPanel';
 
 /**
  * 선택 범위와 요금·제약 일괄 편집 패널. 계획서 8.4.
@@ -20,6 +21,9 @@ import { cn } from '@/lib/utils';
 interface Props {
   data: CalendarGrid;
   rect: SelectionRect | null;
+  /** 누른 예약 막대. 있으면 기간 선택보다 먼저다 — 나중에 한 조작이 이긴다. */
+  bar?: ReservationBar | null;
+  onCloseBar?: () => void;
   propertyId: number;
   /** 적용 뒤 다시 불러올 캘린더 쿼리. 요금과 잔여 재고가 함께 바뀐다. */
   calendarKey: QueryKey;
@@ -36,7 +40,13 @@ const WEEKDAYS = [
   { code: 'SUNDAY', label: '일' },
 ] as const;
 
-export function SelectionPanel({ data, rect, propertyId, calendarKey }: Props) {
+export function SelectionPanel({ data, rect, propertyId, calendarKey, bar, onCloseBar }: Props) {
+  if (bar) {
+    // key 로 막대마다 패널을 새로 만든다. 다른 막대를 누르면 앞 막대의 상태·오류가 남지 않는다.
+    return (
+      <ReservationPanel key={bar.id} bar={bar} calendarKey={calendarKey} onClose={() => onCloseBar?.()} />
+    );
+  }
   if (rect === null) {
     return (
       <aside

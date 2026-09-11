@@ -54,6 +54,8 @@ interface Props {
   onSelect: (rect: SelectionRect | null) => void;
   /** 막대를 놓았을 때. 서버 왕복과 되돌리기는 바깥이 맡는다. */
   onMove: (request: MoveRequest) => void;
+  /** 막대를 눌렀다. 체크인·체크아웃 패널이 열린다(작업지시-15 2절 E). */
+  onBarClick: (bar: ReservationBar) => void;
 }
 
 /** 화면 밖으로 미리 그려 두는 여유분. 스크롤할 때 빈 칸이 스치는 것을 막는다. */
@@ -62,7 +64,7 @@ const OVERSCAN = 4;
 /** 이만큼 끌어야 드래그로 본다. 낮으면 막대를 누르기만 해도 이동으로 잡힌다. */
 const DRAG_START_PX = 4;
 
-export function CalendarGrid({ data, onSelect, onMove }: Props) {
+export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const dates = useMemo(() => data.units[0]?.days.map((day) => day.date) ?? [], [data]);
   const layouts = useMemo(() => layoutGrid(data), [data]);
@@ -181,6 +183,7 @@ export function CalendarGrid({ data, onSelect, onMove }: Props) {
                 padRight={padRight}
                 height={row.size}
                 selection={selection.rect}
+                onBarClick={onBarClick}
               />
             );
           })}
@@ -365,6 +368,7 @@ function UnitRow({
   padRight,
   height,
   selection,
+  onBarClick,
 }: {
   unit: GridData['units'][number];
   unitIndex: number;
@@ -374,6 +378,7 @@ function UnitRow({
   padRight: number;
   height: number;
   selection: SelectionRect | null;
+  onBarClick: (bar: ReservationBar) => void;
 }) {
   const firstVisible = cols[0]?.index ?? 0;
   const lastVisible = cols[cols.length - 1]?.index ?? 0;
@@ -412,7 +417,7 @@ function UnitRow({
         기준점이 행의 왼쪽 끝이라 좌측 목록 너비를 더해야 날짜 칸과 맞는다.
       */}
       {visibleBars.map((placed) => (
-        <Bar key={placed.bar.id} placed={placed} />
+        <Bar key={placed.bar.id} placed={placed} onClick={onBarClick} />
       ))}
     </div>
   );
@@ -509,7 +514,7 @@ function DayCell({
  * **옮길 수 없는 상태는 아예 잡히지 않는다.** 잡히기만 하고 놓을 때마다 거절당하면 왜 안
  * 되는지 알 수 없다. 물론 잡힌다고 옮겨지는 것도 아니다 — 재고 판정은 서버가 한다.
  */
-function Bar({ placed }: { placed: PlacedBar }) {
+function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: ReservationBar) => void }) {
   const { bar, lane, startIndex, endIndex } = placed;
   const movable = MOVABLE_STATUSES.has(bar.status);
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
@@ -547,6 +552,10 @@ function Bar({ placed }: { placed: PlacedBar }) {
       }}
       {...(movable ? listeners : {})}
       {...(movable ? attributes : {})}
+      // 드래그 센서는 DRAG_START_PX 를 넘어야 잡히므로 그냥 누른 것은 click 으로 남는다.
+      // 키보드로 여는 길은 아직 없다 — 옮길 수 있는 막대의 Enter·Space 는 dnd-kit 이
+      // 잡기로 쓰고, 옮길 수 없는 막대는 포커스를 받지 않는 것이 8주차의 계약이다.
+      onClick={() => onClick(bar)}
     >
       <span className="truncate">{bar.guestName ?? '이름 없음'}</span>
     </div>
