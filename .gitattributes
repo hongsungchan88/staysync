@@ -3,3 +3,6 @@
 deploy/** text eol=lf
 *.sh text eol=lf
 gradlew text eol=lf
+
+# iCal 픽스처는 실제 발행물 그대로다. CRLF 를 포함해 바이트가 같아야 한다.
+src/test/resources/ical/*.ics -text
