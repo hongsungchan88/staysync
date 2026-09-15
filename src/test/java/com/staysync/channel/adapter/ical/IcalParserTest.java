@@ -116,10 +116,44 @@ class IcalParserTest {
         assertThat(event.endExclusive()).isEqualTo(LocalDate.of(2026, 10, 4));
     }
 
+    // --- 게시 리스팅 (P5 17주차, 업체 실제 피드) --------------------------------
+
+    @Test
+    @DisplayName("게시 리스팅 발행물은 예약마다 VEVENT 하나고 SUMMARY 가 둘로 갈린다")
+    void 게시_피드는_예약마다_이벤트_하나다() throws IOException {
+        List<IcalParser.VEvent> events = IcalParser.parse(fixture("/ical/airbnb-published.ics"));
+
+        // 미게시 피드(1년치 VEVENT 하나)와 처음으로 다른 자리다(조사-02).
+        assertThat(events).hasSize(15);
+        assertThat(events).filteredOn(e -> e.summary().equals("Reserved")).hasSize(14);
+        assertThat(events).filteredOn(e -> e.summary().equals("Airbnb (Not available)"))
+                .as("호스트 차단이든 1년 창의 끝이든, 예약이 아닌 이벤트가 섞여 온다")
+                .hasSize(1);
+        // 어댑터가 Reserved 만 예약으로 옮기려면 SUMMARY 가 여기까지 살아 있어야 한다.
+        assertThat(events).allSatisfy(e -> assertThat(e.summary()).isNotBlank());
+    }
+
+    @Test
+    @DisplayName("게시 피드의 접힌 DESCRIPTION 이 뒤따르는 UID·날짜를 삼키지 않는다")
+    void 접힌_DESCRIPTION_뒤의_속성이_살아있다() throws IOException {
+        List<IcalParser.VEvent> events = IcalParser.parse(fixture("/ical/airbnb-published.ics"));
+
+        // 실제 발행물은 DESCRIPTION 이 75옥텟에서 접혀 두 줄이다. 펴기가 틀리면 그 뒤
+        // 속성이 DESCRIPTION 값에 붙어 UID 가 비고 이벤트가 통째로 빠진다.
+        IcalParser.VEvent first = events.get(0);
+        assertThat(first.uid()).matches("[0-9a-f]{12}-[0-9a-f]{32}@airbnb\\.com");
+        assertThat(first.start()).isEqualTo(LocalDate.of(2026, 9, 9));
+        assertThat(first.endExclusive()).isEqualTo(LocalDate.of(2026, 9, 16));
+        assertThat(events).extracting(IcalParser.VEvent::uid).doesNotHaveDuplicates();
+    }
+
     private static String fixture() throws IOException {
-        try (InputStream in = IcalParserTest.class
-                .getResourceAsStream("/ical/airbnb-unpublished.ics")) {
-            assertThat(in).as("실제 에어비앤비 발행물 픽스처").isNotNull();
+        return fixture("/ical/airbnb-unpublished.ics");
+    }
+
+    private static String fixture(String path) throws IOException {
+        try (InputStream in = IcalParserTest.class.getResourceAsStream(path)) {
+            assertThat(in).as("실제 에어비앤비 발행물 픽스처 " + path).isNotNull();
             return new String(in.readAllBytes(), StandardCharsets.UTF_8);
         }
     }

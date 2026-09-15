@@ -645,8 +645,7 @@ ADR 13건(0012 에 고아 되살리기와 재동기화를 이어 적었다), 백
   (2026-09-14): 스왑·Docker·`.env`(서버에서 생성)·첫 배포·Flyway V1~V7 과 pgvector
   실재·`Secure` 쿠키 갱신·포트(5432·6379 밖에서 닫힘)·재기동 후 데이터·`pg_dump`
   복원까지. **다시 배포는 `deploy/push.sh staysync` 한 번이다.** 유휴 메모리 516MB.
-- **서버 `.env` 의 키는 서버에서 만든다.** Git Bash 의 `openssl rand` 는 `
-` 을
+- **서버 `.env` 의 키는 서버에서 만든다.** Git Bash 의 `openssl rand` 는 `\r` 을
   붙이고, Git Bash 의 curl 은 한글 본문을 cp949 로 깨뜨린다. 서버를 상대로 한글이
   섞인 요청은 파이썬으로 보낸다.
 
