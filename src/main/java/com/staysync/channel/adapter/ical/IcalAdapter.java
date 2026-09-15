@@ -179,8 +179,12 @@ public class IcalAdapter implements ChannelAdapter {
                         })
                         .toEntity(String.class);
             } catch (ResourceAccessException e) {
+                // e.getMessage() 를 싣지 않는다. 스프링이 "I/O error on GET request for
+                // \"<URL>\"" 로 요청 주소를 통째로 넣는데, iCal 은 그 주소가 곧 비밀이다.
+                // 폴러가 이 예외의 toString() 을 로그에 남기므로 여기서 잘라야 한다.
+                Throwable root = e.getCause() == null ? e : e.getCause();
                 last = new ChannelException.TransientChannelException(
-                        "iCal 발행물에 닿지 못했습니다: " + e.getMessage(), e);
+                        "iCal 발행물에 닿지 못했습니다: " + root.getClass().getSimpleName(), e);
             } catch (ChannelException.TransientChannelException e) {
                 last = e;
             }
