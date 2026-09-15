@@ -189,7 +189,19 @@ public class ChannelBookingPoller {
 
             boolean snapshot = registry.capabilitiesOf(connection.getAdapterType())
                     .contains(Capability.SNAPSHOT_BOOKING);
-            if (snapshot && shrankSuspiciously(connection, feed.bookings().size())) {
+            if (!feed.blocks().isEmpty()) {
+                // 세기만 한다. 재고에 반영하지 않는다(InboundBlock). 예약이 하나도 없이
+                // 차단만 있으면 SUMMARY 규칙이 이 발행자와 맞지 않을 수 있다 — 그러면
+                // 예약이 전부 차단으로 분류되어 조용히 사라지는 것이라 경고로 올린다.
+                if (feed.bookings().isEmpty()) {
+                    log.warn("발행물이 전부 차단으로 분류됐다. 발행자의 SUMMARY 규칙을 확인해야 한다. "
+                            + "connectionId={} 차단={}", connection.getId(), feed.blocks().size());
+                } else {
+                    log.info("예약이 아닌 일정 {} 건은 세기만 하고 넘긴다. connectionId={}",
+                            feed.blocks().size(), connection.getId());
+                }
+            }
+            if (snapshot && shrankSuspiciously(connection, feed.eventCount())) {
                 // 기준값도 ETag 도 갱신하지 않는다. 갱신하면 줄어든 수가 다음 주기의
                 // 기준이 되어, 한 번 더 줄어들 때는 방어가 걸리지 않는다.
                 return 0;
@@ -212,7 +224,8 @@ public class ChannelBookingPoller {
             if (snapshot) {
                 cancelMissing(connection, byExternalId.values(), seen);
             }
-            connection.recordFeed(feed.etag(), feed.bookings().size());
+            // 기준값은 예약과 차단의 합이다. 차단이 예약으로 바뀌는 날 합은 그대로다.
+            connection.recordFeed(feed.etag(), feed.eventCount());
             connections.save(connection);
             return ingested;
         } catch (RuntimeException e) {

@@ -155,6 +155,48 @@ class IcalFeedTest extends SyncTestBase {
         assertThat(상태("uid-5")).isEqualTo("CONFIRMED");
     }
 
+    // --- 게시 리스팅 (P5 17주차) ---------------------------------------------------
+
+    @Test
+    @DisplayName("게시 피드에서 Reserved 만 예약이 되고 Not available 은 세기만 한다")
+    void 차단은_예약이_되지_않는다() throws java.io.IOException {
+        Fixture f = given("iCal 게시");
+        ChannelConnection connection = icalConnection(f);
+        // 업체 실제 피드 모양 그대로. VEVENT 15 = Reserved 14 + Airbnb (Not available) 1.
+        feed.publish(publishedFixture(), null);
+
+        assertThat(poller.pollOne(connection)).isEqualTo(14);
+
+        assertThat(예약_건수_전체(connection))
+                .as("차단이 예약이 되면 게스트 없음·0원 예약이 리포트에 실린다")
+                .isEqualTo(14);
+        assertThat(직전_일정수(connection))
+                .as("대량 소실 방어의 기준값은 예약과 차단의 합이다")
+                .isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("차단이 예약으로 바뀌어도 일정 수의 합은 그대로라 방어가 걸리지 않는다")
+    void 차단이_예약으로_바뀌면_합은_같다() {
+        Fixture f = given("iCal 합산");
+        ChannelConnection connection = icalConnection(f);
+        // 예약 둘 + 차단 넷. 다음 주기에 차단 셋이 예약으로 바뀐다(게스트가 잡았다).
+        feed.publish(calendar(vevent("r-1", "20261001", "20261003"), vevent("r-2", "20261005", "20261007"),
+                block("b-1", "20261010", "20261011"), block("b-2", "20261011", "20261012"),
+                block("b-3", "20261012", "20261013"), block("b-4", "20261013", "20261014")), null);
+        poller.pollOne(connection);
+        assertThat(직전_일정수(connection)).isEqualTo(6);
+
+        feed.publish(calendar(vevent("r-1", "20261001", "20261003"), vevent("r-2", "20261005", "20261007"),
+                vevent("b-1", "20261010", "20261011"), vevent("b-2", "20261011", "20261012"),
+                vevent("b-3", "20261012", "20261013"), block("b-4", "20261013", "20261014")), null);
+
+        // 예약만 셌다면 반대 방향(예약 셋이 차단으로)에서 5 → 2 로 절반 이하가 되어
+        // 방어가 잘못 걸린다. 합으로 세면 6 → 6 이다.
+        assertThat(poller.pollOne(connection)).isEqualTo(3);
+        assertThat(예약_건수_전체(connection)).isEqualTo(5);
+        assertThat(직전_일정수(connection)).isEqualTo(6);
+    }
     // --- 픽스처 -----------------------------------------------------------------
 
     private ChannelConnection icalConnection(Fixture f) {
@@ -171,10 +213,34 @@ class IcalFeedTest extends SyncTestBase {
                 + String.join("", events) + "END:VCALENDAR\r\n";
     }
 
+    /**
+     * 예약 하나. 게시 리스팅이 예약에 붙이는 {@code SUMMARY:Reserved} 다
+     * ({@code airbnb-published.ics}). 13주차에는 미게시 피드의 {@code Airbnb (Not available)}
+     * 를 썼는데, 17주차부터 그 값은 차단으로 분류되어 예약이 되지 않는다.
+     */
     private static String vevent(String uid, String start, String end) {
         return "BEGIN:VEVENT\r\nDTSTAMP:20260905T024836Z\r\n"
                 + "DTSTART;VALUE=DATE:" + start + "\r\nDTEND;VALUE=DATE:" + end + "\r\n"
+                + "SUMMARY:Reserved\r\nUID:" + uid + "\r\nEND:VEVENT\r\n";
+    }
+
+    private static String block(String uid, String start, String end) {
+        return "BEGIN:VEVENT\r\nDTSTAMP:20260905T024836Z\r\n"
+                + "DTSTART;VALUE=DATE:" + start + "\r\nDTEND;VALUE=DATE:" + end + "\r\n"
                 + "SUMMARY:Airbnb (Not available)\r\nUID:" + uid + "\r\nEND:VEVENT\r\n";
+    }
+
+    private static String publishedFixture() throws java.io.IOException {
+        try (java.io.InputStream in = IcalFeedTest.class.getResourceAsStream("/ical/airbnb-published.ics")) {
+            assertThat(in).isNotNull();
+            return new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        }
+    }
+
+    private int 예약_건수_전체(ChannelConnection connection) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM reservation WHERE channel_code = ? AND property_id = ?",
+                Integer.class, connection.getChannelCode(), connection.getPropertyId());
     }
 
     private List<LocalDate> 체크인과_체크아웃(String uid) {

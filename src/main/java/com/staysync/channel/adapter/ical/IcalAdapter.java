@@ -7,6 +7,7 @@ import com.staysync.channel.port.Capability;
 import com.staysync.channel.port.ChannelAdapter;
 import com.staysync.channel.port.ChannelCredentials;
 import com.staysync.channel.port.ChannelException;
+import com.staysync.channel.port.InboundBlock;
 import com.staysync.channel.port.InboundBooking;
 import com.staysync.channel.port.SyncResult;
 import java.math.BigDecimal;
@@ -35,11 +36,21 @@ import org.springframework.web.client.RestClient;
  *       없다. 날짜가 바뀐 뒤의 해시가 우연히 작으면 수정이 무시되고, 그때 로그는
  *       깨끗하다. {@link InboundBooking#revision()} 을 {@code null} 로 두어
  *       "값이 다르면 수정"으로 판정하게 한다(ADR 0013)</li>
- *   <li><b>{@code extractGuestName} 과 {@code isBlock} 을 만들지 않는다.</b>
- *       조사-02 가 확인한 실제 발행물의 {@code SUMMARY} 는
- *       {@code Airbnb (Not available)} 하나뿐이라 게스트도 예약/차단 구분도 없다.
- *       키워드로 나누면 <b>우리가 가진 실제 샘플로 검증할 수 없는 코드</b>가 된다</li>
+ *   <li><b>{@code extractGuestName} 은 만들지 않는다.</b> 게시 리스팅 발행물에도
+ *       게스트 이름은 없다 — {@code DESCRIPTION} 에 예약 URL 과 전화 뒷자리만 온다</li>
+ *   <li><b>{@code isBlock} 은 P5 17주차에 생겼다.</b> 13주차에는 미게시 피드의
+ *       {@code SUMMARY} 가 {@code Airbnb (Not available)} 하나뿐이라 가를 근거가
+ *       없었다. 업체의 게시 리스팅 피드 셋이 {@code Reserved} 와
+ *       {@code Airbnb (Not available)} 둘로 갈리는 것을 확인했고
+ *       ({@code src/test/resources/ical/airbnb-published.ics}), <b>{@code Reserved} 만
+ *       예약</b>이다. 나머지는 {@link BookingFeed#blocks()} 로 싣고 세기만 한다 —
+ *       차단을 재고에 어떻게 표현할지는 진짜 호스트 차단 샘플이 생기면 정한다</li>
  * </ul>
+ *
+ * <p><b>이 규칙은 에어비앤비 방언이다.</b> 다른 발행자(부킹닷컴·VRBO)는 {@code SUMMARY}
+ * 를 다르게 쓰므로 그대로 붙이면 <b>예약이 전부 차단으로 분류되어 조용히 사라진다.</b>
+ * 수신부가 "예약 0·차단 N" 을 경고로 남기는 이유다. 그런 발행자가 생기면 자격 증명에
+ * 발행자 종류를 두고 여기서 가른다.
  *
  * <p>대량 소실 방어({@code last_event_count})는 여기가 아니라 수신부에 있다. 기준값이
  * 연결에 저장되어야 하고, 어댑터가 메모리에 들고 있으면 <b>재기동 직후 첫 폴링에
@@ -54,6 +65,9 @@ public class IcalAdapter implements ChannelAdapter {
 
     /** 자격 증명 키. 발행자의 내보내기 주소다. <b>비밀이다</b>(조사-02 1절). */
     public static final String ICAL_URL = "ical_url";
+
+    /** 에어비앤비가 예약에 붙이는 {@code SUMMARY}. 픽스처 {@code airbnb-published.ics} 의 값이다. */
+    static final String RESERVED_SUMMARY = "Reserved";
 
     /** 계획서 6.2 의 "지수 백오프 3회". 첫 시도를 포함한 횟수다. */
     private static final int MAX_ATTEMPTS = 3;
@@ -127,10 +141,20 @@ public class IcalAdapter implements ChannelAdapter {
         }
 
         List<InboundBooking> bookings = new ArrayList<>();
+        List<InboundBlock> blocks = new ArrayList<>();
         for (IcalParser.VEvent event : IcalParser.parse(body)) {
-            bookings.add(toInbound(event));
+            if (isReserved(event)) {
+                bookings.add(toInbound(event));
+            } else {
+                blocks.add(new InboundBlock(event.uid(), event.start(), event.endExclusive(), event.summary()));
+            }
         }
-        return BookingFeed.of(response.getHeaders().getETag(), bookings);
+        return BookingFeed.of(response.getHeaders().getETag(), bookings, blocks);
+    }
+
+    /** 에어비앤비 게시 리스팅은 예약을 {@code SUMMARY:Reserved} 로 낸다. 그 외는 전부 차단으로 본다. */
+    private static boolean isReserved(IcalParser.VEvent event) {
+        return RESERVED_SUMMARY.equals(event.summary());
     }
 
     /**

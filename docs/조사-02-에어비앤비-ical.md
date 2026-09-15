@@ -1,6 +1,7 @@
 # 조사 02. 에어비앤비 iCal 연동 조건
 
-- 조사일: 2026-09-05
+- 조사일: 2026-09-05 (2026-09-15 추가 — **7절에 게시된 피드 실측이 붙었다.**
+  2·3절은 미게시 피드 하나만 보고 쓴 것이라 그 범위에서만 유효하다)
 - 조사: Cowork 세션
 - 관련: 계획서 3.4 / 6.2 / 12.2 / 13.4, 조사-01
 - 계기: P3 를 한 달 반 앞당길 수 있게 되어 선행 조건을 미리 확보하면서 확인
@@ -116,7 +117,50 @@ Mock 하나에만 기대게 되기 때문이다.
 ```
 CHANNEX_API_KEY
 CHANNEX_BASE_URL      https://staging.channex.io
-AIRBNB_ICAL_URL
+AIRBNB_ICAL_URL       미게시 초안(우리 것)
+AIRBNB_ICAL_URL_1..3  업체 게시 리스팅 셋 (P5 17주차). 순번으로만 부른다
 ```
 
 `JWT_SECRET`, `GUEST_DATA_KEY` 와 같은 자리다. 없으면 기동이 막히게 한다.
+
+## 7. 게시 리스팅의 피드 — 업체 실제 데이터 (2026-09-15, P5 17주차)
+
+업체가 게시 중인 리스팅 세 개의 iCal 주소를 줬다. `tools/ical_probe.py` 로 각각 한 번씩
+받았다(주소는 어디에도 찍지 않는다). **미게시 피드와 무엇이 달랐는지가 이 절이다.**
+
+| | 미게시(2절) | 게시(업체 피드 셋) |
+|---|---|---|
+| `VEVENT` | 1개, 1년치 통째 | **15 · 24 · 19개. 예약마다 하나** |
+| `SUMMARY` | `Airbnb (Not available)` 하나 | **`Reserved`**(14·23·18)와 `Airbnb (Not available)`(각 1) |
+| `DESCRIPTION` | 없음 | **있음.** 예약 상세 URL(`…/reservations/details/HM…`)과 `Phone Number (Last 4 Digits)`. 75옥텟에서 접혀 두 줄 |
+| `UID` | `<12hex>-...@airbnb.com` | `<12hex>-<32hex>@airbnb.com`, 전부 유일 |
+| 날짜 형식 | `VALUE=DATE` | 같다. `TZID` 없음, `DATETIME` 없음 |
+| 범위 | 오늘 ~ +1년 | `DTSTART` 최소 2026-09-09, 최대 **2027-09-15 (오늘+365일) 셋 다 같다** |
+| 응답 | | `200 text/calendar;charset=utf-8`, 4.8~7.7KB, CRLF |
+
+**파서에 걸린 것 셋과 처리.**
+
+1. **`SUMMARY` 로 예약과 차단을 갈라야 한다.** 13주차에는 가를 근거가 없어 모든
+   `VEVENT` 를 예약으로 옮겼다(`IcalAdapter` 주석). 그대로 두면 `Airbnb (Not available)`
+   1박이 게스트 없음·0원 CONFIRMED 예약으로 들어와 캘린더에 "이름 없음" 막대가 서고
+   `reservation_night` 에 0원 1박이 실려 **리포트의 ADR 을 낮추고 점유율을 올린다.**
+   → `IcalAdapter` 가 `Reserved` 만 `bookings` 로, 나머지는 `BookingFeed.blocks` 로
+   싣는다. **차단은 세기만 하고 재고에 반영하지 않는다** — 진짜 호스트 차단 샘플이
+   없어 차단 표현(`stop_sell` 출처 표시 등)은 아직 짓지 않기로 했다. 대량 소실 방어의
+   `last_event_count` 는 둘의 합이다(차단이 예약으로 바뀌는 날 합은 그대로다).
+   이 규칙은 에어비앤비 방언이라 다른 발행자에 붙이면 예약이 전부 차단으로 분류된다 —
+   수신부가 "예약 0·차단 N" 을 경고로 남긴다.
+2. **`DESCRIPTION` 에 개인정보가 온다.** 파서는 넷만 읽어 저장되지 않지만, 응답 원문이
+   로그에 닿는 자리가 없는지 훑었다. 원문·`DESCRIPTION` 을 찍는 곳은 없었고, 대신
+   **연결 실패 예외 메시지에 요청 주소가 통째로 실리는 자리**가 있어 막았다(스프링
+   `ResourceAccessException` 의 `I/O error on GET request for "<URL>"`).
+3. **세 피드의 `Airbnb (Not available)` 이 전부 오늘+365일 하루다.** 호스트 차단이
+   아니라 1년 창의 끝 표식일 가능성이 크다. 다음 날 다시 받아 하루 밀리면 표식이다 —
+   그러면 `blocks` 로 세는 것으로 충분하고 재고를 막을 이유가 없다. (2026-09-16 에
+   판정한다. `tools/ical_probe.py`)
+
+픽스처 `src/test/resources/ical/airbnb-published.ics` 는 피드 1번의 원문 그대로다.
+줄 수·접힘·줄 길이·CRLF 가 같고, UID 16진수·예약 코드·전화 뒷자리만 같은 길이로 가렸다.
+`IcalParserTest` 와 `IcalFeedTest` 가 이걸로 고정한다.
+
+**어느 주소가 어느 판매 단위인지는 아직 업체 확인 전이다.** 매핑은 그 뒤다(확인-09 7절).

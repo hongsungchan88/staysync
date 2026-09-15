@@ -217,12 +217,19 @@ ADR 0002 결과 절이 예고한 자리다.
   근거는 `docs/조사-02-에어비앤비-ical.md`.
 - **iCal `DTEND` 는 받을 때도 낼 때도 배타적이다.** `DTEND:20270906` 은 9월 5일까지
   막힌 것이다. 한쪽만 맞추면 왕복에서 하루가 어긋나고 화면에서는 정상으로 보인다.
-  실제 에어비앤비가 발행한 샘플이 `src/test/resources/ical/airbnb-unpublished.ics` 에
-  있고 `IcalParserTest` 가 그걸로 파서를 고정한다.
+  실제 에어비앤비가 발행한 샘플이 `src/test/resources/ical/airbnb-unpublished.ics`(미게시)
+  와 `airbnb-published.ics`(업체 게시 리스팅, 값만 가림)에 있고 `IcalParserTest` 가
+  그걸로 파서를 고정한다. 두 파일은 `-text` 라 CRLF 그대로다.
 - **iCal 파서에 ical4j 를 쓰지 않는다.** 읽어야 하는 것이 `UID`·`DTSTART`·`DTEND`·
   `SUMMARY` 넷뿐이라 접는 줄만 펴면 끝난다. 계획서 13.1 의 의존성 표에는 있지만 넣지
   않았다. `VALUE=DATE` 와 UTC `DATETIME` 만 읽으므로 `TZID` 가 붙은 발행자가 생기면
   그때 바꾼다.
+- **iCal 은 `SUMMARY:Reserved` 만 예약이다.** 게시 리스팅 피드는 예약과 호스트 차단이
+  같은 `VEVENT` 로 오고 `SUMMARY` 로만 갈린다(조사-02 7절). 나머지는
+  `BookingFeed.blocks` 로 실어 **세기만 하고 재고에 반영하지 않는다** — 차단 표현은
+  진짜 샘플이 생기면 짓는다. `last_event_count` 는 예약과 차단의 합이다. 이 규칙은
+  에어비앤비 방언이라 다른 발행자를 붙이면 예약이 전부 차단이 된다 — 폴러가
+  "예약 0·차단 N" 을 경고로 남긴다.
 - **iCal 발행은 어댑터를 거치지 않는다.** 우리가 채널을 부르는 일이 아니라 채널이 읽어
   가는 공개 URL 이라 `ChannelAdapter` 에 자리가 없다. 13주차에 아무도 부르지 않던
   `exportCalendar` 기본 구현을 지웠다.
