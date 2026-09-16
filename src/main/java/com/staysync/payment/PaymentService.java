@@ -215,9 +215,14 @@ public class PaymentService {
      * <p><b>확인 코드를 그대로 쓰지 않는다.</b> 결제가 실패한 뒤 손님이 다시 시도하면
      * 같은 식별자로 두 번 결제를 만들게 되고 포트원이 거절한다. 시도마다 새로 뽑으면
      * 그 문제가 없고, 예약과의 연결은 결제 행이 들고 있다.
+     *
+     * <p><b>40자를 넘지 않는다.</b> KG이니시스는 이 값을 {@code oid} 로 받고 1~40자로
+     * 제한한다. {@code "staysync-" + UUID}(45자)는 결제창이 열리기 전에
+     * {@code [INIStdPay / Dev. Error] 변수(oid)의 값에 길이 문제가 있습니다} 로 죽었다 —
+     * staysync.kr 첫 테스트 결제(확인-09 9절). 하이픈을 뺀 UUID 32자 + 접두 3자 = 35자.
      */
-    private static String newPaymentId() {
-        return "staysync-" + UUID.randomUUID();
+    static String newPaymentId() {
+        return "ss-" + UUID.randomUUID().toString().replace("-", "");
     }
 
     /** 결제창에 뜨는 주문명. 게스트 이름은 넣지 않는다 — 결제사에 보낼 이유가 없다. */

@@ -83,6 +83,15 @@ class PaymentWebhookTest {
     @MockitoBean
     private PortOneGateway gateway;
 
+    @Test
+    @DisplayName("결제 식별자는 40자를 넘지 않는다 — KG이니시스 oid 제한")
+    void 결제_식별자는_40자_이내다() {
+        // staysync.kr 첫 테스트 결제에서 45자 식별자가 결제창을 열기 전에 거절됐다.
+        for (int i = 0; i < 100; i++) {
+            assertThat(PaymentService.newPaymentId()).hasSizeBetween(1, 40).startsWith("ss-");
+        }
+    }
+
     // --- 완료 조건 9 ---------------------------------------------------------
 
     @Test
