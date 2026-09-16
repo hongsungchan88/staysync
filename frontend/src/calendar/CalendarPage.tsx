@@ -42,7 +42,12 @@ export function CalendarPage() {
     queryFn: fetchProperties,
   });
 
-  const propertyId = properties.data?.[0]?.id ?? null;
+  // 고른 숙소. 처음엔 첫 숙소다. P5 17주차까지 첫 숙소만 그렸는데, 업체 숙소가 둘이
+  // 들어오자 두 번째가 화면에서 닿지 않았다(확인-09 7절). 좌표 계산·드래그 선택은 숙소와
+  // 무관하므로 바꾸는 것은 어느 숙소의 캘린더를 부르는지뿐이다.
+  const [chosenPropertyId, setChosenPropertyId] = useState<number | null>(null);
+  const propertyId = chosenPropertyId ?? properties.data?.[0]?.id ?? null;
+  const property = properties.data?.find((p) => p.id === propertyId);
 
   const calendarKey = useMemo(
     () => ['calendar', propertyId, from, to] as const,
@@ -74,9 +79,28 @@ export function CalendarPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-3">
             <h1 className="text-lg font-semibold text-ink">통합 캘린더</h1>
-            <span className="text-sm text-muted">
-              {properties.data?.[0]?.name ?? '숙소를 불러오는 중'}
-            </span>
+            {properties.data && properties.data.length > 1 ? (
+              <select
+                aria-label="숙소"
+                data-testid="property-select"
+                className="h-8 rounded-md border border-rule-strong bg-paper px-2 text-sm text-ink"
+                value={propertyId ?? ''}
+                onChange={(event) => {
+                  setChosenPropertyId(Number(event.target.value));
+                  // 다른 숙소의 선택 범위와 예약 패널은 의미가 없다.
+                  setSelection(null);
+                  setBar(null);
+                }}
+              >
+                {properties.data.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <span className="text-sm text-muted">{property?.name ?? '숙소를 불러오는 중'}</span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Link
