@@ -101,6 +101,7 @@ async function 홀드까지() {
   await 날짜를_고른다();
   await userEvent.click(await screen.findByRole('radio'));
   await userEvent.type(screen.getByLabelText('이름'), '김손님');
+  await userEvent.type(screen.getByLabelText('이메일'), 'guest@example.com');
   await userEvent.click(screen.getByRole('button', { name: '예약 잡기' }));
   await screen.findByText('ABC12345');
 }
@@ -209,6 +210,8 @@ describe('직접예약 위젯', () => {
     await userEvent.clear(screen.getByLabelText('아동'));
     await userEvent.type(screen.getByLabelText('아동'), '1');
     await userEvent.type(screen.getByLabelText('이름'), '김손님');
+    // 결제사(KG이니시스 V2)가 구매자 이메일을 요구해 필수가 됐다.
+    await userEvent.type(screen.getByLabelText('이메일'), 'guest@example.com');
     await userEvent.click(screen.getByRole('button', { name: '예약 잡기' }));
 
     await waitFor(() => expect(lastHold).not.toBeNull());
@@ -228,6 +231,8 @@ describe('직접예약 위젯', () => {
     await 날짜를_고른다();
     await userEvent.click(await screen.findByRole('radio'));
     await userEvent.type(screen.getByLabelText('이름'), '김손님');
+    // 결제사(KG이니시스 V2)가 구매자 이메일을 요구해 필수가 됐다.
+    await userEvent.type(screen.getByLabelText('이메일'), 'guest@example.com');
     await userEvent.click(screen.getByRole('button', { name: '예약 잡기' }));
 
     expect(await screen.findByText('ABC12345')).toBeInTheDocument();
@@ -244,6 +249,8 @@ describe('직접예약 위젯', () => {
     await 날짜를_고른다();
     await userEvent.click(await screen.findByRole('radio'));
     await userEvent.type(screen.getByLabelText('이름'), '김손님');
+    // 결제사(KG이니시스 V2)가 구매자 이메일을 요구해 필수가 됐다.
+    await userEvent.type(screen.getByLabelText('이메일'), 'guest@example.com');
     await userEvent.click(screen.getByRole('button', { name: '예약 잡기' }));
 
     // 화면이 낡은 요금을 들고 있었다는 뜻이다. 조용히 넘어가면 결제 금액과 예약
@@ -266,6 +273,13 @@ describe('직접예약 위젯', () => {
     expect(결제요청?.paymentId).toBe('staysync-abc');
     expect(결제요청?.storeId).toBe('store-test');
     expect(결제요청?.totalAmount).toBe(200000);
+    // 구매자 정보. KG이니시스 V2 는 이메일이 없으면 결제창을 열기 전에 거절한다 —
+    // staysync.kr 첫 테스트 결제에서 실제로 걸렸다(확인-09 9절).
+    expect(결제요청?.customer).toEqual({
+      fullName: '김손님',
+      phoneNumber: undefined,
+      email: 'guest@example.com',
+    });
   });
 
   it('결제창이 성공해도 서버가 확정하기 전에는 완료로 보여 주지 않는다', async () => {

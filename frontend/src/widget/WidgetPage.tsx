@@ -101,7 +101,15 @@ export function WidgetPage() {
   if (held) {
     return (
       <Shell>
-        <AfterHold held={held} />
+        <AfterHold
+          held={held}
+          customer={{
+            fullName: guestName,
+            // 결제사는 숫자만 받는다. 화면은 하이픈을 허용한다.
+            phoneNumber: guestPhone.replace(/\D/g, '') || undefined,
+            email: guestEmail,
+          }}
+        />
       </Shell>
     );
   }
@@ -215,9 +223,10 @@ export function WidgetPage() {
               onChange={(event) => setGuestPhone(event.target.value)}
             />
           </Field>
-          <Field label="이메일">
+          <Field label="이메일 (결제에 필요)">
             <input
               type="email"
+              required
               aria-label="이메일"
               className={inputClass}
               value={guestEmail}
@@ -240,7 +249,7 @@ export function WidgetPage() {
             className="inline-flex h-10 items-center justify-center rounded-md bg-ink px-4 text-sm font-medium text-paper disabled:opacity-50"
             // 이름이 없으면 서버가 거절한다. 보내기 전에 막아 왕복을 아낀다 —
             // 판정 자체는 서버가 한다.
-            disabled={!guestName.trim() || hold.isPending}
+            disabled={!guestName.trim() || !guestEmail.trim() || hold.isPending}
             onClick={() => hold.mutate()}
           >
             {hold.isPending ? '잡는 중…' : '예약 잡기'}
@@ -260,7 +269,13 @@ export function WidgetPage() {
  * 아직 홀드인 예약을 확정으로 보여 주게 되고, 웹훅이 끝내 오지 않으면 그 예약은
  * 15분 뒤 조용히 사라진다.
  */
-function AfterHold({ held }: { held: HoldResult }) {
+function AfterHold({
+  held,
+  customer,
+}: {
+  held: HoldResult;
+  customer: { fullName?: string; phoneNumber?: string; email?: string };
+}) {
   const [phase, setPhase] = useState<'held' | 'paying' | 'confirming' | 'done'>('held');
   const [failed, setFailed] = useState<string | null>(null);
 
@@ -278,6 +293,7 @@ function AfterHold({ held }: { held: HoldResult }) {
         totalAmount: setup.amount,
         currency: 'KRW',
         payMethod: 'CARD',
+        customer,
       });
       // 결제창은 실패했을 때만 code 를 준다. 손님이 창을 닫은 경우도 여기다.
       if (result?.code) {
@@ -297,7 +313,9 @@ function AfterHold({ held }: { held: HoldResult }) {
         setPhase('held');
       }
     } catch (error) {
-      setFailed(error instanceof PublicApiError
+      // SDK 가 던진 메시지는 그대로 보여 준다 — "이니시스 V2 일반 결제의 경우 구매자
+      // 이메일은 필수 입력입니다" 를 일반 문구로 덮었다가 원인을 한참 찾았다.
+      setFailed(error instanceof Error && error.message
         ? error.message
         : '결제를 시작하지 못했습니다. 잠시 뒤 다시 시도해 주세요.');
       setPhase('held');

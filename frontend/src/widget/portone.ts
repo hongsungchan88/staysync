@@ -25,6 +25,11 @@ export interface PayRequest {
   totalAmount: number;
   currency: string;
   payMethod: string;
+  /**
+   * 구매자. KG이니시스 V2 일반 결제는 **이메일이 필수**라 없으면 결제창이 열리기 전에
+   * SDK 가 거절한다. staysync.kr 첫 테스트 결제에서 실제로 걸렸다(확인-09 9절).
+   */
+  customer?: { fullName?: string; phoneNumber?: string; email?: string };
 }
 
 interface PortOneSdk {
