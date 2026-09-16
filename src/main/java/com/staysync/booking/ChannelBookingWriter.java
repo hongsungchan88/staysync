@@ -11,6 +11,7 @@ import com.staysync.shared.audit.AuditRecorder;
 import com.staysync.shared.outbox.OutboxRecorder;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -164,12 +165,21 @@ class ChannelBookingWriter {
      *
      * <p>부르는 쪽이 대량 소실 방어를 먼저 통과시킨다. 파싱이 실패했거나 발행자가
      * 잠깐 빈 달력을 낸 주기에 이 메서드가 돌면 <b>그 채널의 예약이 전부 사라진다.</b>
+     *
+     * <p><b>체크아웃이 지난 예약은 건드리지 않는다.</b> 에어비앤비는 끝난 예약을 다음 날
+     * 피드에서 뺀다(조사-02 7절 4번) — 그것은 취소가 아니라 과거다. 거르지 않으면 모든
+     * 채널 예약이 체크아웃 다음 날 CANCELLED 가 되어 취소율이 거짓이 된다. 날짜의 기준은
+     * 숙소가 있는 곳의 오늘이다(컨테이너 시계는 UTC 다).
      */
     @Transactional
     int cancelMissing(Long unitId, String channelCode, java.util.Set<String> present) {
         int cancelled = 0;
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
         for (Reservation reservation : reservationRepo.findActiveOfChannel(unitId, channelCode)) {
             if (present.contains(reservation.getChannelBookingId())) {
+                continue;
+            }
+            if (!reservation.getPeriod().checkOut().isAfter(today)) {
                 continue;
             }
             reservationWriter.cancel(reservation.getId());

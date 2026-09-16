@@ -158,6 +158,31 @@ class IcalFeedTest extends SyncTestBase {
     // --- 게시 리스팅 (P5 17주차) ---------------------------------------------------
 
     @Test
+    @DisplayName("체크아웃이 지난 예약이 발행물에서 빠져도 취소하지 않는다")
+    void 끝난_예약이_사라져도_취소하지_않는다() {
+        // 에어비앤비는 끝난 예약을 다음 날 피드에서 뺀다(조사-02 7절 4번). 그것은 과거지
+        // 취소가 아니다. 거르지 않으면 모든 채널 예약이 체크아웃 다음 날 CANCELLED 가 된다.
+        Fixture f = given("iCal 과거");
+        ChannelConnection connection = icalConnection(f);
+        feed.publish(calendar(vevent("past-1", "20250101", "20250103"),
+                vevent("future-1", "20261101", "20261103")), null);
+        poller.pollOne(connection);
+
+        // 다음 주기: 지난 예약만 빠졌다.
+        feed.publish(calendar(vevent("future-1", "20261101", "20261103")), null);
+        poller.pollOne(connection);
+
+        assertThat(상태("past-1")).as("끝난 예약은 그대로다").isEqualTo("CONFIRMED");
+        assertThat(상태("future-1")).isEqualTo("CONFIRMED");
+
+        // 미래 예약이 빠지면 그건 진짜 취소다. 가드가 그쪽까지 막으면 안 된다.
+        feed.publish(calendar(), null);
+        poller.pollOne(connection);
+        assertThat(상태("future-1")).isEqualTo("CANCELLED");
+        assertThat(상태("past-1")).isEqualTo("CONFIRMED");
+    }
+
+    @Test
     @DisplayName("게시 피드에서 Reserved 만 예약이 되고 Not available 은 세기만 한다")
     void 차단은_예약이_되지_않는다() throws java.io.IOException {
         Fixture f = given("iCal 게시");
