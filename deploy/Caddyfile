@@ -19,8 +19,16 @@ handle /public/* {
 # /actuator 는 열지 않는다. 헬스체크는 compose 가 내부 네트워크에서 부른다.
 
 # 나머지는 정적 파일. React Router 경로는 index.html 로 떨어뜨린다(ADR 0009).
+#
+# index.html 은 캐시하지 않는다. 헤더가 없으면 브라우저가 알아서 캐시하고, 다음 배포에서
+# 그 index.html 이 가리키는 해시 번들이 사라져 빈 화면이 된다 — 실제로 배포 두 번 뒤
+# 브라우저가 두 버전 전 번들을 물고 있었다(확인-09 8절). 해시가 붙은 assets 는 반대로
+# 오래 캐시해도 된다. 내용이 바뀌면 이름이 바뀐다.
 handle {
 	root * /srv
+	@page not path /assets/*
+	header @page Cache-Control "no-cache"
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 	try_files {path} /index.html
 	file_server
 }
