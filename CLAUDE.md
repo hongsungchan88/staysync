@@ -262,6 +262,10 @@ ADR 0002 결과 절이 예고한 자리다.
   `message_template`, `message_rule`, `message_dispatch`. 두 프로파일 모두 적용.
 - `db/migration/postgresql/V7__ops_task.sql` — 청소 태스크의 `assignee_name`.
   두 프로파일 모두 적용.
+- `db/migration/postgresql/V8__channel_connection_ical_per_listing.sql` —
+  `UNIQUE (property_id, channel_code)` 를 iCal 에만 푼다. iCal 은 주소 하나가 판매 단위
+  하나라 숙소당 연결이 여럿이다(업체 메종드서촌 2층·3층). 다른 어댑터는 부분 유니크
+  인덱스로 그대로 하나. **배포된 DB(`staysync.kr`)에 적용된 첫 마이그레이션이다.**
 
 `docker` 와 `prod` 는 V2 를 포함한다. **`prod` 가 pgvector 가 실제로 있는 첫 환경이다.**
 

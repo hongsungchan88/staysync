@@ -97,7 +97,10 @@ public class ChannelConnectionService {
             // 남의 숙소에 연결을 만들려는 요청이다. 없다고 답한다.
             throw new ChannelConnectionNotFoundException(null);
         }
-        if (connections.existsByPropertyIdAndChannelCode(propertyId, channelCode)) {
+        // iCal 은 내보내기 주소 하나가 판매 단위 하나라 숙소당 연결이 여럿이다(V8).
+        // 다른 어댑터는 숙소 단위로 붙으므로 그대로 하나만 둔다.
+        if (adapterType != AdapterType.ICAL
+                && connections.existsByPropertyIdAndChannelCode(propertyId, channelCode)) {
             throw new DuplicateChannelConnectionException(channelCode);
         }
 

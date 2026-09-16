@@ -215,6 +215,34 @@ class ChannelApiTest extends ApiTestBase {
     }
 
     @Test
+    @DisplayName("iCal 은 숙소 하나에 같은 채널 연결이 여럿일 수 있고, 다른 어댑터는 하나다")
+    void iCal_연결은_숙소당_여럿이다() throws Exception {
+        // V8. 업체 메종드서촌은 숙소 하나에 2층·3층 피드가 둘이다 — iCal 은 주소 하나가
+        // 판매 단위 하나라 "채널은 숙소 단위로 붙는다"는 V1 의 가정이 성립하지 않는다.
+        Session 세션 = 가입(새이메일());
+        Long propertyId = 숙소등록(세션);
+        Long 이층 = 판매단위등록(세션, propertyId, "2층");
+        Long 삼층 = 판매단위등록(세션, propertyId, "3층");
+
+        Long 첫째 = 연결생성(세션, propertyId, "AIRBNB_ICAL", "ICAL", ICAL_URL);
+        Long 둘째 = 연결생성(세션, propertyId, "AIRBNB_ICAL", "ICAL", ICAL_URL + "?t=other");
+        매핑생성(세션, 첫째, 이층, "listing_2f").andExpect(status().isCreated());
+        매핑생성(세션, 둘째, 삼층, "listing_3f").andExpect(status().isCreated());
+
+        // Channex 는 그대로 숙소당 하나다. 예외를 iCal 에만 열었는지 여기서 본다.
+        연결생성(세션, propertyId, "CHANNEX", "CHANNEX", API_KEY);
+        mvc.perform(post("/api/properties/" + propertyId + "/channels")
+                        .header(HttpHeaders.AUTHORIZATION, 세션.bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"channelCode":"CHANNEX","adapterType":"CHANNEX","displayName":"둘째",
+                                 "credentials":{"api_key":"k2"}}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("DUPLICATE_CHANNEL_CONNECTION"));
+    }
+
+    @Test
     @DisplayName("매핑되지 않은 판매 단위가 목록에서 구분된다")
     void 매핑되지_않은_단위가_드러난다() throws Exception {
         Session 세션 = 가입(새이메일());
