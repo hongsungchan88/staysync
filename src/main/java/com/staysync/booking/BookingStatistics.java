@@ -27,10 +27,17 @@ public interface BookingStatistics {
     /**
      * 판매된 객실박과 그 매출.
      *
-     * @param nights  박 수
-     * @param revenue 박별 금액의 합
+     * <p><b>금액 미상인 박은 {@code nights} 에는 들고 {@code revenue} 에는 없다.</b>
+     * 판 것은 맞지만 얼마에 팔았는지 모른다(iCal). 미상이 하나라도 있으면 단가를 구할
+     * 수 없다는 판단은 analytics 가 한다 — 여기는 세어서 넘길 뿐이다.
+     *
+     * @param nights              박 수. 미상 포함
+     * @param revenue             박별 금액의 합. <b>확인된 금액만</b>
+     * @param unknownNights       금액 미상인 박 수
+     * @param unknownReservations 금액 미상인 예약 수
      */
-    record SoldNights(long nights, BigDecimal revenue) {
+    record SoldNights(long nights, BigDecimal revenue,
+                      long unknownNights, long unknownReservations) {
     }
 
     /**
@@ -42,8 +49,14 @@ public interface BookingStatistics {
     record CancellationCounts(long cancelled, long total) {
     }
 
-    /** 채널 하나의 건수와 매출. 비중은 부르는 쪽이 구한다. */
-    record ChannelVolume(String channelCode, long reservations, BigDecimal revenue) {
+    /**
+     * 채널 하나의 건수와 매출. 비중은 부르는 쪽이 구한다.
+     *
+     * @param revenue             확인된 금액의 합
+     * @param unknownReservations 금액 미상인 예약 수. 0 이 아니면 이 채널의 매출은 미상이다
+     */
+    record ChannelVolume(String channelCode, long reservations, BigDecimal revenue,
+                         long unknownReservations) {
     }
 
     /**

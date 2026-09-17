@@ -23,6 +23,11 @@ import java.time.LocalDate;
  *                        계획서 13.4 처럼 내용 해시를 버전 자리에 넣지 않는다 —
  *                        해시에는 순서가 없어서 날짜가 바뀐 뒤의 해시가 우연히 작으면
  *                        수정이 조용히 무시된다(ADR 0013)
+ * @param totalAmount     채널이 알려 준 총액. <b>{@code null} 은 "이 채널이 금액을 주지
+ *                        않는다"</b>는 뜻이고 그대로 미상으로 저장된다(작업지시-16).
+ *                        0 으로 바꾸지 않는다 — 0 원과 모름이 같은 값이 되면 리포트가
+ *                        모르는 박을 0 원짜리로 센다. 어댑터가 정한다: iCal 은 항상
+ *                        {@code null}, Mock·Channex 는 채널이 준 값이다
  * @param isCancellation  취소 통지인 경우 true. 스냅샷 채널은 이 값을 쓰지 않고
  *                        목록에서 사라진 것을 취소로 본다
  */
@@ -45,9 +50,6 @@ public record InboundBooking(
         }
         if (checkIn == null || checkOut == null || !checkOut.isAfter(checkIn)) {
             throw new IllegalArgumentException("숙박 기간이 올바르지 않습니다: " + checkIn + " ~ " + checkOut);
-        }
-        if (totalAmount == null) {
-            totalAmount = BigDecimal.ZERO;
         }
     }
 }

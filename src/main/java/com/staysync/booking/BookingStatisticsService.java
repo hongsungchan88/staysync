@@ -56,7 +56,7 @@ class BookingStatisticsService implements BookingStatistics {
     @Override
     public SoldNights soldNights(List<Long> propertyIds, LocalDate from, LocalDate to) {
         if (propertyIds.isEmpty()) {
-            return new SoldNights(0, BigDecimal.ZERO);
+            return new SoldNights(0, BigDecimal.ZERO, 0, 0);
         }
         return nights.aggregateSold(propertyIds, SOLD, from, to);
     }

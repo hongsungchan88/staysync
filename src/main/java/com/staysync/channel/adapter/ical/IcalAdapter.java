@@ -166,11 +166,14 @@ public class IcalAdapter implements ChannelAdapter {
      *
      * <p>게스트 정보는 비운다. 판매 단위 식별자도 비운다 — 발행물에 상품 식별자가
      * 없어 수신부가 그 연결의 매핑으로 채운다.
+     *
+     * <p><b>금액도 비운다.</b> 발행물에 금액이 없다. 0 을 넣으면 리포트가 0 원짜리
+     * 박으로 세어 ADR 이 8 원이 된다(검토-01 2절 7번). {@code null} 이 미상이다.
      */
     private static InboundBooking toInbound(IcalParser.VEvent event) {
         return new InboundBooking(
                 event.uid(), null, event.start(), event.endExclusive(),
-                null, 0, 0, BigDecimal.ZERO,
+                null, 0, 0, null,
                 null,      // revision 이 없는 채널이다. 값이 다르면 수정으로 본다
                 false,     // 취소 통지가 없다. 목록에서 사라지는 것이 취소다
                 null);

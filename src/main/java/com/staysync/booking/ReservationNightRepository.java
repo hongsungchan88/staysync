@@ -28,7 +28,10 @@ public interface ReservationNightRepository
      */
     @Query("""
             select new com.staysync.booking.BookingStatistics$SoldNights(
-                       count(n), coalesce(sum(n.price), 0))
+                       count(n),
+                       coalesce(sum(n.price), 0),
+                       coalesce(sum(case when r.totalAmount is null then 1 else 0 end), 0),
+                       count(distinct case when r.totalAmount is null then r.id end))
             from ReservationNight n, Reservation r
             where r.id = n.reservationId
               and r.propertyId in :propertyIds
@@ -44,10 +47,14 @@ public interface ReservationNightRepository
      * 채널별 건수와 매출.
      *
      * <p>건수는 <b>예약 수</b>다. 박 행을 세면 오래 묵은 예약이 여러 건으로 보인다.
+     *
+     * <p>미상 판정은 박의 {@code price} 가 아니라 예약의 {@code totalAmount} 로 한다.
+     * 박은 예약을 나눈 것이라 같은 답이지만, 출처는 예약 쪽이다.
      */
     @Query("""
             select new com.staysync.booking.BookingStatistics$ChannelVolume(
-                       r.channelCode, count(distinct r.id), coalesce(sum(n.price), 0))
+                       r.channelCode, count(distinct r.id), coalesce(sum(n.price), 0),
+                       count(distinct case when r.totalAmount is null then r.id end))
             from ReservationNight n, Reservation r
             where r.id = n.reservationId
               and r.propertyId in :propertyIds

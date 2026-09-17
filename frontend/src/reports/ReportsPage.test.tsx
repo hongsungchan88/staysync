@@ -163,6 +163,48 @@ describe('리포트 화면', () => {
     expect(within(첫줄).getByText('80.0%')).toBeInTheDocument();
   });
 
+  it('금액 미상이 있으면 ADR·RevPAR 를 0원이 아니라 미상으로 보여 준다', async () => {
+    // 작업지시-16. 서버는 미상이면 adr·revPar 키를 아예 빼고 보낸다(non_null). 0 이
+    // 오는 빈 기간과 같은 "0원"으로 찍히면 거짓이다 — 에어비앤비 iCal 이 대부분인
+    // 업체 데이터에서 실제로 ADR 8원이 떴다.
+    respond({
+      soldNights: 253,
+      availableNights: 1185,
+      roomRevenue: 2000,
+      occupancyRate: 0.2135,
+      leadTimeDays: 30.2,
+      cancellationRate: 0.0185,
+      unknownAmountReservations: 53,
+      unknownAmountNights: 251,
+      channelMix: [
+        { channelCode: 'AIRBNB_ICAL', reservations: 53, unknownReservations: 53 },
+        { channelCode: 'DIRECT', reservations: 1, revenue: 2000, unknownReservations: 0 },
+      ],
+    });
+    render(<ReportsPage />, { wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('unknown-amount-notice')).toHaveTextContent('53건(251박)');
+    });
+    expect(within(screen.getByTestId('metric-adr')).getByText(/금액 미상 53건/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('metric-adr')).queryByText(/원$/)).not.toBeInTheDocument();
+    expect(within(screen.getByTestId('metric-revpar')).getByText(/금액 미상 53건/)).toBeInTheDocument();
+    // 점유율은 금액과 무관하므로 그대로다.
+    expect(within(screen.getByTestId('metric-occupancy')).getByText('21.3%')).toBeInTheDocument();
+    // 객실 매출은 확인된 금액만이고 그 사실을 밝힌다.
+    expect(within(screen.getByTestId('metric-revenue')).getByText('2,000원')).toBeInTheDocument();
+    expect(screen.getByTestId('metric-revenue')).toHaveTextContent('확인된 금액만');
+
+    // 채널 믹스 — 미상 채널의 매출은 미상, 비중은 어느 채널도 없다(DIRECT 100% 가 거짓이었다).
+    const 표 = screen.getByRole('table');
+    const 에어비앤비 = within(표).getByRole('row', { name: /AIRBNB_ICAL|에어비앤비/ });
+    expect(within(에어비앤비).getByText('미상 53건')).toBeInTheDocument();
+    const 직접 = within(표).getByRole('row', { name: /직접예약/ });
+    expect(within(직접).getByText('2,000원')).toBeInTheDocument();
+    expect(within(표).queryByText(/100\.0%/)).not.toBeInTheDocument();
+    expect(within(직접).getByText('—')).toBeInTheDocument();
+  });
+
   it('모르는 채널 코드는 코드 그대로 보여 준다', async () => {
     respond({
       ...지표,
