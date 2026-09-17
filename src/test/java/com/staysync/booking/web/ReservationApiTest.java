@@ -31,6 +31,39 @@ class ReservationApiTest extends ApiTestBase {
     }
 
     @Test
+    @DisplayName("기간으로 거르면 200 이고 겹치는 예약만 온다")
+    void 기간으로_거른다() throws Exception {
+        // 작업지시-18 C. `(:from is null or r.period.checkOut > :from)` 의 형 추론이 실패해
+        // from/to 를 주면 500 이었다. 화면이 안 부르는 경로라 증상이 없었다(확인-08 3절 3번).
+        // 리포지토리 단위로는 이 결함이 난 자리(HTTP → 파라미터 바인딩)를 안 지난다.
+        Fixture f = 숙소와_판매단위(가입(새이메일()));
+        Long 삼월 = 예약등록(f, "2027-03-01", "2027-03-03", "200000");
+        Long 오월 = 예약등록(f, "2027-05-10", "2027-05-12", "200000");
+
+        mvc.perform(get("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer())
+                        .param("from", "2027-03-02").param("to", "2027-04-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(삼월));
+
+        // 경계: 체크아웃이 from 과 같으면 그날 묵지 않으므로 빠진다. 체크인이 to 와 같아도 빠진다.
+        mvc.perform(get("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer())
+                        .param("from", "2027-03-03").param("to", "2027-05-10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(0));
+
+        // 한쪽만 줘도 된다.
+        mvc.perform(get("/api/reservations")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer())
+                        .param("from", "2027-05-01"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].id").value(오월));
+    }
+
+    @Test
     @DisplayName("상세에는 박별 스냅샷이 실린다")
     void 상세에_박별_요금이_실린다() throws Exception {
         Fixture f = 숙소와_판매단위(가입(새이메일()));

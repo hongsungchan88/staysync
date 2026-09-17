@@ -22,6 +22,11 @@ server:
   port: 8080
   error:
     include-message: always
+  # Caddy 뒤에 있다. 이게 없으면 getRemoteAddr() 가 Caddy 의 Docker 주소 하나라 공개 HOLD
+  # 속도 제한이 모든 손님을 한 사람으로 센다(작업지시-18 4절). framework = ForwardedHeaderFilter —
+  # X-Forwarded-For 를 무조건 믿는다. 앱 포트가 밖에 안 열려 있고(확인-09 5절) Caddy 가
+  # trusted_proxies 밖 클라이언트의 X-Forwarded-* 를 버리고 다시 붙이므로 위조가 앱에 닿지 않는다.
+  forward-headers-strategy: framework
 
 management:
   endpoints:
@@ -35,6 +40,13 @@ management:
 staysync:
   timezone: Asia/Seoul
   hold-expiry-minutes: 15        # 직접예약 HOLD 유지 시간
+  public-booking:
+    # 공개 HOLD 생성의 IP 당 상한(작업지시-18 D). 정상 손님은 한 번, 결제창을 닫고 다시
+    # 해도 두세 번이다. 넘으면 429 이고 HOLD 를 만들지 않는다. 메모리에 세므로 인스턴스
+    # 하나 전제다.
+    hold-limit:
+      max: 5
+      window: 10m
   security:
     jwt:
       # 서명 키는 저장소에 두지 않는다. 환경 변수로 주입한다 (.env.example 참고).

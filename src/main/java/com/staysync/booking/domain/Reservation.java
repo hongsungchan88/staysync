@@ -185,8 +185,19 @@ public class Reservation {
         return totalAmount;
     }
 
+    /**
+     * 재고를 차지하고 있는 상태인지.
+     *
+     * <p><b>CHECKED_IN 도 포함한다</b>(작업지시-18 A-2). 투숙 중인 손님은 방을 쓰고 있다.
+     * 예전에는 HOLD·CONFIRMED 뿐이라, 채널이 투숙 중 예약의 날짜를 바꾸면 기간만 갈리고
+     * 원장은 옛 날짜에 남았다. {@code ReservationWriter} 의 switch 와
+     * {@code findActiveOfChannel}·{@code ReservationBrief} 는 처음부터 CHECKED_IN 을 넣고
+     * 있었다 — 정의가 갈린 쪽이 여기였다.
+     */
     public boolean isActive() {
-        return status == ReservationStatus.HOLD || status == ReservationStatus.CONFIRMED;
+        return status == ReservationStatus.HOLD
+                || status == ReservationStatus.CONFIRMED
+                || status == ReservationStatus.CHECKED_IN;
     }
 
     /** 임시 점유를 확정으로 승격한다. 결제 성공 시 호출한다. */
