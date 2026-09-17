@@ -50,17 +50,20 @@ class ReservationWriter {
     private final InventoryService inventoryService;
     private final OutboxRecorder outbox;
     private final AuditRecorder audit;
+    private final ConflictCleanup conflictCleanup;
 
     ReservationWriter(ReservationRepository reservationRepo,
                       ReservationNightRepository nightRepo,
                       InventoryService inventoryService,
                       OutboxRecorder outbox,
-                      AuditRecorder audit) {
+                      AuditRecorder audit,
+                      ConflictCleanup conflictCleanup) {
         this.reservationRepo = reservationRepo;
         this.nightRepo = nightRepo;
         this.inventoryService = inventoryService;
         this.outbox = outbox;
         this.audit = audit;
+        this.conflictCleanup = conflictCleanup;
     }
 
     /** 수기 예약. 재고를 먼저 확보하고 예약을 만든다. 모자라면 전체가 실패한다. */
@@ -162,6 +165,10 @@ class ReservationWriter {
                         reservation.getPeriod().checkIn().toString(),
                         reservation.getPeriod().checkOut().toString()),
                 ReservationEvents.auditSnapshot(reservation));
+        // 반납으로 그날의 초과가 풀렸으면 OPEN 충돌을 닫는다. 상태가 이미 CANCELLED 라
+        // 활성 예약 집계에서 빠진다.
+        conflictCleanup.afterRelease(reservation.getPropertyId(), reservation.getUnitId(),
+                reservation.getPeriod());
         return reservation;
     }
 
@@ -230,6 +237,8 @@ class ReservationWriter {
         // actor_kind 를 SYSTEM 으로 남기고 actor_id 는 비운다.
         audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "HOLD_EXPIRE",
                 before, ReservationEvents.auditSnapshot(reservation));
+        conflictCleanup.afterRelease(reservation.getPropertyId(), reservation.getUnitId(),
+                reservation.getPeriod());
     }
 
     /**
@@ -284,6 +293,10 @@ class ReservationWriter {
         }
         audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHANGE_STAY",
                 before, ReservationEvents.auditSnapshot(reservation));
+        if (!sameDates) {
+            // 엔티티의 기간이 바뀐 뒤에 센다. 옛 기간에서 빠져나간 날의 초과가 풀렸을 수 있다.
+            conflictCleanup.afterRelease(reservation.getPropertyId(), unitId, oldPeriod);
+        }
         return reservation;
     }
 
@@ -340,6 +353,9 @@ class ReservationWriter {
                 ReservationEvents.CONFIRMED, ReservationEvents.payloadOf(reservation));
         audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "MOVE_UNIT",
                 before, ReservationEvents.auditSnapshot(reservation));
+        // 원래 단위에서 빠져나갔다. 업그레이드 배정으로 해소한 카드는 이미 닫혀 있지만,
+        // 이 예약이 걸쳐 있던 다른 날짜의 카드가 함께 풀릴 수 있다.
+        conflictCleanup.afterRelease(reservation.getPropertyId(), sourceUnitId, period);
         return reservation;
     }
 

@@ -8,8 +8,16 @@ import java.time.OffsetDateTime;
  * 일자별 재고 원장. 판매 단위 하나와 날짜 하나가 한 행이다.
  *
  * <p>중복예약 방지의 기준 테이블이며, 데이터베이스에
- * {@code CHECK (booked_units + held_units <= total_units)} 제약이 걸려 있다.
- * 애플리케이션 로직에 결함이 있어도 이 제약이 초과 판매를 최종적으로 거부한다.
+ * {@code CHECK (booked_units + held_units <= total_units + overbooked_units)} 와
+ * {@code CHECK (overbooked_units = GREATEST(0, booked + held - total))} 제약이 걸려 있다(V10).
+ * 애플리케이션 로직에 결함이 있어도 이 제약이 초과 판매를 최종적으로 거부한다 —
+ * {@link #forceBook} 만 {@code overbooked_units} 를 올리므로, 다른 경로가 수량을 넘기면
+ * 등식이 깨져 거부된다.
+ *
+ * <p><b>{@code total_units} 는 언제나 판매 단위의 실제 수량이다.</b> 초과 예약(OTA 가 이미
+ * 팔아 버린 것)은 {@code overbooked_units} 에 따로 있고, 반납되면 정확히 그만큼 사라진다.
+ * 예전에는 초과분을 {@code total_units} 에 얹었고 반납돼도 내려오지 않아, 초과가 한 번
+ * 있었던 날은 실제보다 하나 더 팔렸다(작업지시-18 9절 E).
  */
 @Entity
 @Table(name = "inventory_ledger")
@@ -32,6 +40,10 @@ public class InventoryLedger {
 
     @Column(name = "held_units", nullable = false)
     private short heldUnits;
+
+    /** 실제 수량을 넘긴 만큼. 언제나 {@code max(0, booked + held - total)} 이고 DB 가 그 등식을 강제한다. */
+    @Column(name = "overbooked_units", nullable = false)
+    private short overbookedUnits;
 
     @Column(name = "stop_sell", nullable = false)
     private boolean stopSell;
@@ -79,9 +91,17 @@ public class InventoryLedger {
         return stopSell;
     }
 
-    /** 지금 팔 수 있는 수량. */
+    /**
+     * 지금 팔 수 있는 수량. <b>0 아래로 내려가지 않는다.</b> 초과 예약이 남아 있는 날은 0 이다 —
+     * 음수가 화면·위젯·ARI 로 나가면 안 된다.
+     */
     public int available() {
-        return totalUnits - bookedUnits - heldUnits;
+        return Math.max(0, totalUnits - bookedUnits - heldUnits);
+    }
+
+    /** 실제 수량을 넘겨 받아들인 수량. 0 이면 초과가 없다. */
+    public int overbooked() {
+        return overbookedUnits;
     }
 
     /**
@@ -120,12 +140,14 @@ public class InventoryLedger {
     /** 임시 점유를 해제한다. 결제 실패나 시간 만료 시 호출한다. */
     public void releaseHold(int units) {
         this.heldUnits = (short) Math.max(0, heldUnits - units);
+        recomputeOverbooked();
         touch();
     }
 
     /** 확정 예약을 취소해 재고를 되돌린다. */
     public void release(int units) {
         this.bookedUnits = (short) Math.max(0, bookedUnits - units);
+        recomputeOverbooked();
         touch();
     }
 
@@ -133,15 +155,20 @@ public class InventoryLedger {
      * OTA 에서 이미 성사된 예약을 받아들이기 위해 재고 한도를 넘겨 기록한다.
      *
      * <p>iCal 지연 구간에서 발생한 예약은 우리가 거절할 수 없다. 거절하면 게스트와
-     * 플랫폼 양쪽에서 문제가 된다. 대신 총 수량을 함께 늘려 데이터베이스 제약을
-     * 만족시키고, 별도로 충돌 레코드를 남겨 운영자가 해소하게 한다.
+     * 플랫폼 양쪽에서 문제가 된다. 대신 넘긴 만큼을 {@code overbooked_units} 에 적어
+     * 데이터베이스 제약을 만족시키고, 별도로 충돌 레코드를 남겨 운영자가 해소하게 한다.
+     * <b>총 수량은 건드리지 않는다</b> — 올려 두면 반납돼도 내려오지 않아 그 날이 실제보다
+     * 하나 더 팔린다.
      */
     public void forceBook(int units) {
         this.bookedUnits += (short) units;
-        if (bookedUnits + heldUnits > totalUnits) {
-            this.totalUnits = (short) (bookedUnits + heldUnits);
-        }
+        recomputeOverbooked();
         touch();
+    }
+
+    /** 초과분은 정의상 이 값이다. 반납되면 저절로 0 으로 돌아온다. */
+    private void recomputeOverbooked() {
+        this.overbookedUnits = (short) Math.max(0, bookedUnits + heldUnits - totalUnits);
     }
 
     public void changeTotalUnits(short newTotal) {
@@ -172,7 +199,7 @@ public class InventoryLedger {
     }
 
     private String describe() {
-        return "unitId=%d date=%s total=%d booked=%d held=%d"
-                .formatted(unitId, stayDate, totalUnits, bookedUnits, heldUnits);
+        return "unitId=%d date=%s total=%d booked=%d held=%d overbooked=%d"
+                .formatted(unitId, stayDate, totalUnits, bookedUnits, heldUnits, overbookedUnits);
     }
 }

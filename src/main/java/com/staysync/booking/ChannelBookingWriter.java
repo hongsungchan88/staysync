@@ -64,6 +64,7 @@ class ChannelBookingWriter {
     private final AuditRecorder audit;
     private final GuestRegistrar guests;
     private final OwnedResources owned;
+    private final ConflictCleanup conflictCleanup;
 
     ChannelBookingWriter(ReservationRepository reservationRepo,
                          ReservationWriter reservationWriter,
@@ -73,7 +74,8 @@ class ChannelBookingWriter {
                          OutboxRecorder outbox,
                          AuditRecorder audit,
                          GuestRegistrar guests,
-                         OwnedResources owned) {
+                         OwnedResources owned,
+                         ConflictCleanup conflictCleanup) {
         this.reservationRepo = reservationRepo;
         this.reservationWriter = reservationWriter;
         this.inventory = inventory;
@@ -83,6 +85,7 @@ class ChannelBookingWriter {
         this.audit = audit;
         this.guests = guests;
         this.owned = owned;
+        this.conflictCleanup = conflictCleanup;
     }
 
     @Transactional
@@ -133,6 +136,8 @@ class ChannelBookingWriter {
             // 겹치는 날짜에 같은 예약이 두 자리를 차지한다({@code changeStay} 와 같다).
             inventory.release(reservation.getUnitId(), oldPeriod, UNITS);
             conflicted = reserveOrForce(reservation, command);
+            // 기간은 applyIncoming 이 이미 바꿨다. 옛 기간에서 빠져나간 날의 초과가 풀렸으면 닫는다.
+            conflictCleanup.afterRelease(reservation.getPropertyId(), reservation.getUnitId(), oldPeriod);
         }
         // 날짜든 금액이든 바뀌었으면 박 행도 옛것이다. 금액만 바뀌어도 박당 단가가 달라진다.
         reservationWriter.rewriteNights(reservation);
