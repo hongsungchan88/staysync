@@ -69,7 +69,8 @@ export const reservationBarSchema = z.object({
   guestName: z.string().nullish(),
   channel: z.string(),
   status: z.string(),
-  amount: z.number(),
+  /** 금액 미상(iCal)이면 서버가 키를 뺀다. `number()` 로 두면 캘린더가 통째로 안 뜬다. */
+  amount: z.number().nullish(),
 });
 export type ReservationBar = z.infer<typeof reservationBarSchema>;
 
@@ -277,13 +278,19 @@ export type OpsTask = z.infer<typeof opsTaskSchema>;
 
 // --- 리포트 (P4 16주차) --------------------------------------------------------
 
-/** 채널 하나의 몫. 서버가 매출 내림차순으로 보낸다. */
+/**
+ * 채널 하나의 몫. 서버가 매출 내림차순으로 보낸다.
+ *
+ * **금액 미상이면 키가 빠진다.** 이 채널에 미상 예약이 있으면 `revenue` 가, 기간에
+ * 미상이 하나라도 있으면 모든 채널의 `revenueShare` 가 없다(작업지시-16).
+ */
 export const channelShareSchema = z.object({
   channelCode: z.string(),
   reservations: z.number(),
-  revenue: z.number(),
+  revenue: z.number().nullish(),
   /** 0.0 ~ 1.0. 전체 매출이 0이면 0이다. */
-  revenueShare: z.number(),
+  revenueShare: z.number().nullish(),
+  unknownReservations: z.number().default(0),
 });
 export type ChannelShare = z.infer<typeof channelShareSchema>;
 
@@ -295,16 +302,23 @@ export type ChannelShare = z.infer<typeof channelShareSchema>;
  * **분모가 0이면 서버가 0을 보낸다.** 예약이 없는 기간을 보는 것은 정상이고 —
  * 새 숙소를 등록한 직후가 그렇다 — 그때 화면이 터지면 안 된다. "값이 없다"와
  * "0이다"를 구분해 보여 주는 것이 화면의 몫이라 `soldNights` 를 함께 받는다.
+ *
+ * **금액 미상이면 `adr`·`revPar` 키가 빠진다.** iCal 예약은 금액이 없고, 기간에 그런
+ * 박이 하나라도 있으면 서버가 계산하지 않는다(작업지시-16 5절 2번). 분모 0(0 이 온다)과
+ * 미상(키가 없고 `unknownAmountNights > 0`)은 다른 상태다.
  */
 export const reportMetricsSchema = z.object({
   soldNights: z.number(),
   availableNights: z.number(),
+  /** 확인된 금액의 합. 미상 박은 들어 있지 않다. */
   roomRevenue: z.number(),
   occupancyRate: z.number(),
-  adr: z.number(),
-  revPar: z.number(),
+  adr: z.number().nullish(),
+  revPar: z.number().nullish(),
   leadTimeDays: z.number(),
   cancellationRate: z.number(),
+  unknownAmountReservations: z.number().default(0),
+  unknownAmountNights: z.number().default(0),
   channelMix: z.array(channelShareSchema).default([]),
 });
 export type ReportMetrics = z.infer<typeof reportMetricsSchema>;

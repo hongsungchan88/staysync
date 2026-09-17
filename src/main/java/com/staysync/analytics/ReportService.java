@@ -66,18 +66,24 @@ public class ReportService {
         BookingStatistics.CancellationCounts cancels =
                 statistics.cancellationCounts(propertyIds, from, to);
 
+        // 미상 박이 하나라도 있으면 매출이 전체가 아니다. 그 위에서 단가를 구하면
+        // 그럴듯한 작은 숫자가 나온다(ADR 8원). 계산하지 않는다 — 작업지시-16 5절 2번.
+        boolean amountUnknown = sold.unknownNights() > 0;
+
         return new ReportMetrics(
                 sold.nights(),
                 availableNights,
                 sold.revenue(),
                 ratio(BigDecimal.valueOf(sold.nights()), BigDecimal.valueOf(availableNights)),
-                ratio(sold.revenue(), BigDecimal.valueOf(sold.nights())),
-                ratio(sold.revenue(), BigDecimal.valueOf(availableNights)),
+                amountUnknown ? null : ratio(sold.revenue(), BigDecimal.valueOf(sold.nights())),
+                amountUnknown ? null : ratio(sold.revenue(), BigDecimal.valueOf(availableNights)),
                 statistics.averageLeadTimeDays(propertyIds, from, to)
                         .setScale(1, RoundingMode.HALF_UP),
                 ratio(BigDecimal.valueOf(cancels.cancelled()),
                         BigDecimal.valueOf(cancels.total())),
-                channelMix(propertyIds, from, to, sold.revenue()));
+                sold.unknownReservations(),
+                sold.unknownNights(),
+                channelMix(propertyIds, from, to, sold.revenue(), amountUnknown));
     }
 
     /**
@@ -98,14 +104,21 @@ public class ReportService {
         return units * days;
     }
 
-    /** 채널별 비중. 건수와 매출은 booking 이 세고, 나누는 것만 여기서 한다. */
+    /**
+     * 채널별 비중. 건수와 매출은 booking 이 세고, 나누는 것만 여기서 한다.
+     *
+     * <p>미상 예약이 있는 채널의 매출은 미상이고, 기간에 미상이 하나라도 있으면
+     * 어느 채널의 비중도 구하지 않는다 — 분모(전체 매출)를 모르기 때문이다.
+     */
     private List<ChannelShare> channelMix(List<Long> propertyIds, LocalDate from, LocalDate to,
-                                          BigDecimal totalRevenue) {
+                                          BigDecimal totalRevenue, boolean amountUnknown) {
         List<ChannelShare> mix = new ArrayList<>();
         for (BookingStatistics.ChannelVolume volume
                 : statistics.channelVolumes(propertyIds, from, to)) {
             mix.add(new ChannelShare(volume.channelCode(), volume.reservations(),
-                    volume.revenue(), ratio(volume.revenue(), totalRevenue)));
+                    volume.unknownReservations() > 0 ? null : volume.revenue(),
+                    amountUnknown ? null : ratio(volume.revenue(), totalRevenue),
+                    volume.unknownReservations()));
         }
         return mix;
     }
@@ -136,6 +149,6 @@ public class ReportService {
 
     private static ReportMetrics empty() {
         return new ReportMetrics(0, 0, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
-                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, List.of());
+                BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, 0, 0, List.of());
     }
 }

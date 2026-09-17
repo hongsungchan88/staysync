@@ -31,8 +31,9 @@ public class ReservationNight {
     @Column(name = "unit_id", nullable = false)
     private Long unitId;
 
-    @Column(nullable = false)
-    private BigDecimal price = BigDecimal.ZERO;
+    /** 예약의 총액을 나눈 값. 예약이 금액 미상이면 박도 {@code null} 이다(V9). */
+    @Column
+    private BigDecimal price;
 
     protected ReservationNight() {
     }
@@ -57,6 +58,14 @@ public class ReservationNight {
     public static List<ReservationNight> split(Long reservationId, Long unitId,
                                                StayPeriod period, BigDecimal totalAmount) {
         List<LocalDate> nights = period.nightDates();
+        if (totalAmount == null) {
+            // 모르는 금액은 나눌 수 없다. 0 으로 나누면 리포트가 0 원짜리 박으로 센다.
+            List<ReservationNight> rows = new ArrayList<>(nights.size());
+            for (LocalDate night : nights) {
+                rows.add(new ReservationNight(reservationId, night, unitId, null));
+            }
+            return rows;
+        }
         BigDecimal total = totalAmount.setScale(2, RoundingMode.HALF_UP);
         BigDecimal each = total.divide(BigDecimal.valueOf(nights.size()), 2, RoundingMode.DOWN);
         BigDecimal remainder = total.subtract(each.multiply(BigDecimal.valueOf(nights.size())));

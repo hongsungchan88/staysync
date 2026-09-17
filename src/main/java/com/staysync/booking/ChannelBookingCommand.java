@@ -26,6 +26,8 @@ import java.time.LocalDate;
  *                         {@code null} 이고, 그때는 게스트를 만들지 않는다.
  *                         연락처는 받지 않는다 — 채널이 주지도 않고, 받으면
  *                         암호화 경계를 우회하는 두 번째 입구가 된다(ADR 0007)
+ * @param totalAmount      채널이 준 총액. {@code null} 은 금액 미상이고 그대로 저장된다.
+ *                         0 으로 바꾸지 않는다(작업지시-16 5절 1번)
  * @param revision         채널 측 수정 버전. 낮은 것이 나중에 와도 무시된다
  * @param cancellation     취소 통지면 참
  */
@@ -48,9 +50,6 @@ public record ChannelBookingCommand(
         if (channelBookingId == null || channelBookingId.isBlank()) {
             // 멱등성 키가 없으면 같은 예약이 올 때마다 새 예약이 된다.
             throw new IllegalArgumentException("채널 예약번호는 필수입니다. 멱등성 키로 쓰입니다.");
-        }
-        if (totalAmount == null) {
-            totalAmount = BigDecimal.ZERO;
         }
     }
 

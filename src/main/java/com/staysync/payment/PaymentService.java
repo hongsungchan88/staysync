@@ -101,6 +101,11 @@ public class PaymentService {
             // 이미 확정됐거나 만료·취소된 예약이다. 결제창을 열 이유가 없다.
             throw new NotPayableException(reservation.status());
         }
+        if (reservation.totalAmount() == null) {
+            // 금액 미상(V9)은 채널 예약에만 생기고 HOLD 는 위젯 견적으로만 만들어지므로
+            // 여기 닿을 길이 없다. 그래도 모르는 금액으로 결제창을 여는 일은 막는다.
+            throw new NotPayableException("UNKNOWN_AMOUNT");
+        }
 
         String paymentId = newPaymentId();
         payments.save(Payment.pending(reservation.id(), paymentId, reservation.totalAmount()));

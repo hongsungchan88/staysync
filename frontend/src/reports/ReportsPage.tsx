@@ -19,6 +19,10 @@ import { Input } from '@/components/ui/input';
  *
  * `RevPAR = ADR × 점유율` 이 성립한다 — 점유율과 RevPAR 의 분모가 같은 값이기
  * 때문이다. 셋을 나란히 놓는 이유가 그것이고, 서버 테스트가 그 항등식을 잡고 있다.
+ *
+ * **금액 미상은 0 이 아니다.** iCal 예약은 금액이 없고, 기간에 그런 박이 하나라도
+ * 있으면 서버가 ADR·RevPAR 를 보내지 않는다(작업지시-16). 그 칸에는 숫자 대신 미상
+ * 건수를 적고, 객실 매출은 "확인된 금액"임을 밝힌다. 0원으로 찍으면 거짓이다.
  */
 export function ReportsPage() {
   const [range, setRange] = useState(() => currentMonth());
@@ -108,15 +112,26 @@ export function ReportsPage() {
               이 기간에 판매된 객실박이 없습니다. 아래 지표는 모두 0입니다.
             </p>
           )}
+          {m.unknownAmountNights > 0 && (
+            <p
+              role="status"
+              data-testid="unknown-amount-notice"
+              className="rounded-md border border-rule bg-sand/40 p-3 text-sm text-muted"
+            >
+              금액을 모르는 예약이 {m.unknownAmountReservations}건({m.unknownAmountNights}박)
+              있습니다. 에어비앤비 iCal 은 금액을 주지 않습니다. ADR·RevPAR 와 채널 비중은
+              계산하지 않고, 객실 매출은 확인된 금액만 더한 값입니다.
+            </p>
+          )}
 
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-3" aria-label="지표">
             <Metric label="점유율" value={percent(m.occupancyRate)} testId="metric-occupancy">
               판매된 {m.soldNights} / 판매 가능 {m.availableNights} 객실박
             </Metric>
-            <Metric label="ADR" value={won(m.adr)} testId="metric-adr">
+            <Metric label="ADR" value={wonOrUnknown(m.adr, m)} testId="metric-adr">
               객실 매출 ÷ 판매된 객실박
             </Metric>
-            <Metric label="RevPAR" value={won(m.revPar)} testId="metric-revpar">
+            <Metric label="RevPAR" value={wonOrUnknown(m.revPar, m)} testId="metric-revpar">
               ADR × 점유율과 같다
             </Metric>
             <Metric
@@ -134,7 +149,9 @@ export function ReportsPage() {
               숙박 기준. 만료된 홀드는 세지 않는다
             </Metric>
             <Metric label="객실 매출" value={won(m.roomRevenue)} testId="metric-revenue">
-              확정 이상만. HOLD 는 세지 않는다
+              {m.unknownAmountNights > 0
+                ? `확인된 금액만. 미상 ${m.unknownAmountNights}박은 빠져 있다`
+                : '확정 이상만. HOLD 는 세지 않는다'}
             </Metric>
           </section>
 
@@ -191,8 +208,13 @@ function ChannelMix({ mix }: { mix: ChannelShare[] }) {
                 */}
                 <td className="py-1 text-ink">{channelLabel(share.channelCode)}</td>
                 <td className="py-1 text-right text-ink">{share.reservations}건</td>
-                <td className="py-1 text-right text-ink">{won(share.revenue)}</td>
-                <td className="py-1 text-right text-muted">{percent(share.revenueShare)}</td>
+                {/* 이 채널에 미상 예약이 있으면 매출을 모르고, 기간에 미상이 있으면 비중을 모른다. */}
+                <td className="py-1 text-right text-ink">
+                  {share.revenue == null ? `미상 ${share.unknownReservations}건` : won(share.revenue)}
+                </td>
+                <td className="py-1 text-right text-muted">
+                  {share.revenueShare == null ? '—' : percent(share.revenueShare)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -211,6 +233,17 @@ function percent(rate: number): string {
 
 function won(amount: number): string {
   return `${Math.round(amount).toLocaleString('ko-KR')}원`;
+}
+
+/**
+ * 서버가 계산하지 않은 지표. 키가 없으면 미상이고 0 이면 분모가 0 인 것이다 —
+ * 둘을 같은 "0원"으로 찍으면 안 된다.
+ */
+function wonOrUnknown(
+  amount: number | null | undefined,
+  m: { unknownAmountReservations: number },
+): string {
+  return amount == null ? `금액 미상 ${m.unknownAmountReservations}건 — 계산하지 않음` : won(amount);
 }
 
 /**

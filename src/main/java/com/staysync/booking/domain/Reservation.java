@@ -49,8 +49,13 @@ public class Reservation {
     @Column(nullable = false)
     private short children = 0;
 
-    @Column(name = "total_amount", nullable = false)
-    private BigDecimal totalAmount = BigDecimal.ZERO;
+    /**
+     * 총액. <b>{@code null} 은 "모른다"이고 0 이 아니다.</b> iCal 처럼 금액을 주지 않는
+     * 채널의 예약이 그렇다(V9, 작업지시-16). 읽는 쪽은 0 과 구분해야 한다 — 합계에서는
+     * 빠지고, 단가·비중은 계산하지 않는다.
+     */
+    @Column(name = "total_amount")
+    private BigDecimal totalAmount;
 
     @Column(name = "channel_commission", nullable = false)
     private BigDecimal channelCommission = BigDecimal.ZERO;
@@ -96,7 +101,9 @@ public class Reservation {
         r.channelBookingId = channelBookingId;
         r.revision = revision;
         r.totalAmount = totalAmount;
-        r.channelCommission = totalAmount.multiply(commissionRate);
+        // 모르는 금액의 수수료도 모른다. 컬럼이 NOT NULL 이라 0 을 두되, 값을 넣는 유일한
+        // 경로가 어차피 0 을 넘긴다(ReportMetrics 의 순수익률을 만들지 않은 이유).
+        r.channelCommission = totalAmount == null ? BigDecimal.ZERO : totalAmount.multiply(commissionRate);
         return r;
     }
 
@@ -173,6 +180,7 @@ public class Reservation {
         return revision;
     }
 
+    /** {@code null} 이면 금액 미상이다. 0 으로 읽지 말 것. */
     public BigDecimal getTotalAmount() {
         return totalAmount;
     }
