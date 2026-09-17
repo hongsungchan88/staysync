@@ -259,6 +259,28 @@ describe('직접예약 위젯', () => {
     expect(screen.queryByText('ABC12345')).not.toBeInTheDocument();
   });
 
+  it('서버가 속도 제한으로 거절하면 그 메시지를 보여 주고 홀드로 넘어가지 않는다', async () => {
+    // 작업지시-18 D. 서버가 실제로 보내는 모양 그대로 — GlobalExceptionHandler 의 ApiError 다.
+    serve([객실], () =>
+      json(
+        { code: 'HOLD_RATE_LIMITED', message: '예약 요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요.', details: [] },
+        429,
+      ),
+    );
+    render(<WidgetPage />, { wrapper });
+
+    await 날짜를_고른다();
+    await userEvent.click(await screen.findByRole('radio'));
+    await userEvent.type(screen.getByLabelText('이름'), '김손님');
+    await userEvent.type(screen.getByLabelText('이메일'), 'guest@example.com');
+    await userEvent.click(screen.getByRole('button', { name: '예약 잡기' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('예약 요청이 너무 잦습니다');
+    expect(screen.queryByText('ABC12345')).not.toBeInTheDocument();
+    // 다시 시도할 수 있어야 한다 — 잠시 뒤에는 된다.
+    expect(screen.getByRole('button', { name: '예약 잡기' })).toBeEnabled();
+  });
+
   it('결제창에 서버가 준 값을 그대로 넘긴다', async () => {
     serve([객실], 홀드성공);
     결제창(undefined);

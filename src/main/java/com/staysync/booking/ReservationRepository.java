@@ -160,14 +160,21 @@ public interface ReservationRepository extends JpaRepository<Reservation, Long> 
                         @Param("from") LocalDate from,
                         @Param("to") LocalDate to);
 
-    /** 조직 스코핑된 목록. reservation 에는 org_id 가 없어 property 를 거쳐 좁힌다. */
+    /**
+     * 조직 스코핑된 목록. reservation 에는 org_id 가 없어 property 를 거쳐 좁힌다.
+     *
+     * <p>{@code from}·{@code to} 는 {@code cast} 를 거친다. {@code :from is null} 만 있는
+     * 자리는 PostgreSQL 이 파라미터의 자료형을 정하지 못해 값을 주면
+     * "could not determine data type of parameter" 로 500 이 났다(작업지시-18 C,
+     * 확인-08 3절 3번). {@code status}·{@code channelCode} 는 enum·문자열이라 걸리지 않는다.
+     */
     @Query("""
             select r from Reservation r
             where r.propertyId in :propertyIds
               and (:status is null or r.status = :status)
               and (:channelCode is null or r.channelCode = :channelCode)
-              and (:from is null or r.period.checkOut > :from)
-              and (:to is null or r.period.checkIn < :to)
+              and (cast(:from as LocalDate) is null or r.period.checkOut > :from)
+              and (cast(:to as LocalDate) is null or r.period.checkIn < :to)
             order by r.period.checkIn desc, r.id desc
             """)
     List<Reservation> search(@Param("propertyIds") List<Long> propertyIds,

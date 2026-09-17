@@ -99,6 +99,17 @@ public class OverbookingConflict {
         this.reservationIds = reservationIds.toArray(Long[]::new);
     }
 
+    /**
+     * 그날 겹치는 예약 목록을 최신으로 바꾼다. 같은 (판매 단위, 날짜)에 초과 예약이 또
+     * 오면 새 행 대신 이 행이 커진다(작업지시-18 B). OPEN 일 때만 부른다.
+     */
+    public void replaceReservationIds(List<Long> ids) {
+        if (!OPEN.equals(status)) {
+            throw new ConflictAlreadyResolvedException(id, status);
+        }
+        this.reservationIds = ids.toArray(Long[]::new);
+    }
+
     public Long getId() {
         return id;
     }

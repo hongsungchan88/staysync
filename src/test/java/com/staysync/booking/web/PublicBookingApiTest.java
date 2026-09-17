@@ -175,6 +175,7 @@ class PublicBookingApiTest extends ApiTestBase {
         Fixture 남의것 = 숙소하나();
 
         mvc.perform(post("/public/booking/" + 내것.propertyId() + "/hold")
+                        .header("X-Forwarded-For", 내것.ip())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"unitId":%d,"checkIn":"%s","checkOut":"%s",
@@ -183,14 +184,98 @@ class PublicBookingApiTest extends ApiTestBase {
                 .andExpect(status().isNotFound());
     }
 
+    // --- 작업지시-18 D. 속도 제한 (완료 조건 9·10) ---------------------------------
+
+    @Test
+    @DisplayName("한 IP 가 창 안에서 상한을 넘으면 429 이고 HOLD 가 생기지 않는다. 다른 IP 는 그대로 된다")
+    void 상한을_넘으면_429_이고_다른_IP_는_된다() throws Exception {
+        // 속도 제한은 서비스 앞이라 결과(201/409)와 무관하게 요청을 센다 — 날짜를 바꿔
+        // 가며 잡는 손님과 스크립트가 같은 모양이기 때문이다. 재고를 넉넉히 둬서 다섯
+        // 번째까지 실제로 잡히게 한다.
+        Fixture f = 숙소하나((short) 9);
+        for (int i = 1; i <= 5; i++) {
+            홀드(f, 200_000, "손님" + i).andExpect(status().isCreated());
+        }
+        long 전 = 홀드_수(f);
+
+        홀드(f, 200_000, "여섯번째")
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("HOLD_RATE_LIMITED"))
+                .andExpect(jsonPath("$.message").value("예약 요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요."));
+
+        org.assertj.core.api.Assertions.assertThat(홀드_수(f))
+                .as("거절된 요청은 HOLD 를 만들지 않는다")
+                .isEqualTo(전);
+
+        // 다른 손님(다른 IP)은 그 사이에도 된다. 전역 차단이 아니다.
+        mvc.perform(post("/public/booking/" + f.propertyId() + "/hold")
+                        .header("X-Forwarded-For", "203.0.113.9")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(홀드본문(f, "다른 손님")))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("X-Forwarded-For 가 있으면 그 주소로 가르고, 없으면 접속 주소로 센다")
+    void 전달_헤더로_IP_를_가른다() throws Exception {
+        // Caddy 뒤에서는 모든 요청의 접속 주소가 Caddy 하나다. 전달 헤더를 안 풀면 한 사람이
+        // 다섯 번 누른 뒤 모든 손님이 막힌다(작업지시-18 4절). 헤더가 없는 요청(로컬 직접
+        // 접속)은 접속 주소로 센다 — 위조가 아니라 프록시가 없는 것이다.
+        Fixture f = 숙소하나((short) 9);
+        String 프록시 = "172.19.0.4";   // Caddy 컨테이너 같은 내부 주소
+
+        for (int i = 1; i <= 5; i++) {
+            프록시를_거친_홀드(f, 프록시, "203.0.113.1", "첫 손님 " + i).andExpect(status().isCreated());
+        }
+        // 같은 프록시를 거쳤지만 다른 손님이다.
+        프록시를_거친_홀드(f, 프록시, "203.0.113.2", "둘째 손님").andExpect(status().isCreated());
+        // 첫 손님은 막힌다.
+        프록시를_거친_홀드(f, 프록시, "203.0.113.1", "첫 손님 여섯 번째")
+                .andExpect(status().isTooManyRequests());
+        // 헤더가 없으면 접속 주소(프록시 주소 자체)로 센다. 아직 한 번도 안 셌으니 된다.
+        프록시를_거친_홀드(f, 프록시, null, "헤더 없는 손님").andExpect(status().isCreated());
+    }
+
+    private org.springframework.test.web.servlet.ResultActions 프록시를_거친_홀드(
+            Fixture f, String remoteAddr, String forwardedFor, String guestName) throws Exception {
+        var request = post("/public/booking/" + f.propertyId() + "/hold")
+                .with(r -> { r.setRemoteAddr(remoteAddr); return r; })
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(홀드본문(f, guestName));
+        if (forwardedFor != null) {
+            request.header("X-Forwarded-For", forwardedFor);
+        }
+        return mvc.perform(request);
+    }
+
+    private String 홀드본문(Fixture f, String guestName) {
+        return """
+                {"unitId":%d,"checkIn":"%s","checkOut":"%s",
+                 "quotedAmount":200000,"adults":2,"children":0,"guestName":"%s"}
+                """.formatted(f.unitId(), 체크인, 체크아웃, guestName);
+    }
+
+    private long 홀드_수(Fixture f) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM reservation WHERE property_id = ? AND status = 'HOLD'",
+                Long.class, f.propertyId());
+    }
+
     // --- 픽스처 ---------------------------------------------------------------
 
-    private record Fixture(Long propertyId, Long unitId) {
+    /**
+     * @param ip 이 손님의 IP. 배포 환경에서는 Caddy 가 {@code X-Forwarded-For} 로 붙이고
+     *           {@code forward-headers-strategy: framework} 가 {@code getRemoteAddr()} 로
+     *           풀어 준다. 픽스처마다 다르게 준다 — 전부 MockMvc 기본값(127.0.0.1)이면
+     *           이 파일의 홀드 열한 번이 한 IP 로 세어져 여섯 번째부터 429 다
+     */
+    private record Fixture(Long propertyId, Long unitId, String ip) {
     }
 
     private org.springframework.test.web.servlet.ResultActions 홀드(
             Fixture f, int amount, String guestName) throws Exception {
         return mvc.perform(post("/public/booking/" + f.propertyId() + "/hold")
+                .header("X-Forwarded-For", f.ip())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
                         {"unitId":%d,"checkIn":"%s","checkOut":"%s",
@@ -204,6 +289,10 @@ class PublicBookingApiTest extends ApiTestBase {
 
     /** 숙소와 1실짜리 판매 단위 하나. 기본 요금 10만원이다. */
     private Fixture 숙소하나() throws Exception {
+        return 숙소하나((short) 1);
+    }
+
+    private Fixture 숙소하나(short totalUnits) throws Exception {
         Session 세션 = 가입(새이메일());
         MvcResult property = mvc.perform(post("/api/properties")
                         .header(HttpHeaders.AUTHORIZATION, 세션.bearer())
@@ -218,13 +307,15 @@ class PublicBookingApiTest extends ApiTestBase {
                         .header(HttpHeaders.AUTHORIZATION, 세션.bearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"name":"본채","unitKind":"ENTIRE_PLACE","totalUnits":1,
+                                {"name":"본채","unitKind":"ENTIRE_PLACE","totalUnits":%d,
                                  "basePrice":100000}
-                                """))
+                                """.formatted(totalUnits)))
                 .andExpect(status().isCreated())
                 .andReturn();
         Long unitId = json.readTree(unit.getResponse().getContentAsString()).get("id").asLong();
 
-        return new Fixture(propertyId, unitId);
+        // 문서용 대역(TEST-NET-2). 숙소 식별자로 갈라 픽스처마다 다른 손님이 된다.
+        return new Fixture(propertyId, unitId,
+                "198.51." + (propertyId / 250 % 256) + "." + (propertyId % 250 + 1));
     }
 }

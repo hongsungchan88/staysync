@@ -4,6 +4,7 @@ import com.staysync.booking.PublicBookingService;
 import com.staysync.booking.PublicBookingService.HoldResult;
 import com.staysync.booking.PublicBookingService.PublicAvailability;
 import com.staysync.booking.domain.StayPeriod;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -11,6 +12,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -29,10 +31,15 @@ import org.springframework.web.bind.annotation.*;
  * 금액뿐이다.</b> 나머지는 서버가 다시 구한다. 금액은 신뢰해서 쓰는 값이 아니라
  * <b>대조용</b>이다 — 다르면 거절한다.
  *
- * <h2>속도 제한이 없다. 열린 구멍이고 알고 남긴다</h2>
+ * <h2>속도 제한 — {@link PublicHoldRateLimiter}</h2>
  *
  * <p>{@code POST /hold} 는 로그인 없이 재고를 15분씩 잡는다. 스크립트로 반복하면 그
- * 숙소의 판매 가능 날짜를 계속 비워 둘 수 있다. 결제까지 가지 않아도 된다.
+ * 숙소의 판매 가능 날짜를 계속 비워 둘 수 있다. 결제까지 가지 않아도 된다. 16주차에는
+ * 알고 남긴 구멍이었고 <b>작업지시-18 에서 IP 당 시간 창(시작값 10분 5건)으로 막았다.</b>
+ * 판정은 서비스(락·트랜잭션)에 들어가기 전이다. 클라이언트 IP 는 Caddy 가 붙인
+ * {@code X-Forwarded-For} 를 {@code server.forward-headers-strategy: framework} 가
+ * {@code getRemoteAddr()} 로 풀어 준 값이다 — 이게 없으면 모든 요청이 Caddy 의 Docker
+ * 주소로 보여 <b>한 사람이 다섯 번 누르면 모든 손님이 막힌다.</b>
  *
  * <p>작업지시 13 의 5절 4번은 <b>3주차 로그인 시도 제한을 재사용</b>하되 재사용이
  * 안 되면 이번 주에 하지 말라고 정했다. 확인해 보니 재사용이 안 된다.
@@ -48,20 +55,19 @@ import org.springframework.web.bind.annotation.*;
  *       위젯 쪽을 조정하면 로그인 잠금이 함께 바뀐다</li>
  * </ol>
  *
- * <p>셋을 넘으려면 속도 제한기를 새로 세워야 하고, 그건 축소 순서 1번 기능에
- * 인프라를 더하는 일이다. <b>만들지 않았다.</b> 계획서 15.1 에 미조치 항목으로 적었다.
- *
- * <p>덧붙여, 넣었더라도 구멍이 닫히지는 않는다. <b>IP 는 바꿀 수 있다.</b> 얇은 한
- * 겹이었을 것이고 그렇게 적는다.
+ * <p>그래서 따로 세웠다. <b>IP 는 바꿀 수 있다.</b> 여러 IP 로 나눠 오는 공격은 막지
+ * 못하는 얇은 한 겹이고 그렇게 적는다(작업지시-18 5절 2번).
  */
 @RestController
 @RequestMapping("/public/booking")
 class PublicBookingController {
 
     private final PublicBookingService service;
+    private final PublicHoldRateLimiter rateLimiter;
 
-    PublicBookingController(PublicBookingService service) {
+    PublicBookingController(PublicBookingService service, PublicHoldRateLimiter rateLimiter) {
         this.service = service;
+        this.rateLimiter = rateLimiter;
     }
 
     @GetMapping("/{propertyId}/availability")
@@ -79,7 +85,12 @@ class PublicBookingController {
      */
     @PostMapping("/{propertyId}/hold")
     ResponseEntity<HoldResult> hold(@PathVariable Long propertyId,
-                                    @Valid @RequestBody HoldRequest request) {
+                                    @Valid @RequestBody HoldRequest request,
+                                    HttpServletRequest http) {
+        // 락과 트랜잭션에 들어가기 전에 판정한다. 넘으면 HOLD 가 생기지 않는다.
+        if (!rateLimiter.tryAcquire(http.getRemoteAddr(), Instant.now())) {
+            throw new HoldRateLimitedException();
+        }
         HoldResult result = service.hold(propertyId, request.unitId(),
                 new StayPeriod(request.checkIn(), request.checkOut()),
                 request.quotedAmount(), request.adults(), request.children(),

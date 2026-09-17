@@ -3,6 +3,7 @@ package com.staysync.booking;
 import com.staysync.booking.domain.OverbookingConflict;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -26,6 +27,20 @@ public interface OverbookingConflictRepository extends JpaRepository<Overbooking
                                          @Param("to") LocalDate to);
 
     List<OverbookingConflict> findByUnitIdOrderByStayDateAsc(Long unitId);
+
+    /**
+     * (판매 단위, 날짜)의 OPEN 충돌. 유일 인덱스가 없어(작업지시-18 5절 3번) 수신부가
+     * 먼저 조회해 있으면 그 행을 키운다. 판매 단위 락 안에서만 불리므로 둘이 동시에
+     * 만들 일은 없다.
+     */
+    @Query("""
+            select c from OverbookingConflict c
+            where c.unitId = :unitId
+              and c.stayDate = :stayDate
+              and c.status = 'OPEN'
+            """)
+    Optional<OverbookingConflict> findOpenOn(@Param("unitId") Long unitId,
+                                             @Param("stayDate") LocalDate stayDate);
 
     /**
      * 조직이 아직 풀지 않은 충돌 전부. 관리 화면이 쓴다.

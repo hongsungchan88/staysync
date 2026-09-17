@@ -170,6 +170,11 @@ class ChannelBookingWriter {
      * 피드에서 뺀다(조사-02 7절 4번) — 그것은 취소가 아니라 과거다. 거르지 않으면 모든
      * 채널 예약이 체크아웃 다음 날 CANCELLED 가 되어 취소율이 거짓이 된다. 날짜의 기준은
      * 숙소가 있는 곳의 오늘이다(컨테이너 시계는 UTC 다).
+     *
+     * <p><b>투숙 중(CHECKED_IN) 예약도 건드리지 않는다</b>(작업지시-18 5절 1번). "피드에
+     * 안 보인다"는 추정이고, 손님은 실제로 숙소에 있다. 추정으로 취소하면 재고가 풀려
+     * 손님이 있는 방이 다시 팔린다. 경고만 남기고 호스트가 처리한다. 명시적 취소
+     * 통지({@code command.cancellation()})는 이 자리가 아니라 그대로 취소된다.
      */
     @Transactional
     int cancelMissing(Long unitId, String channelCode, java.util.Set<String> present) {
@@ -180,6 +185,13 @@ class ChannelBookingWriter {
                 continue;
             }
             if (!reservation.getPeriod().checkOut().isAfter(today)) {
+                continue;
+            }
+            if (reservation.getStatus() == ReservationStatus.CHECKED_IN) {
+                log.warn("투숙 중인 예약이 발행물에서 사라졌다. 취소하지 않는다 — 호스트가 확인해야 한다. "
+                                + "channel={} bookingId={} reservationId={} checkOut={}",
+                        channelCode, reservation.getChannelBookingId(), reservation.getId(),
+                        reservation.getPeriod().checkOut());
                 continue;
             }
             reservationWriter.cancel(reservation.getId());
@@ -317,11 +329,27 @@ class ChannelBookingWriter {
         return shortDates;
     }
 
+    /**
+     * 날짜마다 충돌 한 행. <b>(판매 단위, 날짜)에 OPEN 충돌이 이미 있으면 그 행의 예약
+     * 목록을 갱신하고 새 행을 만들지 않는다</b>(작업지시-18 B). 초과 예약이 둘이면
+     * 카드가 둘 뜨고, 먼저 생긴 카드는 적은 예약을 담은 낡은 스냅샷으로 남으며, 하나를
+     * 해소해도 다른 하나가 열려 있었다. 해소된 행은 기록이라 건드리지 않는다 —
+     * 해소 뒤 새 초과 예약이 오면 새 행이 맞다.
+     *
+     * <p>먼저 조회해 분기한다. 유일 제약으로 막고 위반을 잡는 방식은 트랜잭션 안에서
+     * rollback-only 가 되어 죽는다(14주차). 경합은 판매 단위 락 안이라 없다.
+     */
     private void raiseConflicts(Reservation reservation, List<LocalDate> dates) {
         for (LocalDate date : dates) {
-            conflicts.save(new OverbookingConflict(
-                    reservation.getPropertyId(), reservation.getUnitId(), date,
-                    overlappingIds(reservation, date)));
+            List<Long> ids = overlappingIds(reservation, date);
+            OverbookingConflict open = conflicts.findOpenOn(reservation.getUnitId(), date)
+                    .orElse(null);
+            if (open == null) {
+                conflicts.save(new OverbookingConflict(
+                        reservation.getPropertyId(), reservation.getUnitId(), date, ids));
+            } else {
+                open.replaceReservationIds(ids);
+            }
         }
     }
 
