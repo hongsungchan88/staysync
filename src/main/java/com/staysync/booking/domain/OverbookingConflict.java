@@ -50,6 +50,13 @@ public class OverbookingConflict {
     /** 실제 추가 객실이 있어 관리자가 허용한다. 재고를 그대로 둔다. */
     public static final String ABSORBED = "ABSORBED";
 
+    /**
+     * 사람이 아니라 시스템이 닫았다. 충돌에 걸린 예약이 취소·만료·이동되어 그날의 활성
+     * 예약이 실제 수량 이하가 됐을 때다(작업지시-18 9절 F). 사람이 고를 수 있는 넷에는
+     * 없다 — {@code resolvedBy} 가 비어 있는 것과 함께 자동 닫힘의 표식이다.
+     */
+    public static final String AUTO_CLOSED = "AUTO_CLOSED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -176,5 +183,10 @@ public class OverbookingConflict {
         this.resolvedBy = resolvedBy;
         this.resolvedAt = OffsetDateTime.now();
         this.memo = memo;
+    }
+
+    /** 초과가 풀려 시스템이 닫는다. 해소자는 없다. {@code ConflictCleanup} 만 부른다. */
+    public void closeAutomatically(String memo) {
+        resolve(AUTO_CLOSED, null, memo);
     }
 }

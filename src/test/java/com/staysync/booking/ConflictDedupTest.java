@@ -86,12 +86,11 @@ class ConflictDedupTest extends SyncTestBase {
     @Test
     @DisplayName("같은 예약의 날짜 수정이 두 번 와도 충돌이 늘지 않는다")
     void 수정이_두_번_와도_늘지_않는다() {
-        // 판매중지한 날이다. 초과 판매는 forceBook 이 원장의 총 수량을 올려 버려서 같은
-        // 예약의 두 번째 수정에서는 그 날이 더는 모자라지 않지만(반납한 자리가 남는다),
-        // 판매중지는 매번 "못 판다"라 수정 경로가 raiseConflicts 를 두 번 지난다.
+        // 9절 E 전에는 판매중지로 짰다 — forceBook 이 총수량을 올려 버려 두 번째 수정에서
+        // 그 날이 더는 모자라지 않았다. 이제 반납되면 초과분이 내려오고 정상 예약이 다시 그
+        // 방을 차지하므로, 두 번째 수정도 같은 날에서 모자라 raiseConflicts 를 다시 지난다.
         Fixture f = given("충돌-수정");
         intake.ingest(command(f, "M-0", 체크인, 체크아웃));
-        inventory.changeStopSell(f.unitId(), List.of(체크인, 체크아웃), true);
         Long 옮길것 = intake.ingest(command(f, "M-1", 체크인.plusDays(5), 체크인.plusDays(6), 1))
                 .reservationId();
         assertThat(열린충돌(f, 체크인)).isEmpty();
@@ -103,9 +102,9 @@ class ConflictDedupTest extends SyncTestBase {
         List<OverbookingConflict> open = 열린충돌(f, 체크인);
         assertThat(open).as("같은 (판매 단위, 날짜)에 OPEN 은 하나다").hasSize(1);
         assertThat(open.get(0).getReservationIds()).contains(옮길것);
-        // 하루 늘린 밤도 판매중지라 그날은 새 행 하나 — 날짜당 한 행이다.
-        assertThat(열린충돌(f, 체크아웃)).hasSize(1);
-        assertThat(conflicts.findByUnitIdOrderByStayDateAsc(f.unitId())).hasSize(2);
+        // 하루 늘린 밤은 아무도 없어 모자라지 않는다. 행은 여전히 하나다.
+        assertThat(열린충돌(f, 체크아웃)).isEmpty();
+        assertThat(conflicts.findByUnitIdOrderByStayDateAsc(f.unitId())).hasSize(1);
     }
 
     // --- 픽스처 -----------------------------------------------------------------
