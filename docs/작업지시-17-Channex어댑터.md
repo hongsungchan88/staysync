@@ -337,6 +337,30 @@ NR 25014098·FLEX-1 25014104·NR-BB 25060075, 전부 OBP, 1~2인). `test_connect
 **시험용 조직의 요금은 USD 숫자로 넣는다**(5절 2번의 EUR 자리에 USD). 화면은 "100원"으로 보인다 — 통화 불일치는
 그대로 8절에 남는다.
 
+### 8.1 브랜치 1 `feat/channex-connection` — A·D·E (09-21)
+
+**정한 것(32차 승인)** — 채널 코드 `BOOKING_COM`(어댑터 유형 `CHANNEX`), 수정 순서는 리비전 `inserted_at` 의 epoch 초,
+수신 주기 60초(Channex 전용 스케줄), ack 는 커밋 뒤. **에어비앤비가 Channex 로 오는 날 `ota_name` 으로 채널 코드를
+가르는 것은 이번 범위 밖이다** — 연결 하나의 채널 코드가 곧 예약의 채널 코드다.
+
+| 자리 | 내용 |
+|---|---|
+| `channel.adapter.channex.ChannexAdapter` | 레지스트리의 세 번째 등록자. 자격 증명 키 `api_key`·`property_id`, 주소는 `staysync.channel.channex.base-url`(기본 스테이징). **이 브랜치에서는 아무 기능도 선언·구현하지 않는다** — `pushAri` 는 `UnsupportedOperationException` |
+| `AdapterType.CHANNEX` | 선언을 **빈 집합**으로. P3 의 선언(PUSH 셋·WEBHOOK·PULL)은 화면용이었고 그대로 두면 구현 없는 기능을 워커가 부른다(E). 브랜치 2 가 `PUSH_*`, 3 이 `PULL_BOOKING` 을 더한다. `WEBHOOK_BOOKING` 은 끝까지 없다 |
+| `ChannelConnectionService.create` | CHANNEX 면 `api_key`·`property_id` 둘 다 있어야 한다 → 없으면 400 `CHANNEL_FIELD_MISSING`(`MissingChannelFieldException`). 없이 만들어지면 첫 전송에서야 `IllegalStateException` 이고 그건 워커 로그뿐이다 |
+| `ChannelConnectionService.addMapping` | CHANNEX 는 `externalRateId`(rate_plan_id) 필수(방만 매핑하면 채널이 안 켜진다). **D**: 같은 판매 단위가 반대편(iCal↔Channex) 연결에 매핑돼 있으면 409 `MAPPING_DOUBLE_INTAKE`(`DoubleIntakeMappingException`). 먼저 조회해 분기 — 연결이 달라 유니크 제약으로 잡을 모양이 아니다. Mock 은 어느 쪽과도 안 겹친다 |
+| 화면 | 연결 폼: CHANNEX 를 고르면 "Channex 숙소 식별자" 칸이 열리고 `credentials` 에 `api_key`+`property_id` 로 나간다. 매핑 폼: Channex 면 "요금제 식별자 (Channex 는 필수)". 오류는 서버 문장 그대로 |
+| 마이그레이션 | 없음. `external_rate_id` 컬럼은 V3 부터 있었다 |
+
+**테스트(새·바뀐 것)** — `ChannelApiTest` +2(D 양방향 409 + 거절된 쪽 안 남음 / 키 둘·요금제 필수·응답 마스킹),
+`AdapterContractTest` 셋 등록·Channex 선언 검사(+1), `ChannelAdapterRegistryTest`·`UnregisteredAdapterPollTest` 는
+세 종류가 다 등록되면서 전제가 깨져 **빈 레지스트리를 든 폴러**로 같은 것을 검증하게 바꿨다. 기존 "한 판매 단위를
+채널 여럿에" 테스트는 iCal+Channex 였는데 그게 이제 D 가 막는 조합이라 Mock+Channex 로. 프론트 +1(CHANNEX 선택 →
+숙소 식별자 칸, 요청 본문 둘).
+
+**결과** — 백엔드 **337** · 시뮬레이터 37 · 프론트 **112**(+1). `ModularityTest` 포함. 확인 문서는 `확인-10-Channex연동.md` 1절.
+Channex 에는 쓰지 않았다(실 API 는 브랜치 2 부터). 병합·배포 앞에서 멈췄다.
+
 ## 참고 — Channex 문서 (09-17 확인)
 
 - ARI: `POST /api/v1/availability`, `POST /api/v1/restrictions`. 요금은 "200.00" 문자열 또는

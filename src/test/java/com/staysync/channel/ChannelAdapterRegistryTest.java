@@ -68,7 +68,7 @@ class ChannelAdapterRegistryTest {
                 .as("iCal 은 날짜만 오간다. 요금을 보낼 수 없다")
                 .doesNotContain(Capability.PUSH_RATE)
                 .contains(Capability.PULL_BOOKING);
-        assertThat(registry.capabilitiesOf(AdapterType.CHANNEX))
+        assertThat(registry.capabilitiesOf(AdapterType.MOCK))
                 .contains(Capability.PUSH_RATE);
     }
 

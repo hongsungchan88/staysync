@@ -31,10 +31,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 class UnregisteredAdapterPollTest extends SyncTestBase {
 
     @Autowired
-    private ChannelBookingPoller poller;
+    private ChannelConnectionRepository connections;
 
     @Autowired
-    private ChannelAdapterRegistry registry;
+    private ChannelMappingRepository mappings;
+
+    @Autowired
+    private ChannelCredentialStore credentials;
+
+    @Autowired
+    private com.staysync.booking.ChannelBookingIntake intake;
 
     private ListAppender<ILoggingEvent> appender;
     private Logger pollerLogger;
@@ -56,15 +62,18 @@ class UnregisteredAdapterPollTest extends SyncTestBase {
     @Test
     @DisplayName("구현이 없는 채널은 기능 선언과 무관하게 폴링 대상이 아니다")
     void 구현이_없는_채널은_수집하지_않는다() {
-        assertThat(registry.isRegistered(AdapterType.CHANNEX))
-                .as("이 테스트의 전제다. Channex 어댑터가 붙으면 다른 종류로 바꿔야 한다")
-                .isFalse();
-        assertThat(registry.capabilitiesOf(AdapterType.CHANNEX))
+        // 작업지시-17 부터 세 종류가 전부 등록된다. 그래서 "구현 없는 종류"를 빈 레지스트리를
+        // 든 폴러로 만든다 — 폴러가 고르는 조건은 레지스트리를 보므로 그 자리가 검증 대상이다.
+        ChannelAdapterRegistry empty = new ChannelAdapterRegistry(java.util.List.of());
+        assertThat(empty.isRegistered(AdapterType.MOCK)).isFalse();
+        assertThat(empty.capabilitiesOf(AdapterType.MOCK))
                 .as("선언은 수집을 지원한다고 말한다. 그래서 선언만 보면 걸린다")
                 .contains(com.staysync.channel.port.Capability.PULL_BOOKING);
+        ChannelBookingPoller poller = new ChannelBookingPoller(
+                connections, mappings, empty, credentials, intake, true);
 
         Fixture fixture = given("미등록어댑터");
-        ChannelConnection connection = connect(fixture, "BOOKING_COM", AdapterType.CHANNEX,
+        ChannelConnection connection = connect(fixture, "BOOKING_COM", AdapterType.MOCK,
                 "http://localhost:1", "room-1");
 
         poller.pollAll();
@@ -78,7 +87,8 @@ class UnregisteredAdapterPollTest extends SyncTestBase {
                 .as("집었다가 실패하면 주기마다 한 줄씩 쌓여 진짜 경고를 덮는다")
                 .noneSatisfy(m -> assertThat(m).contains("채널 예약 수집에 실패했다"));
         assertThat(메시지들(Level.WARN))
-                .filteredOn(m -> m.contains("등록된 어댑터가 없는 채널"))
+                // 빈 레지스트리라 다른 테스트가 남긴 iCal 연결도 종류당 한 줄을 남긴다. MOCK 만 센다.
+                .filteredOn(m -> m.contains("등록된 어댑터가 없는 채널") && m.contains("type=MOCK"))
                 .as("조용히 넘기면 이 연결이 영영 동기화되지 않는 것을 아무도 모른다")
                 .hasSize(1);
     }

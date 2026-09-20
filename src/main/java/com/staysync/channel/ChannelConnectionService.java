@@ -1,5 +1,6 @@
 package com.staysync.channel;
 
+import com.staysync.channel.adapter.channex.ChannexAdapter;
 import com.staysync.channel.domain.ChannelConnection;
 import com.staysync.channel.domain.ChannelMapping;
 import com.staysync.channel.port.AdapterType;
@@ -103,6 +104,11 @@ public class ChannelConnectionService {
                 && connections.existsByPropertyIdAndChannelCode(propertyId, channelCode)) {
             throw new DuplicateChannelConnectionException(channelCode);
         }
+        if (adapterType == AdapterType.CHANNEX) {
+            // 둘 다 없으면 어댑터가 첫 호출에서야 실패하고 그 실패는 워커 로그에만 남는다.
+            requireCredential(credentials, ChannexAdapter.API_KEY);
+            requireCredential(credentials, ChannexAdapter.PROPERTY_ID);
+        }
 
         ChannelConnection saved = connections.save(new ChannelConnection(
                 propertyId, channelCode, adapterType, displayName,
@@ -196,8 +202,45 @@ public class ChannelConnectionService {
         if (mappings.existsByConnectionIdAndUnitId(connectionId, unitId)) {
             throw new DuplicateChannelMappingException(unitId);
         }
+        if (connection.getAdapterType() == AdapterType.CHANNEX
+                && (externalRateId == null || externalRateId.isBlank())) {
+            // Channex 는 요금제가 ARI 의 최소 단위다. 방만 매핑하면 채널이 켜지지 않는다.
+            throw new MissingChannelFieldException("요금제 식별자(externalRateId)");
+        }
+        rejectDoubleIntake(connection, unitId);
         return mappings.save(new ChannelMapping(connectionId, unitId, externalUnitId,
                 externalRateId, newExportToken()));
+    }
+
+    /**
+     * 같은 판매 단위에 iCal 과 Channex 를 함께 매핑하지 못하게 한다(작업지시-17 D).
+     *
+     * <p>에어비앤비가 Channex 를 거치면 같은 예약이 iCal 발행물로도 온다. 채널 코드가
+     * 달라 {@code uq_channel_booking} 이 못 막고 초과 판매 충돌로 뜬다(조사-04 5절 3번).
+     * Mock 은 시뮬레이터라 어느 쪽과도 겹치지 않는다. 먼저 조회해 분기한다 — 유니크
+     * 제약으로 잡을 수 있는 모양이 아니다(연결이 다르다).
+     */
+    private void rejectDoubleIntake(ChannelConnection connection, Long unitId) {
+        AdapterType mine = connection.getAdapterType();
+        if (mine != AdapterType.ICAL && mine != AdapterType.CHANNEX) {
+            return;
+        }
+        AdapterType other = mine == AdapterType.ICAL ? AdapterType.CHANNEX : AdapterType.ICAL;
+        for (ChannelMapping existing : mappings.findByUnitId(unitId)) {
+            boolean clashes = connections.findById(existing.getConnectionId())
+                    .map(c -> c.getAdapterType() == other)
+                    .orElse(false);
+            if (clashes) {
+                throw new DoubleIntakeMappingException(unitId, other);
+            }
+        }
+    }
+
+    private static void requireCredential(Map<String, String> credentials, String key) {
+        String value = credentials == null ? null : credentials.get(key);
+        if (value == null || value.isBlank()) {
+            throw new MissingChannelFieldException(key);
+        }
     }
 
     /**

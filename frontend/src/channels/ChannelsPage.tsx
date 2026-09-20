@@ -168,6 +168,9 @@ function CreateForm({
   const [adapterType, setAdapterType] = useState<AdapterType>('ICAL');
   const [displayName, setDisplayName] = useState('');
   const [secret, setSecret] = useState('');
+  // Channex 만 둘째 값이 있다 — Channex 쪽 숙소 식별자. 비밀은 아니지만 연결의 일부라
+  // 자격 증명과 같은 자리에 저장된다(작업지시-17 A).
+  const [channexPropertyId, setChannexPropertyId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const target = propertyId ?? properties[0]?.id ?? null;
@@ -176,6 +179,7 @@ function CreateForm({
     mutationFn: (input: ConnectionInput) => createChannel(target!, input),
     onSuccess: () => {
       setSecret('');
+      setChannexPropertyId('');
       setDisplayName('');
       setError(null);
       onCreated();
@@ -184,7 +188,9 @@ function CreateForm({
       setError(
         e instanceof ApiError && e.code === 'DUPLICATE_CHANNEL_CONNECTION'
           ? '이 숙소에 같은 채널이 이미 있습니다.'
-          : '연결을 만들지 못했습니다.',
+          : e instanceof ApiError && e.code === 'CHANNEL_FIELD_MISSING'
+            ? e.message
+            : '연결을 만들지 못했습니다.',
       ),
   });
 
@@ -201,7 +207,10 @@ function CreateForm({
           channelCode,
           adapterType,
           displayName: displayName || undefined,
-          credentials: { [credentialKey(adapterType)]: secret },
+          credentials:
+            adapterType === 'CHANNEX'
+              ? { [credentialKey(adapterType)]: secret, property_id: channexPropertyId }
+              : { [credentialKey(adapterType)]: secret },
         });
       }}
     >
@@ -263,6 +272,17 @@ function CreateForm({
             placeholder="저장하면 마스킹된 형태로만 보입니다"
           />
         </label>
+        {adapterType === 'CHANNEX' && (
+          <label className="col-span-2 text-xs text-muted">
+            Channex 숙소 식별자 (property_id)
+            <Input
+              className="mt-1"
+              value={channexPropertyId}
+              onChange={(event) => setChannexPropertyId(event.target.value)}
+              placeholder="Channex 콘솔의 숙소 UUID"
+            />
+          </label>
+        )}
       </div>
       {error && <p className="mt-2 text-xs text-warn">{error}</p>}
       <Button className="mt-3" variant="primary" type="submit" disabled={create.isPending}>
