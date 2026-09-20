@@ -165,7 +165,7 @@ SHA-256 해시로 저장하는 난수(14일)다. 갱신할 때마다 회전시�
 |---|---|---|
 | 1 | `UnitLock` (JVM 내부, 나중에 Redis) | 애플리케이션 수준 동시 진입 |
 | 2 | `SELECT ... FOR UPDATE`, **날짜 오름차순** | DB 동시 갱신, 교착 상태 |
-| 3 | `CHECK (booked + held <= total)` | 로직 결함이 통과했을 때 |
+| 3 | `CHECK (booked + held <= total + overbooked)` + `CHECK (overbooked = GREATEST(0, booked + held − total))` | 로직 결함이 통과했을 때 |
 | 4 | 충돌 감지 절차 | iCal 지연 등 원천 차단 불가 |
 
 **4계층이 P3 12주차부터 실제로 채워지고 13주차에 닫혔다.** 채널 수신이 재고를 넘겨
@@ -189,6 +189,16 @@ ADR 0002 결과 절이 예고한 자리다.
 - **OTA에서 이미 성사된 예약은 거절하지 않는다.** 재고가 없어도 받아들이고
   `overbooking_conflict`에 기록해 운영자가 해소하게 한다. 거절하면 게스트와 플랫폼
   양쪽에서 문제가 된다.
+- **초과분은 `overbooked_units` 이고 `total_units` 는 언제나 판매 단위의 실제 수량이다**
+  (V10, 작업지시-18 9절). 예전에는 `forceBook` 이 `total_units` 를 올렸고 반납돼도
+  내려오지 않아 초과가 한 번 있었던 날이 실제보다 하나 더 팔렸다 — 그 값이 ARI 로
+  채널에도 나갔다. 이제 `overbooked_units = GREATEST(0, booked + held − total)` 을 DB 가
+  등식으로 강제한다: `forceBook` 만 올리고, 반납되면 정확히 사라지며, 다른 경로가
+  수량을 넘기면 등식이 깨져 거부된다(3계층이 약해지지 않는다). `available()` 은 0 아래로
+  안 내려간다. **초과가 풀리면(취소·만료·이동) OPEN 충돌은 `ConflictCleanup` 이
+  `AUTO_CLOSED`(해소자 없음, 감사 SYSTEM)로 닫는다** — 반납 경로 다섯의 끝에서, 엔티티
+  상태가 확정된 뒤 부른다. 아직 초과면 예약 목록만 갱신. 사람이 UPGRADED·CANCELLED 로
+  닫은 것은 덮이지 않는다(해소가 먼저 RESOLVED 로 바꾼다).
 
 ## 채널 연동
 
@@ -272,6 +282,11 @@ ADR 0002 결과 절이 예고한 자리다.
   `reservation_night.price` 의 NOT NULL·DEFAULT 0 을 풀고, ICAL 어댑터 연결의 채널
   코드로 들어온 예약을 NULL 로 바로잡는다. **운영 데이터(에어비앤비 iCal 예약 55건·
   260박)를 고친 첫 마이그레이션이다**(2026-09-17, 작업지시-16 8절). 두 프로파일 모두 적용.
+- `db/migration/postgresql/V10__ledger_overbooked_units.sql` — `inventory_ledger.overbooked_units`,
+  `chk_no_oversell` 교체와 `chk_overbooked_exact`. 부푼 행을 판매 단위 수량으로 맞춘다.
+  **순서가 중요하다 — 옛 제약을 먼저 내리고 UPDATE 한다.** 반대면 부푼 행에서 실패한다.
+  `V10MigrationTest` 가 V9 상태의 부푼 행에 실제로 적용해 본다(별도 스키마). 운영 적용
+  2026-09-20, 부푼 행 0. 두 프로파일 모두 적용.
 
 `docker` 와 `prod` 는 V2 를 포함한다. **`prod` 가 pgvector 가 실제로 있는 첫 환경이다.**
 
@@ -662,6 +677,12 @@ ADR 13건(0012 에 고아 되살리기와 재동기화를 이어 적었다), 백
 업체 숙소 둘·판매 단위 셋, 에어비앤비 iCal 셋이 붙어 **55건·260박**이 들어와 있다
 (09-17 기준). 포트원 웹훅까지 판정됐다(확인-09 9절).
 
+**작업지시-18 9절 완료(2026-09-20, `e65f7c1` 배포, V10).** 초과 예약분을 `overbooked_units`
+로 분리하고(위 "중복예약 방어"), 초과가 풀리면 OPEN 충돌이 `AUTO_CLOSED` 로 닫힌다.
+백엔드 325건 + 시뮬레이터 37건 + 프론트 107건. 운영 DB 에 부푼 행은 없었다. 같이 보인
+것(작업지시-19 로) — 판매 단위 수량 변경(`PropertyService.updateUnit`)이 기존 원장
+행에 안 흘러간다. `changeTotalUnits` 호출자 없음.
+
 **작업지시-18 완료(2026-09-17, `f636c7d` 배포).** 결함 넷 — 투숙 중(CHECKED_IN) 예약이
 피드에서 빠져도 취소하지 않고 경고만(`cancelMissing`), **`Reservation.isActive()` 에
 CHECKED_IN 을 넣어** "재고를 차지하는 상태"의 정의를 하나로(그전에는 채널이 투숙 중
@@ -669,8 +690,8 @@ CHECKED_IN 을 넣어** "재고를 차지하는 상태"의 정의를 하나로(�
 OPEN 충돌은 한 행(`raiseConflicts` 가 먼저 조회해 갱신), `GET /api/reservations?from=`
 의 500(`cast(:from as LocalDate)`), 공개 HOLD 속도 제한(위). 백엔드 318건 + 시뮬레이터
 37건 + 프론트 107건. 배포 뒤 실측 — 위젯 HOLD 의 판정 IP 가 공인 주소로 찍히고, 위조한
-`X-Forwarded-For` 는 Caddy 가 버려 실제 IP 로 세어졌다(작업지시-18 8.4). **같이 보인 것 — `forceBook` 이 올린 `total_units` 는 충돌을 해소해도 그대로라
-그 날짜가 실제 수량보다 하나 더 팔릴 수 있다.** 고치지 않았다(작업지시-18 8.1).
+`X-Forwarded-For` 는 Caddy 가 버려 실제 IP 로 세어졌다(작업지시-18 8.4). 같이 보인 것
+(`forceBook` 이 올린 `total_units` 가 안 내려오는 것)은 9절에서 V10 으로 고쳤다.
 
 **작업지시-16 완료(2026-09-17).** 금액 미상을 NULL 로 저장하고 리포트가 미상을 따로
 센다. V9 를 운영 DB 에 적용해 iCal 예약 55건·260박이 NULL 이 됐고 DIRECT 5건은
