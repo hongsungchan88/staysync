@@ -81,13 +81,49 @@ class ConflictCleanupTest extends SyncTestBase {
         Long 초과 = intake.ingest(command(f, "U-1", 1, false)).reservationId();
         Long 카드 = 열린충돌(f).get(0).getId();
 
-        conflictService.resolve(카드, f.orgId(), 사용자(f),
+        Long 운영자 = 사용자(f);
+        conflictService.resolve(카드, f.orgId(), 운영자,
                 OverbookingConflict.UPGRADED, 초과, 별채, "별채로");
 
         assertThat(원장(f)).containsEntry("total", 1).containsEntry("booked", 1).containsEntry("overbooked", 0);
         assertThat(가용(f)).isZero();
         assertThat(원장(별채, 체크인)).containsEntry("booked", 1).containsEntry("overbooked", 0);
         assertThat(열린충돌(f)).isEmpty();
+
+        // 사람이 닫은 기록이 반납 경로의 자동 닫힘에 덮이지 않는다 — 해소가 먼저 RESOLVED 로
+        // 바꾸고 나서 재고가 움직이므로 ConflictCleanup 은 OPEN 을 못 찾는다.
+        OverbookingConflict 닫힌것 = conflicts.findById(카드).orElseThrow();
+        assertThat(닫힌것.getResolution()).isEqualTo(OverbookingConflict.UPGRADED);
+        assertThat(닫힌것.getResolvedBy()).isEqualTo(운영자);
+        assertThat(닫힌것.getMemo()).isEqualTo("별채로");
+    }
+
+    @Test
+    @DisplayName("CANCELLED 로 해소하면 초과분이 내려오고 기록은 사람이 고른 값 그대로다")
+    void 취소_해소는_사람의_기록으로_남는다() {
+        Fixture f = given("뒷정리-취소해소");
+        intake.ingest(command(f, "H-0", 1, false));
+        Long 초과 = intake.ingest(command(f, "H-1", 1, false)).reservationId();
+        Long 카드 = 열린충돌(f).get(0).getId();
+
+        Long 운영자 = 사용자(f);
+        conflictService.resolve(카드, f.orgId(), 운영자,
+                OverbookingConflict.CANCELLED, 초과, null, "보상하고 취소");
+
+        assertThat(원장(f)).containsEntry("total", 1).containsEntry("booked", 1).containsEntry("overbooked", 0);
+        assertThat(가용(f)).isZero();
+        assertThat(열린충돌(f)).isEmpty();
+        OverbookingConflict 닫힌것 = conflicts.findById(카드).orElseThrow();
+        assertThat(닫힌것.getResolution()).as("AUTO_CLOSED 로 덮이지 않는다").isEqualTo(OverbookingConflict.CANCELLED);
+        assertThat(닫힌것.getResolvedBy()).isEqualTo(운영자);
+        assertThat(닫힌것.getMemo()).isEqualTo("보상하고 취소");
+        // 감사 기록은 사람이 닫은 것 하나뿐이다 — 시스템 행이 하나 더 붙으면 두 번 닫은 것처럼 읽힌다.
+        assertThat(jdbc.queryForObject("""
+                SELECT count(*) FROM audit_log
+                WHERE entity_type = 'OVERBOOKING_CONFLICT' AND entity_id = ? AND action = 'CONFLICT_RESOLVE'
+                """, Integer.class, 카드)).isEqualTo(1);
+        // 행위자 종류는 여기서 보지 않는다 — 서비스 레벨 테스트에는 SecurityContext 가 없어
+        // AuditRecorder 가 SYSTEM 으로 적는다. 컨트롤러를 지나면 USER 다.
     }
 
     // --- 완료 조건 17 -----------------------------------------------------------

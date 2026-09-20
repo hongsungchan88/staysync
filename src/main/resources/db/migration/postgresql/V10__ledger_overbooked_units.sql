@@ -13,6 +13,12 @@
 --     overbooked 가 0 인 채 등식이 깨져 거부된다. 최종 방어선은 그대로다
 -- =====================================================================
 
+-- 순서가 중요하다. 옛 chk_no_oversell(booked + held <= total) 을 먼저 내려야 아래 UPDATE 가
+-- 부푼 행(booked + held 가 판매 단위 수량보다 큰 행)의 total 을 내릴 수 있다. UPDATE 를
+-- 먼저 하면 그 행에서 옛 제약에 걸려 마이그레이션이 통째로 실패한다 — 운영은 부푼 행이
+-- 0 이라 안 드러나고 테스트는 빈 DB 라 못 잡는 종류다(V10MigrationTest 가 부푼 행으로 본다).
+ALTER TABLE inventory_ledger DROP CONSTRAINT chk_no_oversell;
+
 ALTER TABLE inventory_ledger
     ADD COLUMN overbooked_units SMALLINT NOT NULL DEFAULT 0;
 
@@ -24,8 +30,6 @@ UPDATE inventory_ledger l
   FROM unit u
  WHERE u.id = l.unit_id
    AND l.total_units <> u.total_units;
-
-ALTER TABLE inventory_ledger DROP CONSTRAINT chk_no_oversell;
 
 ALTER TABLE inventory_ledger
     ADD CONSTRAINT chk_no_oversell
