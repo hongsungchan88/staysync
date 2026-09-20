@@ -104,6 +104,7 @@ class AuthApiTest extends ApiTestBase {
         가입(email);
 
         mvc.perform(post("/api/auth/signup")
+                        .header("X-Forwarded-For", 새IP())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"충분히긴비밀번호1234",
@@ -153,6 +154,77 @@ class AuthApiTest extends ApiTestBase {
                 .contains("refresh_token=")
                 .contains("Max-Age=0")
                 .contains("Path=/api/auth");
+    }
+
+    // --- 작업지시-19 추가분. 가입 속도 제한 -----------------------------------
+
+    @Test
+    @DisplayName("한 IP 가 창 안에서 상한(3건)을 넘으면 429 이고 계정이 생기지 않는다. 다른 IP 는 그대로 된다")
+    void 가입_상한을_넘으면_429_이고_계정이_생기지_않는다() throws Exception {
+        // 성공·실패를 가리지 않고 요청을 센다 — 오타로 다시 하는 사람과 스크립트가 같은
+        // 모양이라서. 셋은 실제로 가입되게 이메일을 다르게 준다.
+        String ip = 새IP();
+        for (int i = 1; i <= 3; i++) {
+            가입시도(새이메일(), ip, null).andExpect(status().isCreated());
+        }
+
+        String 네번째 = 새이메일();
+        가입시도(네번째, ip, null)
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.code").value("SIGNUP_RATE_LIMITED"))
+                .andExpect(jsonPath("$.message").value("가입 요청이 너무 잦습니다. 잠시 뒤 다시 시도해 주세요."));
+
+        // 거절된 가입은 만들어지지 않았다 — 그 이메일로 로그인이 안 된다.
+        assertThat(로그인시도(네번째, "충분히긴비밀번호1234").getResponse().getStatus())
+                .as("429 로 거절된 가입은 계정을 남기지 않는다")
+                .isEqualTo(401);
+
+        // 다른 IP 는 그 사이에도 된다. 전역 차단이 아니다.
+        가입시도(새이메일(), 새IP(), null).andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("X-Forwarded-For 가 있으면 그 주소로 가르고, 없으면 접속 주소로 센다")
+    void 가입_전달_헤더로_IP_를_가른다() throws Exception {
+        // Caddy 뒤에서는 모든 요청의 접속 주소가 Caddy 하나다. 전달 헤더를 안 풀면 한 사람이
+        // 세 번 가입한 뒤 모든 손님이 막힌다. 헤더가 없는 요청(로컬 직접 접속)은 접속
+        // 주소로 센다 — 위조가 아니라 프록시가 없는 것이다.
+        String 프록시 = "172.19.0.4";   // Caddy 컨테이너 같은 내부 주소
+        String 손님A = 새IP();
+        String 손님B = 새IP();
+
+        for (int i = 1; i <= 3; i++) {
+            가입시도(새이메일(), 손님A, 프록시).andExpect(status().isCreated());
+        }
+        // 같은 프록시를 거쳤지만 다른 손님이다.
+        가입시도(새이메일(), 손님B, 프록시).andExpect(status().isCreated());
+        // 손님 A 는 막힌다 — 프록시 주소가 아니라 전달 헤더의 주소로 셌다.
+        가입시도(새이메일(), 손님A, 프록시).andExpect(status().isTooManyRequests());
+
+        // 헤더 없이 접속 주소만 있는 요청은 그 주소로 센다.
+        String 직접 = 새IP();
+        for (int i = 1; i <= 3; i++) {
+            가입시도(새이메일(), null, 직접).andExpect(status().isCreated());
+        }
+        가입시도(새이메일(), null, 직접).andExpect(status().isTooManyRequests());
+    }
+
+    /** @param forwardedFor {@code X-Forwarded-For}. null 이면 안 붙인다. remoteAddr 가 null 이면 MockMvc 기본값 */
+    private org.springframework.test.web.servlet.ResultActions 가입시도(
+            String email, String forwardedFor, String remoteAddr) throws Exception {
+        var request = post("/api/auth/signup")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                        {"email":"%s","password":"충분히긴비밀번호1234",
+                         "displayName":"테스트","orgName":"테스트 조직"}
+                        """.formatted(email));
+        if (forwardedFor != null) {
+            request.header("X-Forwarded-For", forwardedFor);
+        }
+        if (remoteAddr != null) {
+            request.with(r -> { r.setRemoteAddr(remoteAddr); return r; });
+        }
+        return mvc.perform(request);
     }
 
     /** 테스트끼리 이메일이 겹치지 않게 한다. 컨텍스트를 공유하므로 데이터가 남는다. */

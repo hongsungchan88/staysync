@@ -38,7 +38,9 @@ class HostOnboardingApiTest extends ApiTestBase {
     @DisplayName("가입하면 로그인 상태가 되고 캘린더(숙소 목록)까지 이어진다. 같은 이메일은 409 와 메시지")
     void 가입에서_캘린더까지() throws Exception {
         String email = 새이메일();
+        String ip = 새IP();
         MvcResult signup = mvc.perform(post("/api/auth/signup")
+                        .header("X-Forwarded-For", ip)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"충분히긴비밀번호1234","displayName":"호스트","orgName":"새 조직"}
@@ -59,6 +61,7 @@ class HostOnboardingApiTest extends ApiTestBase {
                 .andExpect(jsonPath("$.length()").value(0));
 
         mvc.perform(post("/api/auth/signup")
+                        .header("X-Forwarded-For", ip)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"충분히긴비밀번호1234","displayName":"둘째","orgName":"다른 조직"}

@@ -47,6 +47,12 @@ staysync:
     hold-limit:
       max: 5
       window: 10m
+  signup:
+    # 가입의 IP 당 상한(작업지시-19). 사람은 한 번, 오타로 다시 해도 두세 번이다. 넘으면
+    # 429 이고 조직·계정을 만들지 않는다. 공개 HOLD 와 같은 장치, 값은 따로.
+    limit:
+      max: 3
+      window: 1h
   security:
     jwt:
       # 서명 키는 저장소에 두지 않는다. 환경 변수로 주입한다 (.env.example 참고).
