@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes as RouterRoutes } from 'react-router-dom';
 import { LoginPage } from '@/auth/LoginPage';
+import { SignupPage } from '@/auth/SignupPage';
 import { CalendarPage } from '@/calendar/CalendarPage';
 import { ChannelsPage } from '@/channels/ChannelsPage';
 import { ChannelMappingPage } from '@/channels/ChannelMappingPage';
@@ -8,6 +9,7 @@ import { ConflictsPage } from '@/conflicts/ConflictsPage';
 import { OpsTasksPage } from '@/ops/OpsTasksPage';
 import { InboxPage } from '@/inbox/InboxPage';
 import { ReportsPage } from '@/reports/ReportsPage';
+import { PropertiesPage } from '@/properties/PropertiesPage';
 import { WidgetPage } from '@/widget/WidgetPage';
 import { useSessionBootstrap } from '@/auth/useSessionBootstrap';
 import { useTokenStore } from '@/auth/tokenStore';
@@ -71,7 +73,15 @@ function Routes() {
     );
   }
   if (!accessToken) {
-    return <LoginPage />;
+    // 토큰이 없을 때 그리는 화면은 둘이다. `/signup` 만 가입이고 나머지는 전부 로그인 —
+    // 원래 보려던 경로는 그대로 남는다. 가입이 끝나 토큰이 생기면 아래 라우트가 그려지고
+    // `/signup` 은 `*` 로 캘린더에 떨어진다.
+    return (
+      <RouterRoutes>
+        <Route path="/signup" element={<SignupPage />} />
+        <Route path="*" element={<LoginPage />} />
+      </RouterRoutes>
+    );
   }
   return (
     <RouterRoutes>
@@ -88,6 +98,8 @@ function Routes() {
       <Route path="/inbox/:threadId" element={<InboxPage />} />
       {/* P4 16주차. 운영 리포트(계획서 8.8). 지표 여섯이 한 화면이다. */}
       <Route path="/reports" element={<ReportsPage />} />
+      {/* 작업지시-19. 숙소·판매 단위 등록·편집. 호스트가 혼자 시작하는 자리다. */}
+      <Route path="/properties" element={<PropertiesPage />} />
       {/* 알 수 없는 경로는 캘린더로. 404 화면을 만들 이유가 아직 없다. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </RouterRoutes>

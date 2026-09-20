@@ -84,8 +84,7 @@ class PropertyController {
     @PatchMapping("/units/{unitId}")
     UnitResponse updateUnit(@PathVariable Long unitId,
                             @Valid @RequestBody UpdateUnitRequest request) {
-        return UnitResponse.from(propertyService.updateUnit(
-                unitId, orgId(), request.name(), request.totalUnits()));
+        return UnitResponse.from(propertyService.updateUnit(unitId, orgId(), request.name()));
     }
 
     // --- 요금제 -------------------------------------------------------------

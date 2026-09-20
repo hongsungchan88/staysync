@@ -104,6 +104,12 @@ export function CalendarPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
+              to="/properties"
+              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
+            >
+              숙소
+            </Link>
+            <Link
               to="/channels"
               className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
             >
@@ -297,6 +303,12 @@ function StateSwitch({
           숙소를 만들고 판매 단위를 하나 등록하면 이 화면에 달력이 나타납니다. 판매 단위를
           만들 때 기본 요금제가 함께 생성됩니다.
         </p>
+        <Link
+          to="/properties"
+          className="mt-4 inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
+        >
+          숙소 등록하러 가기
+        </Link>
       </div>
     );
   }

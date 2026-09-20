@@ -70,15 +70,34 @@ public class PropertyService {
         return unitRepo.findById(unitId).orElseThrow(() -> new UnitNotFoundException(unitId));
     }
 
+    /** 소유 확인만. 없거나 남의 것이면 {@code UnitNotFoundException}. booking 이 락을 잡기 전에 부른다. */
+    @Transactional(readOnly = true)
+    public void requireOwnedUnit(Long unitId, Long orgId) {
+        owned.unit(unitId, orgId);
+    }
+
+    /** 이름만 바꾼다. 수량은 {@link #changeUnitCapacity} — 원장이 따라가야 해서 booking 이 든다. */
     @Transactional
-    public Unit updateUnit(Long unitId, Long orgId, String name, Short totalUnits) {
+    public Unit updateUnit(Long unitId, Long orgId, String name) {
         Unit unit = owned.unit(unitId, orgId);
         if (name != null) {
             unit.rename(name);
         }
-        if (totalUnits != null) {
-            unit.changeCapacity(totalUnits);
-        }
         return unit;
+    }
+
+    /**
+     * 판매 수량을 바꾼다. <b>직접 부르지 말 것</b> — 원장 행이 함께 바뀌어야 하므로
+     * booking 의 {@code UnitCapacityService} 가 판매 단위 락과 트랜잭션 안에서 부른다
+     * (작업지시-19 C). 여기서 따로 부르면 원장이 옛 수량으로 남는다(작업지시-18 9.4.1 의
+     * 결함이 그 모양이었다).
+     */
+    @Transactional
+    public UnitSummary changeUnitCapacity(Long unitId, Long orgId, short totalUnits) {
+        Unit unit = owned.unit(unitId, orgId);
+        unit.changeCapacity(totalUnits);
+        // booking 에 돌려주는 값이라 도메인 엔티티가 아니라 공개 타입이다(모듈 경계).
+        return new UnitSummary(unit.getId(), unit.getPropertyId(), unit.getName(),
+                unit.getTotalUnits(), unit.getBasePrice(), null);
     }
 }

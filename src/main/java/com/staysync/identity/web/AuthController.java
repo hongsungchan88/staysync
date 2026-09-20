@@ -7,6 +7,7 @@ import com.staysync.identity.web.AuthDtos.*;
 import com.staysync.shared.security.AuthenticatedUser;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -26,16 +27,29 @@ class AuthController {
 
     private final AuthService authService;
     private final RefreshCookie refreshCookie;
+    private final SignupRateLimiter signupRateLimiter;
     private final long accessTokenSeconds;
 
-    AuthController(AuthService authService, RefreshCookie refreshCookie, JwtProperties jwtProperties) {
+    AuthController(AuthService authService, RefreshCookie refreshCookie,
+                   SignupRateLimiter signupRateLimiter, JwtProperties jwtProperties) {
         this.authService = authService;
         this.refreshCookie = refreshCookie;
+        this.signupRateLimiter = signupRateLimiter;
         this.accessTokenSeconds = jwtProperties.accessTokenTtl().toSeconds();
     }
 
+    /**
+     * 가입. 로그인 없이 조직과 계정을 만드는 유일한 경로라 IP 당 속도 제한이 앞에 있다
+     * ({@link SignupRateLimiter}). 넘으면 서비스에 들어가지 않고 429 — 가입은 만들어지지
+     * 않는다. IP 는 {@code forward-headers-strategy: framework} 가 {@code X-Forwarded-For}
+     * 를 풀어 준 값이다(공개 HOLD 와 같은 전제).
+     */
     @PostMapping("/signup")
-    ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest request) {
+    ResponseEntity<TokenResponse> signup(@Valid @RequestBody SignupRequest request,
+                                         HttpServletRequest http) {
+        if (!signupRateLimiter.tryAcquire(http.getRemoteAddr(), Instant.now())) {
+            throw new SignupRateLimitedException();
+        }
         var tokens = authService.signup(
                 request.email(), request.password(), request.displayName(), request.orgName(),
                 OffsetDateTime.now());

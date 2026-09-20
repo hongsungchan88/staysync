@@ -45,9 +45,9 @@ final class PropertyDtos {
             @NotNull @DecimalMin("0") BigDecimal basePrice) {
     }
 
+    /** 이름만. 수량은 {@code PATCH /api/units/{id}/capacity}(booking) — 원장이 따라가야 한다. */
     record UpdateUnitRequest(
-            @Size(max = 200) String name,
-            @Min(1) @Max(999) Short totalUnits) {
+            @Size(max = 200) String name) {
     }
 
     // --- 응답 ----------------------------------------------------------------

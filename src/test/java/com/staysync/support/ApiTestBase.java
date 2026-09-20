@@ -41,9 +41,23 @@ public abstract class ApiTestBase {
     @Autowired
     protected ObjectMapper json;
 
+    private static final java.util.concurrent.atomic.AtomicInteger 가입_IP_순번 = new java.util.concurrent.atomic.AtomicInteger();
+
+    /**
+     * 가입 요청마다 다른 클라이언트 IP. 가입은 IP 당 1시간 3건이라(작업지시-19,
+     * {@code SignupRateLimiter}) 전부 MockMvc 기본값(127.0.0.1)이면 컨텍스트를 공유하는
+     * 이 계열 테스트가 네 번째 가입부터 429 다. {@code X-Forwarded-For} 로 준다 —
+     * {@code forward-headers-strategy: framework} 가 {@code getRemoteAddr()} 로 풀어 준다.
+     */
+    protected static String 새IP() {
+        int n = 가입_IP_순번.incrementAndGet();
+        return "10.0." + ((n >> 8) & 255) + "." + (n & 255);
+    }
+
     /** 가입해서 액세스 토큰과 리프레시 쿠키를 받는다. */
     protected Session 가입(String email) throws Exception {
         MvcResult result = mvc.perform(post("/api/auth/signup")
+                        .header("X-Forwarded-For", 새IP())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"%s","password":"충분히긴비밀번호1234",
