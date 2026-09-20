@@ -171,12 +171,18 @@ public class InventoryLedger {
         this.overbookedUnits = (short) Math.max(0, bookedUnits + heldUnits - totalUnits);
     }
 
+    /**
+     * 판매 단위의 수량이 바뀌면 원장 행도 따라간다({@code UnitCapacityWriter}, 작업지시-19 C).
+     * 이미 팔린 수량 아래로는 못 내린다 — 부르는 쪽이 먼저 조회해 막는 날짜를 돌려주고,
+     * 여기 예외는 그 판정을 우회한 결함을 잡는 마지막 줄이다. 초과분은 다시 계산한다.
+     */
     public void changeTotalUnits(short newTotal) {
         if (newTotal < bookedUnits + heldUnits) {
             throw new IllegalStateException(
                     "이미 판매된 수량보다 적게 줄일 수 없습니다. " + describe());
         }
         this.totalUnits = newTotal;
+        recomputeOverbooked();
         touch();
     }
 

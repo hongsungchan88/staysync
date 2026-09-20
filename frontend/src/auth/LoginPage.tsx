@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { login } from '@/api/auth';
 import { ApiError } from '@/api/client';
 import { Button } from '@/components/ui/button';
@@ -7,8 +8,8 @@ import { Input } from '@/components/ui/input';
 /**
  * 로그인 화면.
  *
- * 회원가입 화면은 만들지 않는다. 7주차에는 개발용 계정 하나면 되고, 가입 API 는
- * 이미 있으므로 필요하면 curl 로 만든다. 화면은 각자의 단계에 있다.
+ * 가입 화면은 작업지시-19 에서 붙었다(`/signup`). 7주차부터는 개발용 계정 하나면 됐고
+ * 가입은 curl 로 했는데, 판매를 시도하려면 호스트가 혼자 시작할 수 있어야 한다.
  */
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -78,6 +79,13 @@ export function LoginPage() {
         <Button type="submit" variant="primary" className="mt-5 w-full" disabled={busy}>
           {busy ? '확인 중…' : '로그인'}
         </Button>
+
+        <p className="mt-4 text-center text-xs text-muted">
+          처음이면{' '}
+          <Link to="/signup" className="text-clay underline-offset-2 hover:underline">
+            가입
+          </Link>
+        </p>
       </form>
     </div>
   );

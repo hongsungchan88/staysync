@@ -20,6 +20,26 @@ export async function login(email: string, password: string): Promise<TokenRespo
   return parsed;
 }
 
+/**
+ * 가입. 서버가 조직 하나와 OWNER 한 명을 함께 만들고 로그인과 같은 토큰 한 쌍을 준다
+ * (작업지시-19 A). 응답 모양이 로그인과 같아 그대로 세션이 된다.
+ */
+export async function signup(input: {
+  email: string;
+  password: string;
+  displayName: string;
+  orgName: string;
+}): Promise<TokenResponse> {
+  const body = await apiRequest<unknown>('/api/auth/signup', {
+    method: 'POST',
+    body: input,
+    skipAuthRetry: true,
+  });
+  const parsed = tokenResponseSchema.parse(body);
+  tokenStore.set(parsed.accessToken);
+  return parsed;
+}
+
 export async function logout(): Promise<void> {
   try {
     await apiRequest<void>('/api/auth/logout', { method: 'POST' });

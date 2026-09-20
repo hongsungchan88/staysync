@@ -31,6 +31,17 @@ public interface InventoryLedgerRepository
     List<InventoryLedger> findForUpdate(@Param("unitId") Long unitId,
                                         @Param("dates") List<LocalDate> dates);
 
+    /** 수량 변경용. 이 날부터의 행 전부를 배타 잠금으로 읽는다. 지난 행은 건드리지 않는다. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints(@QueryHint(name = "jakarta.persistence.lock.timeout", value = "3000"))
+    @Query("""
+            select l from InventoryLedger l
+            where l.unitId = :unitId and l.stayDate >= :from
+            order by l.stayDate asc
+            """)
+    List<InventoryLedger> findFromForUpdate(@Param("unitId") Long unitId,
+                                            @Param("from") LocalDate from);
+
     @Query("""
             select l from InventoryLedger l
             where l.unitId in :unitIds and l.stayDate between :from and :to

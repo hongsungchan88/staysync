@@ -22,7 +22,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleDomain(DomainException e) {
         log.warn("도메인 규칙 위반: code={} message={}", e.code(), e.getMessage());
         return ResponseEntity.status(e.status())
-                .body(ApiError.of(e.code(), e.getMessage()));
+                .body(ApiError.of(e.code(), e.getMessage(), e.details()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
