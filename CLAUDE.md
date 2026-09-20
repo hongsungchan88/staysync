@@ -27,7 +27,9 @@ Java 21 · Spring Boot 3.5.4 · Spring Modulith 1.3 · PostgreSQL 16 · Flyway �
 프론트엔드는 `frontend/`에 있다. React 19 · TypeScript 5.6 · Vite 6 · TanStack Query 5 ·
 Zustand · Tailwind CSS 4 · Zod · Vitest 3. 캘린더 그리드가 TanStack Virtual 3(양방향
 가상 스크롤)과 dnd-kit(막대 드래그, 키보드 센서 포함)을 쓴다. React Router 7은 P3
-10주차에 들어왔다 — 화면이 로그인·캘린더·채널 목록·채널 매핑 넷이다.
+10주차에 들어왔다. 화면은 열하나다(작업지시-19 기준) — 로그인, 가입(`/signup`), 캘린더(`/`),
+숙소·판매 단위 등록(`/properties`), 채널 목록(`/channels`), 채널 매핑, 충돌(`/conflicts`),
+청소 칸반(`/ops/tasks`), 인박스(`/inbox`), 리포트(`/reports`), 공개 위젯(`/widget/:propertyId`).
 
 **인증은 경로가 아니라 토큰 유무로 갈린다.** `/login` 경로가 없다. 토큰이 없으면 어느
 경로에 있든 로그인 화면을 그리고, 라우터는 부팅 복구 안쪽에 있어 `/channels/2/mapping`
@@ -199,6 +201,19 @@ ADR 0002 결과 절이 예고한 자리다.
   `AUTO_CLOSED`(해소자 없음, 감사 SYSTEM)로 닫는다** — 반납 경로 다섯의 끝에서, 엔티티
   상태가 확정된 뒤 부른다. 아직 초과면 예약 목록만 갱신. 사람이 UPGRADED·CANCELLED 로
   닫은 것은 덮이지 않는다(해소가 먼저 RESOLVED 로 바꾼다).
+- **판매 단위 수량을 바꾸는 길은 `PATCH /api/units/{id}/capacity` 하나다**(booking,
+  작업지시-19 C). `PATCH /api/units/{id}` 는 이름만 받는다 — `totalUnits` 를 보내도
+  무시된다. 두 길이면 property 쪽 길이 `unit.total_units` 만 바꾸고 원장 행은 옛 수량에
+  남아 V10 이 맞춘 것이 다음 변경부터 다시 어긋난다(작업지시-18 9.4.1 이 그 모양이었다).
+  `UnitCapacityService`(락) → `UnitCapacityWriter`(트랜잭션)가 **오늘(Asia/Seoul) 이후**
+  원장 행을 `FOR UPDATE` 로 읽어 `booked + held > 새 수량` 인 날이 하나라도 있으면 아무것도
+  안 바꾸고 409 `CAPACITY_BELOW_BOOKINGS` + `details` 에 막는 날짜들, 없으면 행마다
+  `changeTotalUnits`(초과분 재계산) 뒤 `PropertyService.changeUnitCapacity`. 늘리기는
+  언제나 된다. **지난 날짜의 원장 행은 일부러 안 건드린다** — 그날 팔 수 있었던 수량의
+  기록이다. 그래서 수량을 바꾼 판매 단위는 **지난 행의 `total_units` 가 판매 단위 수량과
+  달라도 정상**이고, "`total_units ≠ 판매 단위 수량`" 점검 쿼리는 오늘 이후로 한정해야
+  0 이 기대값이다. 리포트 분모는 원장이 아니라 `unit.total_units` 라 과거 점유율은 새
+  수량으로 다시 계산된다(수량 이력이 없어 지금은 어쩔 수 없다).
 
 ## 채널 연동
 
@@ -677,6 +692,27 @@ ADR 13건(0012 에 고아 되살리기와 재동기화를 이어 적었다), 백
 업체 숙소 둘·판매 단위 셋, 에어비앤비 iCal 셋이 붙어 **55건·260박**이 들어와 있다
 (09-17 기준). 포트원 웹훅까지 판정됐다(확인-09 9절).
 
+**작업지시-19 완료(2026-09-21, `055e216` 배포, 마이그레이션 없음). 호스트가 혼자 시작한다.**
+가입 화면(`/signup`), 숙소·판매 단위 등록·편집 화면(`/properties`), 판매 단위 수량 변경이
+원장을 따라가는 `PATCH /api/units/{id}/capacity`(위 "중복예약 방어"), 공개 가입 경로의
+IP 당 속도 제한. 백엔드 334건 + 시뮬레이터 37건 + 프론트 111건. 배포 환경에 시험 조직
+**`온보딩 시험 조직`**(`onboarding-test-20260921@example.com`, 숙소 `시험 숙소`·판매 단위
+`시험 객실`)이 있다 — 심사 때 "혼자 시작하는 흐름"을 보여 줄 자리라 **지우지 않는다.**
+업체 조직 `1차 심사` 는 그대로다. 기록은 `docs/작업지시-19-등록화면.md` 8절.
+
+- **가입은 IP 당 1시간 3건이다**(`staysync.signup.limit`, `SignupRateLimiter`). 넘으면 429
+  `SIGNUP_RATE_LIMITED`, 조직·계정을 만들지 않는다. 공개 HOLD 와 같은 장치 —
+  `shared.web.IpRateLimiter` 를 경로별 `@Component` 가 상속해 이름·창·상한을 넣는다
+  (`PublicHoldRateLimiter` 도 이제 그 상속이다). 판정 IP 는 끝자리를 가려 로그에 남는다.
+  **HTTP 테스트에서 가입은 `ApiTestBase.가입()` 을 쓰거나 `새IP()` 를 `X-Forwarded-For`
+  로 붙일 것** — 이 계열 테스트는 컨텍스트를 공유하므로 전부 127.0.0.1 이면 네 번째
+  가입부터 429 다.
+- **요금제는 화면에 없다.** 판매 단위를 등록하면 기본 요금제가 함께 생기고(`UnitRegistrationService`)
+  날짜별 요금·최소 숙박은 캘린더의 기간 선택 편집이 한다. 요금 화면을 만들지 말 것.
+- **역할별 인가는 여전히 없다** — `Role` 이 어디서 읽히는지는 작업지시-19 8.1 의 표.
+  발급이 OWNER 하나뿐이라 지금 `@PreAuthorize` 를 붙이면 아무것도 막지 않는 코드가 된다.
+  읽기 전용 심사자 계정이나 조직 안 초대를 만들 때 함께 짓는다.
+
 **작업지시-18 9절 완료(2026-09-20, `e65f7c1` 배포, V10).** 초과 예약분을 `overbooked_units`
 로 분리하고(위 "중복예약 방어"), 초과가 풀리면 OPEN 충돌이 `AUTO_CLOSED` 로 닫힌다.
 백엔드 325건 + 시뮬레이터 37건 + 프론트 107건. 운영 DB 에 부푼 행은 없었다. 같이 보인
@@ -738,7 +774,7 @@ OPEN 충돌은 한 행(`raiseConflicts` 가 먼저 조회해 갱신), `GET /api/
 `docs/확인-04-P3완료조건-셋째.md` 3절이다. 이번 주 작업과는 무관하다.
 
 **아직 없는 것** — 역할별 인가(`@PreAuthorize`)는 지금도 없다. 인증 여부와 조직
-스코핑까지다. 운영·메시지 워커는 P4이고, 그 자리는 `DomainEventPublisher` 구현을 빈으로
+스코핑까지다(작업지시-19 8.1 에 `Role` 이 읽히는 자리 표가 있다). 운영·메시지 워커는 P4이고, 그 자리는 `DomainEventPublisher` 구현을 빈으로
 등록하면 `OutboxRelay`가 알아서 함께 돌린다(첫 입주자가 SSE 브로드캐스터, 두 번째가
 12주차의 채널 전파다).
 
