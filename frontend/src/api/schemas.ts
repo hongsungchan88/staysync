@@ -134,6 +134,9 @@ export const channelConnectionSchema = z.object({
   syncEnabled: z.boolean(),
   credentials: z.record(z.string()).default({}),
   capabilities: z.array(capabilitySchema).default([]),
+  /** 재시도가 포기한 전송. 0 이 아니면 사람이 봐야 한다 — 채널이 거부한 값, 틀린 매핑. */
+  deadJobs: z.number().default(0),
+  lastError: z.string().nullish(),
 });
 export type ChannelConnection = z.infer<typeof channelConnectionSchema>;
 

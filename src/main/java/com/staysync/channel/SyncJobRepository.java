@@ -1,8 +1,10 @@
 package com.staysync.channel;
 
 import com.staysync.channel.domain.SyncJob;
+import com.staysync.channel.domain.SyncJobStatus;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -94,4 +96,9 @@ interface SyncJobRepository extends JpaRepository<SyncJob, Long> {
     int reviveOrphans(@Param("staleBefore") OffsetDateTime staleBefore);
 
     List<SyncJob> findByConnectionIdOrderByIdAsc(Long connectionId);
+
+    /** 사람이 봐야 할 것. 채널 화면이 "실패한 전송 N건 · 마지막 오류"로 드러낸다(작업지시-17 8.3). */
+    long countByConnectionIdAndStatus(Long connectionId, SyncJobStatus status);
+
+    Optional<SyncJob> findFirstByConnectionIdAndStatusOrderByIdDesc(Long connectionId, SyncJobStatus status);
 }

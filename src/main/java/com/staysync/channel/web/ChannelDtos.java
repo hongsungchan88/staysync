@@ -1,5 +1,6 @@
 package com.staysync.channel.web;
 
+import com.staysync.channel.ChannelConnectionService;
 import com.staysync.channel.ChannelConnectionService.MappingBoard;
 import com.staysync.channel.domain.ChannelConnection;
 import com.staysync.channel.domain.ChannelMapping;
@@ -62,6 +63,8 @@ final class ChannelDtos {
      *
      * @param credentials 마스킹된 값만. 평문은 어떤 경로로도 나가지 않는다
      * @param capabilities 이 채널이 지원하는 기능. 화면이 "요금 전파 미지원"을 여기서 읽는다
+     * @param deadJobs     재시도가 포기한 전송 수. 0 이 아니면 사람이 봐야 한다(작업지시-17 8.3)
+     * @param lastError    그중 마지막 것의 사유. 채널의 경고 문장이 그대로 온다
      */
     record ConnectionResponse(
             Long id,
@@ -71,15 +74,19 @@ final class ChannelDtos {
             String displayName,
             boolean syncEnabled,
             Map<String, String> credentials,
-            Set<Capability> capabilities) {
+            Set<Capability> capabilities,
+            long deadJobs,
+            String lastError) {
 
         static ConnectionResponse of(ChannelConnection connection,
                                      Map<String, String> maskedCredentials,
-                                     Set<Capability> capabilities) {
+                                     Set<Capability> capabilities,
+                                     ChannelConnectionService.SyncFailure failure) {
             return new ConnectionResponse(
                     connection.getId(), connection.getPropertyId(), connection.getChannelCode(),
                     connection.getAdapterType(), connection.getDisplayName(),
-                    connection.isSyncEnabled(), maskedCredentials, capabilities);
+                    connection.isSyncEnabled(), maskedCredentials, capabilities,
+                    failure.deadJobs(), failure.lastError());
         }
     }
 

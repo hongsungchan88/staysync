@@ -95,14 +95,28 @@ public class ChannelBookingPoller {
      * <p>기본 5초다. 완료 조건이 "15초 이내"이고, 폴링 주기에 어댑터 왕복과 캘린더
      * 갱신까지 더해도 여유가 있어야 한다. 15초로 두면 최악의 경우가 곧 상한이 된다.
      *
-     * <p><b>iCal 은 이 주기를 따르지 않는다.</b> 계획서 6.2 의 15분이 따로 있고,
-     * 그래서 iCal 은 15초 사슬 밖이다.
+     * <p><b>iCal 과 Channex 는 이 주기를 따르지 않는다.</b> iCal 은 계획서 6.2 의 15분,
+     * Channex 는 60초({@link #runChannex}). 그래서 이 5초 사슬에는 Mock 만 남는다.
      */
     @Scheduled(fixedDelayString = "${staysync.channel.poll-interval-ms:5000}",
             initialDelayString = "${staysync.channel.poll-interval-ms:5000}")
     public void run() {
         if (enabled) {
             pollAll();
+        }
+    }
+
+    /**
+     * Channex 리비전 피드. 60초(작업지시-17 8.1).
+     *
+     * <p>5초에 두면 남의 API 를 하루 17,280번 두드린다. 확인 안 된 리비전은 30분 동안 다시
+     * 오고 그 뒤 메일이 가므로 60초는 그 창의 1/30 이다. 완료 조건에 초 단위 요구는 없다.
+     */
+    @Scheduled(fixedDelayString = "${staysync.channel.channex-poll-interval-ms:60000}",
+            initialDelayString = "${staysync.channel.channex-poll-interval-ms:60000}")
+    public void runChannex() {
+        if (enabled) {
+            pollChannex();
         }
     }
 
@@ -121,19 +135,35 @@ public class ChannelBookingPoller {
         }
     }
 
-    /** 모든 활성 연결을 한 바퀴 돈다. 테스트가 스케줄러를 기다리지 않고 부른다. */
+    /** 5초 사슬의 연결(Mock)을 한 바퀴 돈다. 테스트가 스케줄러를 기다리지 않고 부른다. */
     public int pollAll() {
         return pollAll(false);
     }
 
+    /** Channex 연결만 한 바퀴. {@link #runChannex} 가 부르는 그 메서드다. */
+    public int pollChannex() {
+        return poll(connection -> connection.getAdapterType() == AdapterType.CHANNEX);
+    }
+
     /**
-     * @param snapshotOnly 참이면 스냅샷 채널(iCal)만, 거짓이면 나머지만 돈다.
-     *                     주기가 달라서 갈린다
+     * @param snapshotOnly 참이면 스냅샷 채널(iCal)만, 거짓이면 5초 사슬(스냅샷도 Channex 도
+     *                     아닌 것)만 돈다. 주기가 달라서 갈린다
      */
     public int pollAll(boolean snapshotOnly) {
+        return poll(connection -> {
+            if (connection.getAdapterType() == AdapterType.CHANNEX) {
+                return false;   // 60초 사슬
+            }
+            boolean snapshot = registry.capabilitiesOf(connection.getAdapterType())
+                    .contains(Capability.SNAPSHOT_BOOKING);
+            return snapshot == snapshotOnly;
+        });
+    }
+
+    private int poll(java.util.function.Predicate<ChannelConnection> selected) {
         int ingested = 0;
         for (ChannelConnection connection : connections.findAll()) {
-            if (!connection.isSyncEnabled()) {
+            if (!connection.isSyncEnabled() || !selected.test(connection)) {
                 continue;
             }
             if (!registry.isRegistered(connection.getAdapterType())) {
@@ -144,11 +174,7 @@ public class ChannelBookingPoller {
                 warnOnceAboutMissingAdapter(connection);
                 continue;
             }
-            Set<Capability> capabilities = registry.capabilitiesOf(connection.getAdapterType());
-            if (!capabilities.contains(Capability.PULL_BOOKING)) {
-                continue;
-            }
-            if (capabilities.contains(Capability.SNAPSHOT_BOOKING) != snapshotOnly) {
+            if (!registry.capabilitiesOf(connection.getAdapterType()).contains(Capability.PULL_BOOKING)) {
                 continue;
             }
             ingested += pollOne(connection);
@@ -213,12 +239,17 @@ public class ChannelBookingPoller {
             for (InboundBooking booking : feed.bookings()) {
                 ChannelMapping mapping = resolveMapping(connection, byExternalId, booking);
                 if (mapping == null) {
+                    // 확인(ack)하지 않는다. Channex 는 30분 동안 다시 주고 메일을 보낸다 —
+                    // 매핑을 고치면 다음 주기에 들어오고, 위 경고가 주기마다 남는다.
                     continue;
                 }
                 seen.add(booking.bookingId());
                 if (ingest(connection, mapping, booking)) {
                     ingested++;
                 }
+                // ingest 가 돌아왔다 = 커밋됐거나(생성·수정·취소) 일부러 무시했다(중복·옛 버전).
+                // 예외로 나갔으면 여기 오지 않는다 — 롤백된 것은 확인하지 않는다(작업지시-17 4절).
+                acknowledge(adapter, creds, connection, booking);
             }
 
             if (snapshot) {
@@ -288,6 +319,17 @@ public class ChannelBookingPoller {
             return null;
         }
         return byExternalId.values().iterator().next();
+    }
+
+    /** 확인 실패는 이 예약을 잃지 않는다 — 다음 주기에 같은 리비전이 다시 오고 멱등키가 흡수한다. */
+    private static void acknowledge(ChannelAdapter adapter, ChannelCredentials creds,
+                                    ChannelConnection connection, InboundBooking booking) {
+        try {
+            adapter.acknowledge(creds, booking);
+        } catch (RuntimeException e) {
+            log.warn("채널에 예약 확인(ack)을 보내지 못했다. 다음 주기에 다시 온다. "
+                    + "connectionId={} bookingId={} 사유={}", connection.getId(), booking.bookingId(), e.toString());
+        }
     }
 
     private boolean ingest(ChannelConnection connection, ChannelMapping mapping,

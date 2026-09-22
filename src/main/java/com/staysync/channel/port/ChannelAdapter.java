@@ -84,6 +84,20 @@ public interface ChannelAdapter {
     }
 
     /**
+     * 받은 예약을 채널에 확인해 준다. <b>처리가 커밋된 뒤에만 부른다</b>(작업지시-17 5절 4번).
+     *
+     * <p>Channex 는 확인하지 않은 리비전을 30분 동안 다시 주고 그 뒤 메일을 보낸다. 롤백된
+     * 처리를 확인하면 그 예약은 다시 오지 않으므로, 폴러가 {@code ingest} 가 돌아온 뒤에
+     * 부른다. 확인이 실패하면 같은 리비전이 다시 오고 멱등성이 흡수한다. 확인이라는 것이
+     * 없는 채널(iCal, Mock)은 기본 구현 그대로 아무것도 하지 않는다.
+     *
+     * <p>무엇을 확인할지는 {@link InboundBooking#rawPayload()} 에서 어댑터가 꺼낸다 —
+     * 채널마다 모양이 달라 포트에 필드를 두지 않는다.
+     */
+    default void acknowledge(ChannelCredentials credentials, InboundBooking booking) {
+    }
+
+    /**
      * 웹훅 본문을 표준 예약 형태로 변환한다.
      *
      * <p>수신 엔드포인트는 아직 없다. 12주차에 폴링으로 정했고 13주차에도 그대로다

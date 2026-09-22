@@ -127,7 +127,8 @@ class ChannelController {
         return ConnectionResponse.of(
                 connection,
                 credentialStore.masked(connection.getCredentials()),
-                registry.capabilitiesOf(connection.getAdapterType()));
+                registry.capabilitiesOf(connection.getAdapterType()),
+                service.failureOf(connection.getId()));
     }
 
     private static Long orgId() {

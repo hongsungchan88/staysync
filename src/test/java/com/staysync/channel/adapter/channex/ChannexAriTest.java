@@ -72,7 +72,6 @@ class ChannexAriTest extends SyncTestBase {
     @BeforeAll
     static void 스텁을_연다() {
         channex = new ChannexStubServer();
-        adapter = new ChannexAdapter(RestClient.builder(), channex.baseUrl(), 3000);
     }
 
     @AfterAll
@@ -84,6 +83,33 @@ class ChannexAriTest extends SyncTestBase {
     void 스텁을_비운다() {
         channex.reset();
         channex.replyAll(Reply.ok(Responses.TASK_ACCEPTED));
+        // 어댑터마다 전송 상한(숙소당 분당 10)을 들고 있다. 테스트끼리 창을 나눠 쓰지 않게 새로 만든다.
+        adapter = new ChannexAdapter(RestClient.builder(), channex.baseUrl(), 3000);
+    }
+
+    @Test
+    @DisplayName("우리 쪽 상한은 문서 값이다 — 숙소당 분당 재고 10·요금 10. 11번째는 채널에 닿기 전에 미룬다")
+    void 전송_상한은_문서_값이다() {
+        for (int i = 0; i < 10; i++) {
+            adapter.pushAri(credentials(), new AriUpdateCommand(ROOM, RATE, List.of(
+                    new AriUpdateCommand.Segment(LocalDate.of(2026, 10, 22), LocalDate.of(2026, 10, 22),
+                            1, null, null, null, null, null, null))));
+        }
+        assertThat(channex.received("/api/v1/availability")).hasSize(10);
+
+        assertThatThrownBy(() -> adapter.pushAri(credentials(), new AriUpdateCommand(ROOM, RATE, List.of(
+                new AriUpdateCommand.Segment(LocalDate.of(2026, 10, 22), LocalDate.of(2026, 10, 22),
+                        1, null, null, null, null, null, null)))))
+                .isInstanceOf(ChannelException.RateLimitedException.class)
+                .satisfies(e -> assertThat(((ChannelException.RateLimitedException) e).retryAfter())
+                        .isPositive().isLessThanOrEqualTo(Duration.ofMinutes(1)));
+        assertThat(channex.received("/api/v1/availability")).as("채널에 닿지 않았다").hasSize(10);
+
+        // 요금·제약은 따로 센다(스테이징 헤더 6,000/분과 다르다 — 우리는 문서 값을 쓴다).
+        adapter.pushAri(credentials(), new AriUpdateCommand(ROOM, RATE, List.of(
+                new AriUpdateCommand.Segment(LocalDate.of(2026, 10, 22), LocalDate.of(2026, 10, 22),
+                        null, new BigDecimal("120"), null, null, null, null, null))));
+        assertThat(channex.received("/api/v1/restrictions")).hasSize(1);
     }
 
     // --- 본문 모양 ---------------------------------------------------------------
@@ -371,6 +397,10 @@ class ChannexAriTest extends SyncTestBase {
         SyncJob job = worker.jobsOf(connection.getId()).get(0);
         assertThat(job.getStatus()).as("다시 보내도 같은 답이다. 사람이 봐야 한다").isEqualTo(SyncJobStatus.DEAD);
         assertThat(job.getLastError()).contains("Past date is not allowed");
+        // 사람 눈에 닿는 자리 — 채널 화면이 "실패한 전송 N건 · 마지막 오류"로 보여 준다(작업지시-17 8.3).
+        var failure = channels.failureOf(connection.getId());
+        assertThat(failure.deadJobs()).isEqualTo(1);
+        assertThat(failure.lastError()).contains("Past date is not allowed");
     }
 
     // --- 픽스처 ---------------------------------------------------------------------

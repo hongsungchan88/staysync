@@ -3,6 +3,8 @@ package com.staysync.channel;
 import com.staysync.channel.adapter.channex.ChannexAdapter;
 import com.staysync.channel.domain.ChannelConnection;
 import com.staysync.channel.domain.ChannelMapping;
+import com.staysync.channel.domain.SyncJob;
+import com.staysync.channel.domain.SyncJobStatus;
 import com.staysync.channel.port.AdapterType;
 import com.staysync.property.OwnedResources;
 import com.staysync.property.UnitCatalog;
@@ -53,6 +55,7 @@ public class ChannelConnectionService {
 
     private final ChannelConnectionRepository connections;
     private final ChannelMappingRepository mappings;
+    private final SyncJobRepository syncJobs;
     private final ChannelCredentialStore credentialStore;
     private final OwnedResources owned;
     private final UnitCatalog unitCatalog;
@@ -60,12 +63,14 @@ public class ChannelConnectionService {
 
     ChannelConnectionService(ChannelConnectionRepository connections,
                              ChannelMappingRepository mappings,
+                             SyncJobRepository syncJobs,
                              ChannelCredentialStore credentialStore,
                              OwnedResources owned,
                              UnitCatalog unitCatalog,
                              AuditRecorder audit) {
         this.connections = connections;
         this.mappings = mappings;
+        this.syncJobs = syncJobs;
         this.credentialStore = credentialStore;
         this.owned = owned;
         this.unitCatalog = unitCatalog;
@@ -168,6 +173,21 @@ public class ChannelConnectionService {
         audit.record(ENTITY, connectionId, "CHANNEL_DISCONNECT", Map.of(
                 "propertyId", connection.getPropertyId(),
                 "channelCode", connection.getChannelCode()), null);
+    }
+
+    /**
+     * 이 연결에서 사람이 봐야 할 실패. DEAD 는 재시도가 고치지 못하는 것이라(틀린 매핑, 채널이
+     * 거부한 값) 화면에 안 보이면 조용히 실패하는 자리가 된다(작업지시-17 8.3).
+     */
+    public SyncFailure failureOf(Long connectionId) {
+        long dead = syncJobs.countByConnectionIdAndStatus(connectionId, SyncJobStatus.DEAD);
+        String lastError = dead == 0 ? null : syncJobs
+                .findFirstByConnectionIdAndStatusOrderByIdDesc(connectionId, SyncJobStatus.DEAD)
+                .map(SyncJob::getLastError).orElse(null);
+        return new SyncFailure(dead, lastError);
+    }
+
+    public record SyncFailure(long deadJobs, String lastError) {
     }
 
     // --- 매핑 ---------------------------------------------------------------
