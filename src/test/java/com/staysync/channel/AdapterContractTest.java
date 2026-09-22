@@ -48,13 +48,21 @@ class AdapterContractTest extends SyncTestBase {
     private ChannelAdapterRegistry registry;
 
     @Test
-    @DisplayName("등록된 어댑터가 둘이다. Mock 과 iCal")
-    void 레지스트리에_어댑터가_둘_있다() {
+    @DisplayName("등록된 어댑터가 셋이다. Mock·iCal·Channex")
+    void 레지스트리에_어댑터가_셋_있다() {
+        // Channex 는 작업지시-17 에서 붙었다. 세 구현을 감춘다는 P3 의 설계가 실제가 됐다.
         assertThat(adapters).extracting(ChannelAdapter::type)
-                .containsExactlyInAnyOrder(AdapterType.MOCK, AdapterType.ICAL);
-        // Channex 는 계획서 3.2 의 Could 항목이고 P3 에 없다. 없는 것이 정상이다.
-        assertThatThrownBy(() -> registry.get(AdapterType.CHANNEX))
-                .isInstanceOf(AdapterNotRegisteredException.class);
+                .containsExactlyInAnyOrder(AdapterType.MOCK, AdapterType.ICAL, AdapterType.CHANNEX);
+        assertThat(registry.get(AdapterType.CHANNEX).type()).isEqualTo(AdapterType.CHANNEX);
+    }
+
+    @Test
+    @DisplayName("Channex 는 구현된 것만 선언한다 — 웹훅은 없고, 브랜치 1 에서는 아무것도 없다")
+    void Channex_선언은_구현을_따라간다() {
+        // 작업지시-17 2절 E. 브랜치 2 가 PUSH_* 를, 브랜치 3 이 PULL_BOOKING 을 더하면
+        // 이 단언을 그때 같이 넓힌다. WEBHOOK_BOOKING 은 끝까지 없다(5절 4번 — 피드 + ack).
+        assertThat(AdapterType.CHANNEX.supports(Capability.WEBHOOK_BOOKING)).isFalse();
+        assertThat(AdapterType.CHANNEX.capabilities()).isEmpty();
     }
 
     @Test

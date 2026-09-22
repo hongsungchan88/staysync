@@ -32,6 +32,9 @@ class ChannelApiTest extends ApiTestBase {
     private static final String ICAL_URL =
             "https://www.airbnb.com/calendar/ical/12345.ics?s=SECRETTOKEN";
 
+    /** Channex 숙소 식별자. 비밀이 아니고 연결의 일부다. */
+    private static final String CHANNEX_PROPERTY = "17e754e7-9aa8-456a-ad0a-94e1d54bc8f3";
+
     @Autowired
     private ChannelCredentialStore credentialStore;
 
@@ -207,11 +210,76 @@ class ChannelApiTest extends ApiTestBase {
         Long propertyId = 숙소등록(세션);
         Long unitId = 판매단위등록(세션, propertyId, "본채");
 
-        // 이게 이 제품의 존재 이유다. 막으면 안 된다.
-        매핑생성(세션, 연결생성(세션, propertyId, "CHANNEX", "CHANNEX", API_KEY), unitId, "rt_1")
+        // 이게 이 제품의 존재 이유다. 막으면 안 된다. (iCal + Channex 만 예외다 — 아래 D.)
+        매핑생성(세션, 연결생성(세션, propertyId, "BOOKING_COM", "CHANNEX", API_KEY), unitId, "rt_1")
                 .andExpect(status().isCreated());
-        매핑생성(세션, 연결생성(세션, propertyId, "AIRBNB_ICAL", "ICAL", ICAL_URL), unitId, "listing_1")
+        매핑생성(세션, 연결생성(세션, propertyId, "MOCK_OTA", "MOCK", API_KEY), unitId, "room_1")
                 .andExpect(status().isCreated());
+    }
+
+    // --- 작업지시-17 A·D (완료 조건 1·2) ---------------------------------------
+
+    @Test
+    @DisplayName("같은 판매 단위에 iCal 과 Channex 를 함께 매핑하면 어느 순서든 409 다")
+    void iCal_과_Channex_는_한_판매_단위에_함께_매핑되지_않는다() throws Exception {
+        // 에어비앤비가 Channex 를 거치면 같은 예약이 iCal 발행물로도 온다. 채널 코드가
+        // 달라 uq_channel_booking 이 못 막고 초과 판매 충돌로 뜬다(조사-04 5절 3번).
+        Session 세션 = 가입(새이메일());
+        Long propertyId = 숙소등록(세션);
+        Long 먼저iCal = 판매단위등록(세션, propertyId, "iCal 먼저");
+        Long 먼저Channex = 판매단위등록(세션, propertyId, "Channex 먼저");
+        Long ical = 연결생성(세션, propertyId, "AIRBNB_ICAL", "ICAL", ICAL_URL);
+        Long channex = 연결생성(세션, propertyId, "BOOKING_COM", "CHANNEX", API_KEY);
+
+        매핑생성(세션, ical, 먼저iCal, "listing_a").andExpect(status().isCreated());
+        매핑생성(세션, channex, 먼저iCal, "rt_a")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MAPPING_DOUBLE_INTAKE"));
+
+        매핑생성(세션, channex, 먼저Channex, "rt_b").andExpect(status().isCreated());
+        매핑생성(세션, ical, 먼저Channex, "listing_b")
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("MAPPING_DOUBLE_INTAKE"));
+
+        // 거절된 쪽은 남지 않았다 — 판매 단위마다 매핑이 하나뿐이다.
+        Long 매핑수 = jdbc.queryForObject(
+                "SELECT count(*) FROM channel_mapping WHERE unit_id IN (?, ?)", Long.class, 먼저iCal, 먼저Channex);
+        assertThat(매핑수).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("Channex 연결은 api_key 와 property_id 둘 다 있어야 만들어지고, 매핑은 요금제 식별자가 있어야 한다")
+    void Channex_는_키_둘과_요금제_식별자를_요구한다() throws Exception {
+        Session 세션 = 가입(새이메일());
+        Long propertyId = 숙소등록(세션);
+        Long unitId = 판매단위등록(세션, propertyId, "본채");
+
+        // property_id 없이 — 연결이 만들어지면 첫 전송에서야 IllegalStateException 으로 죽고 그건 워커 로그뿐이다.
+        mvc.perform(post("/api/properties/" + propertyId + "/channels")
+                        .header(HttpHeaders.AUTHORIZATION, 세션.bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"channelCode":"BOOKING_COM","adapterType":"CHANNEX","credentials":{"api_key":"%s"}}
+                                """.formatted(API_KEY)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CHANNEL_FIELD_MISSING"));
+
+        Long channex = 연결생성(세션, propertyId, "BOOKING_COM", "CHANNEX", API_KEY);
+        // 요금제 없이 방만 매핑하면 Channex 는 채널을 켜지 않는다(4절).
+        매핑생성(세션, channex, unitId, "rt_1", null)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CHANNEL_FIELD_MISSING"));
+        매핑생성(세션, channex, unitId, "rt_1", "rp_1")
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.externalRateId").value("rp_1"));
+
+        // 응답의 자격 증명 — 키는 가려지고 숙소 식별자도 같은 규칙으로 나간다(완료 조건 1).
+        mvc.perform(get("/api/channels/" + channex).header(HttpHeaders.AUTHORIZATION, 세션.bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.channelCode").value("BOOKING_COM"))
+                .andExpect(jsonPath("$.credentials.api_key").value(org.hamcrest.Matchers.not(API_KEY)))
+                .andExpect(jsonPath("$.credentials.api_key").value(org.hamcrest.Matchers.containsString("••••")))
+                .andExpect(jsonPath("$.credentials.property_id").value(org.hamcrest.Matchers.containsString("••••")));
     }
 
     @Test
@@ -236,7 +304,7 @@ class ChannelApiTest extends ApiTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"channelCode":"CHANNEX","adapterType":"CHANNEX","displayName":"둘째",
-                                 "credentials":{"api_key":"k2"}}
+                                 "credentials":{"api_key":"k2","property_id":"p2"}}
                                 """))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("DUPLICATE_CHANNEL_CONNECTION"));
@@ -283,9 +351,10 @@ class ChannelApiTest extends ApiTestBase {
         Session 세션 = 가입(새이메일());
         Long propertyId = 숙소등록(세션);
         Long ical = 연결생성(세션, propertyId, "AIRBNB_ICAL", "ICAL", ICAL_URL);
-        Long channex = 연결생성(세션, propertyId, "CHANNEX", "CHANNEX", API_KEY);
+        // PUSH_RATE 의 양성 예는 Mock 이다. Channex 는 구현된 만큼만 선언한다(작업지시-17 E).
+        Long channex = 연결생성(세션, propertyId, "MOCK_OTA", "MOCK", API_KEY);
 
-        // 어댑터 구현은 아직 하나도 없다. 그래도 화면은 옳은 것을 보여 줘야 한다.
+        // 화면은 어댑터 종류의 선언을 보여 준다.
         mvc.perform(get("/api/channels/" + ical).header(HttpHeaders.AUTHORIZATION, 세션.bearer()))
                 .andExpect(jsonPath("$.capabilities").value(org.hamcrest.Matchers.hasItem("PULL_BOOKING")))
                 .andExpect(jsonPath("$.capabilities").value(
@@ -331,13 +400,15 @@ class ChannelApiTest extends ApiTestBase {
     private Long 연결생성(Session 세션, Long propertyId, String channelCode,
                       String adapterType, String secret) throws Exception {
         String key = "ICAL".equals(adapterType) ? "ical_url" : "api_key";
+        // Channex 는 숙소 식별자도 있어야 만들어진다(작업지시-17 A). 비밀은 아니다.
+        String extra = "CHANNEX".equals(adapterType) ? ",\"property_id\":\"" + CHANNEX_PROPERTY + "\"" : "";
         MvcResult result = mvc.perform(post("/api/properties/" + propertyId + "/channels")
                         .header(HttpHeaders.AUTHORIZATION, 세션.bearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"channelCode":"%s","adapterType":"%s","displayName":"%s",
-                                 "credentials":{"%s":"%s"}}
-                                """.formatted(channelCode, adapterType, channelCode, key, secret)))
+                                 "credentials":{"%s":"%s"%s}}
+                                """.formatted(channelCode, adapterType, channelCode, key, secret, extra)))
                 .andExpect(status().isCreated())
                 .andReturn();
         JsonNode body = json.readTree(result.getResponse().getContentAsString());
@@ -346,12 +417,19 @@ class ChannelApiTest extends ApiTestBase {
 
     private org.springframework.test.web.servlet.ResultActions 매핑생성(
             Session 세션, Long connectionId, Long unitId, String externalUnitId) throws Exception {
+        return 매핑생성(세션, connectionId, unitId, externalUnitId, "rp_1");
+    }
+
+    private org.springframework.test.web.servlet.ResultActions 매핑생성(
+            Session 세션, Long connectionId, Long unitId, String externalUnitId,
+            String externalRateId) throws Exception {
+        String rate = externalRateId == null ? "" : ",\"externalRateId\":\"" + externalRateId + "\"";
         return mvc.perform(post("/api/channels/" + connectionId + "/mappings")
                 .header(HttpHeaders.AUTHORIZATION, 세션.bearer())
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"unitId":%d,"externalUnitId":"%s"}
-                        """.formatted(unitId, externalUnitId)));
+                        {"unitId":%d,"externalUnitId":"%s"%s}
+                        """.formatted(unitId, externalUnitId, rate)));
     }
 
     private static String 새이메일() {

@@ -114,4 +114,27 @@ describe('채널 목록', () => {
     expect(input.value).toBe('');
     expect(input.type).toBe('password');
   });
+
+  it('CHANNEX 를 고르면 숙소 식별자 칸이 열리고, 생성 요청에 api_key 와 property_id 가 함께 실린다', async () => {
+    // 작업지시-17 A. 서버가 둘 다 없으면 400 CHANNEL_FIELD_MISSING 이다.
+    const { default: userEvent } = await import('@testing-library/user-event');
+    render(<ChannelsPage />, { wrapper });
+    await waitFor(() => expect(screen.getByText('에어비앤비')).toBeInTheDocument());
+
+    expect(screen.queryByPlaceholderText('Channex 콘솔의 숙소 UUID')).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByDisplayValue('ICAL'), 'CHANNEX');
+    await userEvent.type(screen.getByPlaceholderText('저장하면 마스킹된 형태로만 보입니다'), 'chnx_key');
+    await userEvent.type(screen.getByPlaceholderText('Channex 콘솔의 숙소 UUID'), '17e754e7-uuid');
+    await userEvent.click(screen.getByRole('button', { name: '추가' }));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(
+        ([url, init]) => String(url).startsWith('/api/properties/1/channels') && init?.method === 'POST',
+      );
+      expect(call).toBeDefined();
+      const body = JSON.parse(String(call![1]!.body));
+      expect(body.adapterType).toBe('CHANNEX');
+      expect(body.credentials).toEqual({ api_key: 'chnx_key', property_id: '17e754e7-uuid' });
+    });
+  });
 });

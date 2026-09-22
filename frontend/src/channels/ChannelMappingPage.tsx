@@ -189,7 +189,10 @@ function MappingForm({
       setError(
         e instanceof ApiError && e.code === 'DUPLICATE_CHANNEL_MAPPING'
           ? '이 연결에 이미 매핑된 판매 단위입니다.'
-          : '매핑하지 못했습니다.',
+          : // MAPPING_DOUBLE_INTAKE(iCal+Channex 동시 매핑)·CHANNEL_FIELD_MISSING 은 서버 문장이 이유를 담고 있다.
+            e instanceof ApiError
+            ? e.message
+            : '매핑하지 못했습니다.',
       ),
   });
 
@@ -211,7 +214,7 @@ function MappingForm({
         />
       </label>
       <label className="flex-1 text-xs text-muted">
-        요금 식별자 (선택)
+        {hint === 'room_type_id' ? '요금제 식별자 (Channex 는 필수)' : '요금 식별자 (선택)'}
         <Input
           className="mt-1"
           value={externalRateId}
