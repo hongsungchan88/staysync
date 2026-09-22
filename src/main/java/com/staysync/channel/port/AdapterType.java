@@ -26,10 +26,10 @@ public enum AdapterType {
      * 선언(PUSH 셋·WEBHOOK·PULL)이 화면용으로 남아 있었는데, 그대로 두고 어댑터를
      * 붙이면 구현 없는 기능을 워커가 부른다 — 12~14주차에 선언과 구현이 어긋난 결함이
      * 세 번이었다. 브랜치마다 붙는 만큼만 더한다: 연결·매핑(없음) → 재고·요금 전송
-     * ({@code PUSH_*}) → 예약 피드({@code PULL_BOOKING}). {@code WEBHOOK_BOOKING} 은
+     * ({@code PUSH_*}, 지금 여기) → 예약 피드({@code PULL_BOOKING}). {@code WEBHOOK_BOOKING} 은
      * 안 만든다(5절 4번, 피드 + ack).
      */
-    CHANNEX(EnumSet.noneOf(Capability.class)),
+    CHANNEX(EnumSet.of(Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE, Capability.PUSH_RESTRICTION)),
 
     /**
      * 자체 제작 시뮬레이터. 지연과 실패를 주입해 동기화 로직을 검증한다.

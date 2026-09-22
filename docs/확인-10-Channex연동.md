@@ -73,9 +73,65 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
 - 같은 판매 단위에 iCal 과 Channex 를 함께 매핑하면 어느 순서든 409 `MAPPING_DOUBLE_INTAKE`
 - 능력 선언: 브랜치 1 에서는 없음. `WEBHOOK_BOOKING` 은 끝까지 없다
 
-## 2. 재고·요금 전송 (브랜치 2)
+## 2. 재고·요금 전송 (브랜치 2, `feat/channex-ari`, 09-22)
 
-(브랜치 2 에서 채운다)
+### 2.1 스테이징이 실제로 하는 일 (09-22 04:00 UTC, 파이썬 직접 호출)
+
+**쓰기.** `POST /api/v1/availability {"values":[{"property_id","room_type_id","date_from","date_to","availability"}]}` → 200
+`{"data":[{"id":"<task uuid>","type":"task"}],"meta":{"message":"Success"}}` (1.35s).
+`POST /api/v1/restrictions {"values":[{"property_id","rate_plan_id","date_from","date_to","rate":"120.00","min_stay_arrival":2,"stop_sell":false}]}`
+→ 같은 모양 (0.95s). `date_from`~`date_to` 는 **양끝 포함**이다(10-22~10-25 로 보내면 되읽기에 나흘이 있다).
+
+**되읽기.** `GET /api/v1/availability?filter[property_id]=…&filter[date][gte]=…&filter[date][lte]=…` →
+`{"data":{"<room_type_id>":{"2026-10-22":1,…}}}`.
+`GET /api/v1/restrictions?…&filter[restrictions]=availability,rate,min_stay_arrival,min_stay_through,stop_sell,closed_to_arrival,closed_to_departure,max_stay` →
+`{"data":{"<rate_plan_id>":{"2026-10-22":{"availability":1,"closed_to_arrival":false,"closed_to_departure":false,"max_stay":0,"min_stay_arrival":2,"min_stay_through":1,"rate":"120.00","stop_sell":false,"unavailable_reasons":[]},…}}}`.
+**요금제 키 아래 재고까지 같이 오므로 재동기화는 이 GET 하나로 대조한다.** 대괄호를 `%5B`/`%5D` 로 인코딩해 보내도(RestClient 가 그렇게 한다) 200 이다.
+
+**실제로 받은 경고(전부 200).** 그대로 `ChannexStubServer.Responses` 에 넣어 테스트 픽스처로 쓴다.
+
+| 보낸 것 | 응답 |
+|---|---|
+| 지난 날짜 `date: 2026-09-21` | `{"data":[],"meta":{"message":"Success","warnings":[{"warning":{"date":["Past date is not allowed"]},"date":"2026-09-21","property_id":"…","rate_plan_id":"…","rate":"120.00"}]}}` |
+| `rate: "0"` | `warnings:[{"warning":{"rate":["must be greater than 0"]},"date":"2026-10-22",…,"rate":"0"}]` |
+| `availability: -1` | `warnings:[{"warning":{"availability":["must be greater than or equal to 0"]},…,"availability":-1}]` |
+| 없는 `room_type_id` | `warnings:[{"warning":"Not found room_type for this change","date":"2026-10-22",…}]` — **경고가 객체가 아니라 문자열** |
+| 빈 본문 `{"property_id":…}` 만 | `warnings:[{"warning":{"date":["Should be included field date or fields pair date_from-date_to"],"room_type_id":["can't be blank"],"availability":["can't be blank"]},…}]` — **400 이 아니다** |
+| 틀린 키 | **401** `{"errors":{"code":"unauthorized","title":"Unauthorized"}}` |
+
+**레이트 리밋.** 응답 헤더 `ratelimit-policy: "availability";q=6000;w=60, "availability";q=360000;w=3600, "availability";q=8640000;w=86400`,
+`ratelimit: "availability";r=5996;t=21, …`. **분당 6,000** 이다 — 문서(조사-01)의 "숙소당 분당 10" 과 다르다. 12.5초에 15번을
+보내도 전부 200 이라 **실제 429 는 받지 못했다.** 429 처리는 `Retry-After` → `ratelimit` 의 `t=` → 60초 순으로 대기 시간을
+읽게 짜고 스텁으로만 검증했다(완료 조건 6 은 스텁 + 실측 헤더).
+
+### 2.2 StaySync 를 거친 왕복 (로컬 앱 → 스테이징, 09-22 13:1x KST)
+
+로컬 조직 `Channex 시험 조직`(숙소 `Channex 시험 숙소 (USD)`, 판매 단위 `시험 객실` 1실 기본 요금 100), CHANNEX 연결(채널 코드
+`BOOKING_COM`, `api_key`+`property_id`, 응답은 `UspI••••589x`/`17e7••••c8f3` 로 가려짐), 매핑 `92f88770… / 46b69549…`.
+
+| 한 일 | Channex 되읽기 | 걸린 시간 |
+|---|---|---|
+| 30일 일괄 편집 요금 130·최소 숙박 2 (11-01~11-30) | 첫날·중간·마지막 전부 `rate "130.00", min_stay_arrival 2` | **14.6s**(병합 버퍼 6s + 워커 주기) |
+| 30일 일괄 편집 요금 140 (12-11~01-09) | 마지막 날 `140.00` | **11.5s**. 앱 로그 `Channex 전송. path=/api/v1/restrictions 값=1건 task=…` **한 줄** — **요청 1번, 값(구간) 1개**(완료 조건 5) |
+| 수기 예약 2박 → 취소 | 예약 뒤 `availability 0`(이미 0 이었다 — 우리가 재고를 보낸 적 없는 날은 Channex 가 0 이다), **취소 뒤 `availability 1, stop_sell false`** | 12s 안 |
+| 다시 예약 1박 | `availability 0` — **`stop_sell true` 는 Channex 가 스스로 켠다**(우리는 `false` 를 보냈다) | **11.5s** |
+
+완료 조건 3·4 판정. 부킹닷컴 테스트 예약을 만들 재고가 이제 있다(브랜치 3).
+
+### 2.3 StaySync 쪽 (브랜치 2)
+
+- `ChannexAdapter.pushAri` — 세그먼트를 재고(`/availability`, `room_type_id`)와 요금·제약(`/restrictions`, `rate_plan_id`)으로 갈라
+  두 번 보낸다. 요금은 `"120.00"` 문자열, `min_stay_arrival`·`min_stay_through` 둘 다(숙소 `min_stay_type: both`). 채널로 보내는
+  값은 `InventoryLedger.available()`(0 아래로 안 내려감) — **초과분을 더해 보내지 않는다**(9.2 B, `ChannexAriTest` 가 초과 예약 둘인
+  날에 `availability: 0` 이 나가는 것을 본다)
+- `meta.warnings` 가 하나라도 있으면 `PermanentChannelException` → 워커가 **DEAD** + `last_error` 에 경고 문장(완료 조건 7)
+- 401/403/404 → 영구, 5xx·연결 실패 → 일시, 429 → `RateLimitedException(Retry-After | ratelimit t= | 60s)`. 워커의 연결별 순서
+  보장(`NOT EXISTS`)이 "그 숙소만 멈춘다"를 만든다 — 이웃 연결은 그대로 나간다(완료 조건 6)
+- `fetchAriSnapshot(creds, room, rate, from, to)` — `ChannelAdapter` 에 요금제까지 받는 꼴을 더했고(기본 구현은 옛 셋짜리로 넘김)
+  `ChannelReconcileJob` 이 그걸 부른다. Channex 는 `GET /restrictions` 한 번으로 재고·요금·최소 숙박·판매중지를 읽는다
+- **판매 단위 수량 변경(`/capacity`)이 채널로 나간다**(9.2 D). `UnitCapacityWriter` 가 `UNIT_CAPACITY_CHANGED`(unitId, 오늘~+180일)를
+  Outbox 에 남기고 `ChannelSyncService` 가 재고 이벤트로 받는다. 안 보내면 새벽 4시 재동기화까지 채널이 옛 수량으로 판다
+- `AdapterType.CHANNEX` 선언: `PUSH_AVAILABILITY`·`PUSH_RATE`·`PUSH_RESTRICTION`
 
 ## 3. 예약 피드 (브랜치 3)
 
@@ -90,7 +146,16 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
 | 예약 피드 순서 "적혀 있지 않다"(작업지시-17 2절 C) | `GET /booking_revisions/feed` 의 `meta` 가 `order_by: inserted_at, order_direction: asc, limit: 10` 이다 — **오름차순으로 준다.** 그래도 한 묶음 안에서 정렬해 넘긴다 |
 | `channel_restrictions` 의 뜻(6절이 모른다고 함) | `{currency: EUR, min_price: 500}` — 채널이 받는 최소 요금 5.00 EUR 로 읽힌다(정수 = 최소 단위). 확정은 브랜치 2 의 요금 전송에서 |
 | `rate_params.pricing_type` 기본값 | `"Standart"`(오타). 값은 `Standard`|`OBP` 를 보내야 한다 |
+| 레이트 리밋 "숙소당 분당 요금 10·재고 10"(조사-01, 문서) | 스테이징 헤더는 **분당 6,000** (`ratelimit-policy`). 실제 429 를 못 만들었다 |
+| 잘못된 요청은 400 | **전부 200 + `meta.warnings`** 다. 빈 본문도 200 이다. 400 은 한 번도 못 봤다 |
+| 재고 0 이면 판매중지? | 재고를 0 으로 보내면 Channex 가 `stop_sell: true` 를 **스스로 켠다**(우리는 `false` 를 보냈다). 되읽기로 판매중지를 대조할 때 이걸 감안해야 한다 |
 
 ## 5. 시간과 레이트 리밋
 
-(브랜치 2·3 에서 채운다 — 걸린 시간, 429 를 받았는지, 200+경고를 받았는지)
+| | 값 |
+|---|---|
+| 스테이징 왕복 | 쓰기 0.7~1.5s, 읽기 0.7~0.9s(개발 PC → SJC) |
+| 변경 → Channex 반영 | 11.5~14.6s (병합 버퍼 6s + 워커 주기 + 왕복) |
+| 30일 요금 변경 | 요청 1번, 값 1개 |
+| 429 | **못 받았다.** 정책 분당 6,000(헤더 실측). 15연속 200 |
+| 200+경고 | 받았다 — 지난 날짜·0 요금·음수 재고·없는 객실·빈 본문 다섯 모양(2.1) |

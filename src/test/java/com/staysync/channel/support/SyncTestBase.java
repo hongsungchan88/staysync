@@ -107,7 +107,7 @@ public abstract class SyncTestBase {
                                         String baseUrl, String externalUnitId) {
         ChannelConnection connection = channels.create(
                 fixture.propertyId(), fixture.orgId(), channelCode, type, channelCode,
-                Map.of("api_key", "stub-key", "base_url", baseUrl));
+                Map.of("api_key", "stub-key", "base_url", baseUrl, "property_id", "prop-1"));
         channels.addMapping(connection.getId(), fixture.orgId(), fixture.unitId(),
                 externalUnitId, "rate-1");
         return connection;
@@ -117,6 +117,6 @@ public abstract class SyncTestBase {
     protected ChannelConnection connectWithoutMapping(Fixture fixture, String channelCode,
                                                       AdapterType type, String baseUrl) {
         return channels.create(fixture.propertyId(), fixture.orgId(), channelCode, type, channelCode,
-                Map.of("api_key", "stub-key", "base_url", baseUrl));
+                Map.of("api_key", "stub-key", "base_url", baseUrl, "property_id", "prop-1"));
     }
 }

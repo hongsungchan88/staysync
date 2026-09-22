@@ -35,6 +35,7 @@ import org.springframework.stereotype.Component;
  *   RESERVATION_CANCELLED  → 재고가 늘었다              "
  *   RESERVATION_EXPIRED    → 재고가 늘었다              "
  *   RESERVATION_DATES_CHANGED → 양쪽 기간이 바뀌었다    "
+ *   UNIT_CAPACITY_CHANGED  → 수량이 바뀌었다(오늘~180일)  "
  * </pre>
  *
  * <p><b>이벤트에서 값을 읽지 않고 현재 값을 다시 읽는다.</b> 페이로드에는 식별자와
@@ -69,7 +70,9 @@ class ChannelSyncService implements DomainEventPublisher {
             "RESERVATION_DATES_CHANGED",
             // P4 16주차. 홀드도 재고를 차지한다 — available() 이 held 를 빼기 때문이다.
             // 이것이 빠져 있어 만료(재고 증가)만 나가고 생성(재고 감소)은 안 나갔다.
-            "RESERVATION_HELD");
+            "RESERVATION_HELD",
+            // 판매 단위 수량 변경(작업지시-17 9.2 D). 오늘부터 180일의 가용이 통째로 바뀐다.
+            "UNIT_CAPACITY_CHANGED");
 
     private final ChannelConnectionRepository connections;
     private final ChannelMappingRepository mappings;
