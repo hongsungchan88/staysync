@@ -174,14 +174,25 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
 Channex 는 OTA 가 아니라 우리 원장의 거울이고, 실측으로는 생성 때만 스스로 줄이고 변경·취소에는 손대지 않는다. 그래서
 `adapterType == CHANNEX` 면 원 채널이어도 재고를 보낸다. 같은 값을 한 번 더 보내는 비용(요청 1)뿐이다.
 
-**완료 조건 18 의 나머지(막대 색이 부킹닷컴 색인지)** — 캘린더 API 가 막대에 `channel: BOOKING_COM` 을 싣는 것까지 봤다.
-라벨·색은 `frontend/src/calendar/channels.ts` 의 `BOOKING_COM` 항목이 맡고 단위 테스트가 덮는다. **브라우저로 실제 색을 보는
-것은 부킹닷컴 실물과 함께 심사 직전 1회로 미룬다**(8.3).
+**CRS 로 증명된 것과 안 된 것.** 채널 코드는 CRS 든 실물이든 같은 경로다 — `ChannelBookingPoller` 가
+`connection.getChannelCode()` 를 그대로 `ChannelBookingCommand` 에 넘기고 `ota_name` 을 읽는 곳은 하나도 없다.
+그래서 `BOOKING_COM` 이 붙는 것은 CRS 로 증명됐다. 남은 것 둘:
 
-### 3.4 USD 숙소 재시도
+- **(ㄱ) 브라우저에서 막대가 실제 부킹닷컴 색으로 칠해지는지** — API 가 `channel: BOOKING_COM` 을 싣는 것까지 봤고 색·라벨은
+  `frontend/src/calendar/channels.ts` 의 항목과 단위 테스트가 덮는다. 눈으로 보는 것은 **심사 직전 1회**
+- **(ㄴ) 실물 OTA 리비전의 페이로드 모양이 CRS 리비전과 같은지** — 지금 픽스처는 CRS 하나뿐이다(`is_crs_revision true`,
+  `channel_id null`). 실물은 `is_crs_revision false` 이고 `channel_id` 가 있으며 방·금액 필드 구성이 다를 수 있다.
+  **이쪽이 남은 진짜 위험이다** — 어댑터가 읽는 필드(`booking_id`·`status`·`inserted_at`·`amount`·`currency`·
+  `rooms[].room_type_id`·`checkin_date`·`checkout_date`·`occupancy`)가 실물에서 같은 자리에 있는지는 아직 모른다
 
-09-22 19:13~20:1x KST, 10485037·11140466 에 5분마다 `POST /channels` — 전부 422. 회수는 주기적으로 일어나므로 심사 직전에
-다시 시도한다(채널 생존 확인 → 재고 푸시 → 앱 기동 → 예약 → 변경 → 취소를 한 자리에서).
+### 3.4 USD 숙소 재시도 — 1시간, 전부 실패
+
+**09-22 19:13~20:01 KST, 5분 간격 10회, 10485037·11140466 에 `POST /channels` — 전부 422 "already exists".** 그 뒤 감시를
+내렸다. 공용 테스트 숙소 다섯(USD 둘·GBP 둘·EUR 하나)이 그 시간 내내 남의 손에 있었다.
+
+**재시도는 심사 직전에 한 자리에서 몰아서 한다** — ① 채널 생존 확인(`GET /channels`, 없으면 `POST /channels` + 매핑 +
+`activate`) → ② 재고 푸시(수량 왕복이면 오늘~180일이 한 번에 나간다, 9.2 D) → ③ 로컬 앱 기동 → ④ 부킹닷컴 테스트 예약 →
+⑤ 변경 → ⑥ 취소. 중간에 끊기면 그 사이 만든 예약은 우리에게 오지 않는다(3.1).
 
 ## 4. Channex 문서와 실제가 다른 곳
 

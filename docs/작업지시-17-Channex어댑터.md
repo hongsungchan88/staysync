@@ -410,7 +410,7 @@ Channex 에는 쓰지 않았다(실 API 는 브랜치 2 부터). 병합·배포 
 | `ChannexAdapter.pullBookings` | `GET /booking_revisions/feed?filter[property_id]&pagination[limit]=100&order[inserted_at]=asc`. 리비전 → `InboundBooking`(방마다 하나, 둘째부터 `#2`). `revision` = `inserted_at` epoch 초(INT, 2038 까지). **금액은 속성 `amount` 그대로, 없으면 미상 + 경고**(9.2 A). 통화가 숙소 통화(`GET /properties/:id`, 캐시)와 다르면 넣지 않고 ack 도 안 한다(14) |
 | `ChannexAdapter.acknowledge` | `POST /booking_revisions/:id/ack`. 리비전 id 는 `rawPayload` 에서 — 포트에 필드를 더하지 않았다(`ChannelAdapter.acknowledge` 기본 구현은 아무것도 안 함) |
 | `ChannelBookingPoller` | **Channex 전용 60초 스케줄 `runChannex()`**(5초 사슬은 Mock 만, 15분은 iCal). `ingest` 가 **돌아온 뒤에만** ack — 예외로 나가면(롤백) 안 하고, 매핑 없으면 안 한다(주기마다 경고, Channex 가 30분 뒤 메일) |
-| `ChannelSyncService` | **Channex 에는 원 채널이어도 재고를 되보낸다.** Channex 는 OTA 가 아니라 거울이고 변경·취소에 스스로 안 움직인다(실측, 확인-10 3.3) — 안 되보내면 취소된 날이 0 으로 남아 부킹닷컴이 닫힌 채다 |
+| `ChannelSyncService` | **Channex 에는 원 채널이어도 재고를 되보낸다.** Channex 는 OTA 가 아니라 거울이고 변경·취소에 스스로 안 움직인다(실측, 확인-10 3.3) — 안 되보내면 취소된 날이 0 으로 남아 부킹닷컴이 닫힌 채다. **12주차 결정을 뒤집은 것이라 `ADR 0014` 에 남겼고**(맥락·실측·범위·대가·뒤집을 조건) 클래스 javadoc 의 12주차 문단도 함께 고쳤다 — 그 문단만 보고 되돌리는 것을 막는다 |
 | `AdapterType.CHANNEX` | `PUSH_*` 셋 + `PULL_BOOKING`. 웹훅·스냅샷 아님 |
 | 채널 코드 | 예약의 `channel_code` = 연결의 코드(`BOOKING_COM`). **에어비앤비가 Channex 로 오는 날 `ota_name` 으로 가르는 것은 이번 범위 밖** |
 | 마이그레이션 | 없음 |
@@ -423,9 +423,21 @@ Channex 에는 쓰지 않았다(실 API 는 브랜치 2 부터). 병합·배포 
 
 **완료 조건** — 8 (CRS 실물로: 캘린더 `BOOKING_COM`·US$361.08·재고 0·리포트 채널 믹스·ack), 9 (CRS 로 변경 3박 → 취소,
 재고 복귀 — StaySync 와 Channex 둘 다), 10·11·12·13·14·16 테스트, 9.2 A·C 테스트(초과 → OPEN 한 행·overbooked 1 →
-취소 → AUTO_CLOSED·0). **미검증으로 남긴 것**: 부킹닷컴 경유 실물의 채널 코드·캘린더 막대 색(18 의 절반) — CRS 로는
-증명이 안 된다. **심사 직전 실물 1회**로: 채널 생존 확인 → 재고 푸시(수량 왕복이면 180일) → 앱 기동 → 예약 → 변경 → 취소를
-한 자리에서.
+취소 → AUTO_CLOSED·0).
+
+**채널 코드는 CRS 로 증명됐다.** 폴러가 `connection.getChannelCode()` 를 그대로 명령에 넘기고 `ota_name` 을 읽는 곳이
+없어, CRS 든 실물이든 같은 경로로 `BOOKING_COM` 이 된다. **미검증은 둘이다**(확인-10 3.3):
+
+- **(ㄱ) 브라우저에서 막대가 실제 부킹닷컴 색인지** — 심사 직전 1회. API 가 `channel: BOOKING_COM` 을 싣는 것까지는 봤다
+- **(ㄴ) 실물 OTA 리비전의 페이로드 모양** — 지금 픽스처는 CRS 하나(`is_crs_revision true`, `channel_id null`)뿐이다.
+  실물은 `is_crs_revision false`·`channel_id` 있음이고 방·금액 필드 구성이 다를 수 있다. **이쪽이 남은 진짜 위험이다** —
+  어댑터가 읽는 필드가 실물에서 같은 자리에 있는지 아직 모른다
+
+**심사 직전 실물 1회**의 순서는 확인-10 3.4 에 적었다(채널 생존 → 재고 푸시 → 앱 기동 → 예약 → 변경 → 취소, 한 자리에서).
+
+**32차 지적 둘이 브랜치 3 에 들어갔다.** 전송 상한(문서 값)과 DEAD 가시성은 브랜치 2 의 지적이지만 그 브랜치가 이미
+병합된 뒤에 고쳐서 이 커밋에 있다. **`main` 의 `1c48692` 시점에는 그 둘이 빠져 있다** — 배포 전이라 무해하고, 브랜치 3 이
+병합되면 해소된다. 되돌릴 때 브랜치 2 까지만 되돌리면 그 둘도 같이 사라진다는 뜻이다.
 
 **결과** — 백엔드 **364** · 시뮬레이터 37 · 프론트 **113**(+1). 병합·배포 앞에서 멈췄다. 배포는 셋을 한 번에.
 
