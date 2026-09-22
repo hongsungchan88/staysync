@@ -6,6 +6,7 @@ import com.staysync.booking.DailyAvailability;
 import com.staysync.booking.InventoryService;
 import com.staysync.channel.domain.ChannelConnection;
 import com.staysync.channel.domain.ChannelMapping;
+import com.staysync.channel.port.AdapterType;
 import com.staysync.channel.port.Capability;
 import com.staysync.pricing.DayRate;
 import com.staysync.pricing.RateCalendarView;
@@ -47,9 +48,16 @@ import org.springframework.stereotype.Component;
  * 말하는 설계의 요점이 여기서 동작한다 — iCal 은 {@code PUSH_RATE} 를 지원하지 않으므로
  * 요금을 바꿔도 그 연결에는 작업이 만들어지지 않는다(13주차에 실제로 걸린다).
  *
- * <p><b>예약을 만든 채널 자신에게는 되보내지 않는다.</b> 계획서 6.5 수신 경로의 5번이
- * "다른 채널로 재고 차감 전파"인 이유다. 자기가 판 예약을 자기에게 다시 알리는 것은
- * 낭비이고, 채널에 따라서는 되울림이 된다.
+ * <p><b>예약을 만든 채널 자신에게는 되보내지 않는다 — Channex 는 예외다.</b> 계획서 6.5
+ * 수신 경로의 5번이 "다른 채널로 재고 차감 전파"인 이유다. 자기가 판 예약을 자기에게 다시
+ * 알리는 것은 낭비이고, 채널에 따라서는 되울림이 된다. 그 전제는 <b>OTA 는 자기 예약만큼
+ * 자기 재고를 스스로 깎는다</b>는 것인데, {@link AdapterType#CHANNEX} 에는 절반만 성립한다 —
+ * 생성 때만 줄이고 변경·취소에는 손대지 않는다(숙소 설정
+ * {@code allow_availability_autoupdate_on_modification}·{@code _on_cancellation} 기본
+ * {@code false}, 확인-10 3.3 실측). 되보내지 않으면 취소된 날이 채널에 0 으로 남아
+ * 부킹닷컴이 계속 닫혀 있고, 우리 쪽에는 아무 증상이 없다. 그래서 CHANNEX 연결에는 원 채널
+ * 필터를 적용하지 않는다. <b>근거와 뒤집을 조건은 ADR 0014</b> — 12주차 결정을 여기서
+ * 뒤집었으므로 이 문단만 보고 되돌리지 말 것.
  *
  * <p>예외를 삼키지 않는다. {@code OutboxRelay} 가 실패로 기록하고 다음 주기에 다시
  * 준다. 조용히 성공으로 처리하면 채널이 옛 값을 든 채로 남고 아무 증상이 없다.
@@ -175,8 +183,13 @@ class ChannelSyncService implements DomainEventPublisher {
                         required, connection.getId(), connection.getAdapterType());
                 continue;
             }
-            if (originChannel != null && originChannel.equals(connection.getChannelCode())) {
-                // 이 예약을 만든 채널이다. 자기에게 되보내지 않는다.
+            if (originChannel != null && originChannel.equals(connection.getChannelCode())
+                    && connection.getAdapterType() != AdapterType.CHANNEX) {
+                // 이 예약을 만든 채널이다. 자기에게 되보내지 않는다 — OTA 는 자기 예약을 스스로 깎는다.
+                // **Channex 는 예외다.** Channex 는 OTA 가 아니라 우리 원장의 거울이고, 실측으로는
+                // 예약 생성 때만 재고를 스스로 줄이고 변경·취소에는 손대지 않는다
+                // (allow_availability_autoupdate_on_cancellation/modification = false, 확인-10 3절).
+                // 안 되보내면 취소된 날이 Channex 에 0 으로 남아 부킹닷컴이 계속 닫혀 있다.
                 continue;
             }
 

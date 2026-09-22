@@ -132,6 +132,41 @@ public final class ChannexStubServer implements AutoCloseable {
         public static final String AVAILABILITY_SNAPSHOT =
                 "{\"data\":{\"92f88770-4d38-4ff8-839d-542672d92c3e\":{\"2026-10-22\":1,\"2026-10-23\":1}}}";
 
+        /**
+         * 스테이징 실물 — <b>Booking CRS 로 만든 예약의 첫 리비전</b>(2026-09-22 10:19 UTC, 확인-10 3절).
+         * 부킹닷컴 공용 테스트 숙소가 전부 남의 손에 있어 Channex 인증 시험 11 이 허용하는 CRS 경로로
+         * 만들었다(작업지시-17 8.3). 투숙객은 가명("Te st"), 메일은 예시 주소, 계정 식별자
+         * {@code system_id} 는 0 으로 지웠다. {@code raw_message} 안의 금액이 최소 단위 정수(18054)인
+         * 것이 보인다 — 속성의 {@code "180.54"} 와 같은 값이다.
+         */
+        public static final String REVISION_CRS_NEW = "{\"attributes\":{\"id\":\"22861a65-c065-450c-ac2c-7b7894dc1c5d\",\"meta\":{},\"status\":\"new\",\"services\":[],\"currency\":\"USD\",\"amount\":\"361.08\",\"agent\":null,\"unique_id\":\"BDC-STAYSYNC-CRS-001\",\"inserted_at\":\"2026-09-22T10:19:36.251613\",\"channel_id\":null,\"ota_reservation_code\":\"STAYSYNC-CRS-001\",\"system_id\":\"00000000-0000-0000-0000-000000000000\",\"ota_name\":\"Booking.com\",\"property_id\":\"17e754e7-9aa8-456a-ad0a-94e1d54bc8f3\",\"booking_id\":\"87358c26-ac21-4962-aca4-571807e76238\",\"arrival_date\":\"2026-11-10\",\"arrival_hour\":null,\"customer\":{\"meta\":null,\"name\":\"Te\",\"state\":null,\"zip\":null,\"address\":null,\"city\":null,\"country\":\"KR\",\"language\":null,\"mail\":\"test@example.com\",\"phone\":null,\"surname\":\"st\"},\"departure_date\":\"2026-11-12\",\"deposits\":[],\"notes\":null,\"ota_commission\":\"0.00\",\"payment_collect\":\"ota\",\"payment_type\":\"credit_card\",\"rooms\":[{\"meta\":null,\"taxes\":[],\"services\":[],\"amount\":\"361.08\",\"days\":{\"2026-11-10\":\"180.54\",\"2026-11-11\":\"180.54\"},\"ota_commission\":null,\"guests\":[{\"name\":\"Te\",\"surname\":\"st\"}],\"occupancy\":{\"children\":0,\"adults\":2,\"ages\":[],\"infants\":0},\"rate_plan_id\":\"46b69549-6f8b-4a55-b594-979850f45379\",\"room_type_id\":\"92f88770-4d38-4ff8-839d-542672d92c3e\",\"booking_room_id\":\"47253c43-556b-409e-a767-a83ce04e92a6\",\"checkout_date\":\"2026-11-12\",\"checkin_date\":\"2026-11-10\",\"is_cancelled\":false,\"ota_unique_id\":null}],\"occupancy\":{\"children\":0,\"adults\":2,\"ages\":[],\"infants\":0},\"guarantee\":null,\"secondary_ota\":null,\"acknowledge_status\":\"pending\",\"raw_message\":\"{\\\"meta\\\":{},\\\"status\\\":\\\"new\\\",\\\"services\\\":[],\\\"currency\\\":\\\"USD\\\",\\\"amount\\\":0,\\\"ota_reservation_code\\\":\\\"STAYSYNC-CRS-001\\\",\\\"ota_name\\\":\\\"Booking.com\\\",\\\"property_id\\\":\\\"17e754e7-9aa8-456a-ad0a-94e1d54bc8f3\\\",\\\"arrival_date\\\":\\\"2026-11-10\\\",\\\"arrival_hour\\\":null,\\\"customer\\\":{\\\"meta\\\":null,\\\"name\\\":\\\"Te\\\",\\\"state\\\":null,\\\"zip\\\":null,\\\"address\\\":null,\\\"city\\\":null,\\\"country\\\":\\\"KR\\\",\\\"language\\\":null,\\\"mail\\\":\\\"test@example.com\\\",\\\"phone\\\":null,\\\"surname\\\":\\\"st\\\"},\\\"departure_date\\\":\\\"2026-11-12\\\",\\\"deposits\\\":[],\\\"notes\\\":null,\\\"ota_commission\\\":0,\\\"payment_collect\\\":\\\"ota\\\",\\\"payment_type\\\":\\\"credit_card\\\",\\\"rooms\\\":[{\\\"meta\\\":null,\\\"taxes\\\":[],\\\"services\\\":[],\\\"amount\\\":0,\\\"days\\\":{\\\"2026-11-10\\\":18054,\\\"2026-11-11\\\":18054},\\\"guests\\\":[{\\\"name\\\":\\\"Te\\\",\\\"surname\\\":\\\"st\\\"}],\\\"occupancy\\\":{\\\"children\\\":0,\\\"adults\\\":2,\\\"ages\\\":[],\\\"infants\\\":0},\\\"rate_plan_id\\\":\\\"46b69549-6f8b-4a55-b594-979850f45379\\\",\\\"room_type_id\\\":\\\"92f88770-4d38-4ff8-839d-542672d92c3e\\\"}]}\",\"is_crs_revision\":true},\"id\":\"22861a65-c065-450c-ac2c-7b7894dc1c5d\",\"type\":\"booking_revision\",\"relationships\":{\"data\":{\"property\":{\"id\":\"17e754e7-9aa8-456a-ad0a-94e1d54bc8f3\",\"type\":\"property\"},\"booking\":{\"id\":\"87358c26-ac21-4962-aca4-571807e76238\",\"type\":\"booking\"}}}}";
+
+        /**
+         * 예약 리비전 하나. <b>Channex 문서의 예시를 시험 숙소 식별자로 바꾼 것</b> — 부킹닷컴 경로의
+         * 모양(채널 코드·색 매핑을 덮는 단위 테스트용). 실물은 {@link #REVISION_CRS_NEW} 다.
+         */
+        public static final String REVISION_NEW = revision(
+                "03dd7198-c5b7-493c-a889-74d0c2211de7", "cfa33f3b-bd32-4b90-8ef9-bde2bfe986cd",
+                "new", "2026-09-22T05:00:00.000000", "2026-11-05", "2026-11-07", "260.00", "USD",
+                "92f88770-4d38-4ff8-839d-542672d92c3e", "46b69549-6f8b-4a55-b594-979850f45379");
+
+        /** 같은 모양으로 값만 바꾼 리비전. 피드 {@code data[]} 의 원소 하나다. */
+        public static String revision(String id, String bookingId, String status, String insertedAt,
+                                      String checkIn, String checkOut, String amount, String currency,
+                                      String roomTypeId, String ratePlanId) {
+            String amountJson = amount == null ? "null" : "\"" + amount + "\"";
+            return "{\"type\":\"booking_revision\",\"id\":\"" + id + "\",\"attributes\":{"
+                    + "\"id\":\"" + id + "\",\"property_id\":\"17e754e7-9aa8-456a-ad0a-94e1d54bc8f3\","
+                    + "\"booking_id\":\"" + bookingId + "\",\"unique_id\":\"BDC-9996013801\",\"revision_id\":\"" + id + "\","
+                    + "\"ota_reservation_code\":\"9996013801\",\"ota_name\":\"Booking.com\",\"status\":\"" + status + "\","
+                    + "\"customer\":{\"name\":\"User\",\"surname\":\"Channex\",\"mail\":\"user@channex.io\"},"
+                    + "\"rooms\":[{\"room_type_id\":\"" + roomTypeId + "\",\"rate_plan_id\":\"" + ratePlanId + "\","
+                    + "\"checkin_date\":\"" + checkIn + "\",\"checkout_date\":\"" + checkOut + "\","
+                    + "\"occupancy\":{\"adults\":2,\"children\":0,\"infants\":0},\"amount\":" + amountJson + ",\"days\":{}}],"
+                    + "\"arrival_date\":\"" + checkIn + "\",\"departure_date\":\"" + checkOut + "\","
+                    + "\"amount\":" + amountJson + ",\"currency\":\"" + currency + "\",\"inserted_at\":\"" + insertedAt + "\"}}";
+        }
+
         /** 틀린 키. */
         public static final String UNAUTHORIZED = "{\"errors\":{\"code\":\"unauthorized\",\"title\":\"Unauthorized\"}}";
 

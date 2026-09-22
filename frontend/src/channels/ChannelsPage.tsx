@@ -83,6 +83,14 @@ export function ChannelsPage() {
                   {Object.keys(connection.credentials).length === 0 && '없음'}
                 </p>
                 <CapabilityBadges capabilities={connection.capabilities} />
+                {connection.deadJobs > 0 && (
+                  // 조용히 실패하는 자리를 남기지 않는다(작업지시-17 8.3). 재시도가 포기한 전송은
+                  // 채널이 값을 거부했거나 매핑이 틀린 것이라 사람이 고쳐야 한다.
+                  <p className="mt-2 text-xs text-warn" role="alert">
+                    실패한 전송 {connection.deadJobs}건
+                    {connection.lastError ? ` · 마지막 오류: ${connection.lastError}` : ''}
+                  </p>
+                )}
               </div>
               <div className="flex shrink-0 gap-2">
                 <Link

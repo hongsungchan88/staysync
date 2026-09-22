@@ -57,13 +57,14 @@ class AdapterContractTest extends SyncTestBase {
     }
 
     @Test
-    @DisplayName("Channex 는 구현된 것만 선언한다 — 웹훅은 없고, 브랜치 2 까지는 PUSH 셋이다")
+    @DisplayName("Channex 는 구현된 것만 선언한다 — PUSH 셋과 PULL_BOOKING. 웹훅도 스냅샷도 아니다")
     void Channex_선언은_구현을_따라간다() {
-        // 작업지시-17 2절 E. 브랜치 3 이 PULL_BOOKING 을 더하면 이 단언을 그때 같이 넓힌다.
-        // WEBHOOK_BOOKING 은 끝까지 없다(5절 4번 — 피드 + ack).
+        // 작업지시-17 2절 E. WEBHOOK_BOOKING 은 없다(5절 4번 — 피드 + ack). SNAPSHOT_BOOKING 도
+        // 아니다 — 취소는 리비전 상태로 오고, 스냅샷으로 다루면 아직 안 온 예약을 취소한다.
         assertThat(AdapterType.CHANNEX.supports(Capability.WEBHOOK_BOOKING)).isFalse();
         assertThat(AdapterType.CHANNEX.capabilities()).containsExactlyInAnyOrder(
-                Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE, Capability.PUSH_RESTRICTION);
+                Capability.PUSH_AVAILABILITY, Capability.PUSH_RATE, Capability.PUSH_RESTRICTION,
+                Capability.PULL_BOOKING);
     }
 
     @Test

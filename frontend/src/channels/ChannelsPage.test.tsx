@@ -115,6 +115,28 @@ describe('채널 목록', () => {
     expect(input.type).toBe('password');
   });
 
+  it('재시도가 포기한 전송이 있으면 건수와 마지막 오류가 보인다', async () => {
+    // 작업지시-17 8.3. DEAD 는 채널이 값을 거부했거나 매핑이 틀린 것이라 사람이 고쳐야 하는데,
+    // 화면에 안 보이면 조용히 실패하는 자리가 된다. 서버 응답 모양 그대로(deadJobs·lastError).
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve(
+            String(url).startsWith('/api/channels')
+              ? [connection({ deadJobs: 2, lastError: 'Channex 가 값을 거부했습니다(1건): date ["Past date is not allowed"] (2026-09-21)' })]
+              : respond(url),
+          ),
+      } as Response),
+    );
+    render(<ChannelsPage />, { wrapper });
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument());
+    expect(screen.getByRole('alert').textContent).toContain('실패한 전송 2건');
+    expect(screen.getByRole('alert').textContent).toContain('Past date is not allowed');
+  });
+
   it('CHANNEX 를 고르면 숙소 식별자 칸이 열리고, 생성 요청에 api_key 와 property_id 가 함께 실린다', async () => {
     // 작업지시-17 A. 서버가 둘 다 없으면 400 CHANNEL_FIELD_MISSING 이다.
     const { default: userEvent } = await import('@testing-library/user-event');

@@ -133,9 +133,66 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
   Outbox 에 남기고 `ChannelSyncService` 가 재고 이벤트로 받는다. 안 보내면 새벽 4시 재동기화까지 채널이 옛 수량으로 판다
 - `AdapterType.CHANNEX` 선언: `PUSH_AVAILABILITY`·`PUSH_RATE`·`PUSH_RESTRICTION`
 
-## 3. 예약 피드 (브랜치 3)
+## 3. 예약 피드 (브랜치 3, `feat/channex-booking-feed`, 09-22)
 
-(브랜치 3 에서 채운다)
+### 3.1 부킹닷컴 실물은 못 받았다 — 채널이 회수됐다
+
+09-22 19:00 KST, 사용자가 부킹닷컴 테스트 숙소 11140466 에 예약(11-10~12, "Te st", US$361.08)을 만들었으나 피드·
+`booking_revisions`·`bookings` 전부 0건. **우리 채널 `d9283bf0…` 이 지워져 있었다**(`GET /channels/:id` 404, 채널 목록 빈
+배열, 숙소 `acc_channels_count 0`). 09-22 04:00 UTC 재고 전송 실측 때는 살아 있었으니 그 뒤 15시간 안에 회수됐다
+(`expected_removal_date` 는 `null` 이었다). 그 사이 만든 부킹닷컴 예약은 우리에게 오지 않는다.
+다시 만들려 했으나 11140466·10485037(USD)·5868189·6519420(GBP)·4372137(EUR) 전부 422 "already exists". 5분 간격으로
+1시간 재시도했고 그 안에 풀리지 않았다(3.4). **심사 시연 전에는 채널 생존 확인이 선행 조건이다.**
+
+### 3.2 Booking CRS 로 실물을 만들었다 (Channex 인증 시험 11 이 허용하는 경로)
+
+`POST /api/v1/applications/install {"application_installation":{"property_id":…,"application_code":"booking_crs"}}` → 200
+(설치 `19cf28ed-…`, USD 시험 숙소). 그 뒤:
+
+| 호출 | 본문 요지 | 응답 |
+|---|---|---|
+| `POST /api/v1/bookings` | `ota_name "Booking.com"`, `ota_reservation_code "STAYSYNC-CRS-001"`, 11-10→11-12, USD, 방 하나(`days {"2026-11-10":"180.54","2026-11-11":"180.54"}`, 성인 2), 손님 "Te st" | 200 `{"data":{"attributes":{"id":"87358c26-…","status":"new","unique_id":"BDC-STAYSYNC-CRS-001","booking_id":"87358c26-…","revision_id":"22861a65-…"}}}` |
+| `GET /booking_revisions/feed?filter[property_id]=…` (2초 뒤) | | **`total 1`** — 리비전 `22861a65-…`, `status new`, `amount "361.08"`, `currency USD`, `acknowledge_status "pending"`, `is_crs_revision true`, `channel_id null`. 방에 `checkin_date`·`checkout_date`·`amount "361.08"`·`days`·`is_cancelled false`. **CRS 예약도 피드에 뜬다**(문서엔 명시 없음, 실측) |
+| `PUT /api/v1/bookings/:id` `status "modified"`, 11-10→11-13(3박) | | 200, 새 리비전 `2babc335-…` `modified`, `amount "541.62"` |
+| `PUT /api/v1/bookings/:id` `status "cancelled"` | | 200, 새 리비전 `4c0301c9-…` `cancelled`(방 `is_cancelled` 는 `false` 그대로, 예약 금액도 그대로 실린다) |
+| `GET /booking_revisions/:id` (ack 뒤) | | `acknowledge_status "acknowledged"`, 피드 `total 0` |
+
+`raw_message` 안에는 금액이 **최소 단위 정수**(`"days":{"2026-11-10":18054}`, `"amount":0`)로 남아 있고, 속성에는 `"180.54"`·
+`"361.08"` 문자열이다 — 어댑터는 속성을 읽는다. 첫 리비전 실물이 `ChannexStubServer.Responses.REVISION_CRS_NEW` 다(계정
+식별자 `system_id` 는 0 으로, 손님은 가명 그대로).
+
+### 3.3 StaySync 를 거친 왕복 (로컬 앱, 60초 폴링)
+
+| 한 일 | StaySync | Channex |
+|---|---|---|
+| 생성 리비전 | 첫 폴링에 들어옴. 예약 83 `CONFIRMED`, **채널 코드 `BOOKING_COM`**, `totalAmount 361.08`(USD 숫자 그대로 — 미상 아님), 손님 "Te st", 성인 2. 캘린더 `avail` 11-10·11 = 0. 리포트(11월) `channelMix [{BOOKING_COM, 1건, 361.08, 73.5%}, {DIRECT, …}]`, `unknownAmount 0` | 피드 0건, 리비전 `acknowledged` (ack 는 커밋 뒤). 재고 11-10·11 = 0 (Channex 가 생성 때 스스로 줄인다) |
+| 변경(3박) | 22초 안에 `checkOut 11-13`, `totalAmount 541.62`, 11-12 도 0 | ack 됨. **11-12 는 1 그대로** — `allow_availability_autoupdate_on_modification: false`(숙소 기본값)이고 우리는 원 채널에 되보내지 않았다 |
+| 취소 | 38초 안에 `CANCELLED`, 11-10~12 전부 1 | ack 됨. **11-10·11 이 0 으로 남았다** — `…_on_cancellation: false`. 부킹닷컴이 계속 닫혀 있게 되는 결함 |
+| **고친 뒤 두 번째 주기**(11-20~22 생성 → 취소) | 생성 16초, 취소 57초 안 | **취소 69초 뒤 11-20·21 = 1 로 돌아왔다** — `ChannelSyncService` 가 Channex 에는 원 채널이어도 되보낸다(아래) |
+
+**되울림 예외.** 12주차의 "자기가 만든 예약을 자기에게 되보내지 않는다"는 OTA 용이다 — OTA 는 자기 예약을 스스로 깎는다.
+Channex 는 OTA 가 아니라 우리 원장의 거울이고, 실측으로는 생성 때만 스스로 줄이고 변경·취소에는 손대지 않는다. 그래서
+`adapterType == CHANNEX` 면 원 채널이어도 재고를 보낸다. 같은 값을 한 번 더 보내는 비용(요청 1)뿐이다.
+
+**CRS 로 증명된 것과 안 된 것.** 채널 코드는 CRS 든 실물이든 같은 경로다 — `ChannelBookingPoller` 가
+`connection.getChannelCode()` 를 그대로 `ChannelBookingCommand` 에 넘기고 `ota_name` 을 읽는 곳은 하나도 없다.
+그래서 `BOOKING_COM` 이 붙는 것은 CRS 로 증명됐다. 남은 것 둘:
+
+- **(ㄱ) 브라우저에서 막대가 실제 부킹닷컴 색으로 칠해지는지** — API 가 `channel: BOOKING_COM` 을 싣는 것까지 봤고 색·라벨은
+  `frontend/src/calendar/channels.ts` 의 항목과 단위 테스트가 덮는다. 눈으로 보는 것은 **심사 직전 1회**
+- **(ㄴ) 실물 OTA 리비전의 페이로드 모양이 CRS 리비전과 같은지** — 지금 픽스처는 CRS 하나뿐이다(`is_crs_revision true`,
+  `channel_id null`). 실물은 `is_crs_revision false` 이고 `channel_id` 가 있으며 방·금액 필드 구성이 다를 수 있다.
+  **이쪽이 남은 진짜 위험이다** — 어댑터가 읽는 필드(`booking_id`·`status`·`inserted_at`·`amount`·`currency`·
+  `rooms[].room_type_id`·`checkin_date`·`checkout_date`·`occupancy`)가 실물에서 같은 자리에 있는지는 아직 모른다
+
+### 3.4 USD 숙소 재시도 — 1시간, 전부 실패
+
+**09-22 19:13~20:01 KST, 5분 간격 10회, 10485037·11140466 에 `POST /channels` — 전부 422 "already exists".** 그 뒤 감시를
+내렸다. 공용 테스트 숙소 다섯(USD 둘·GBP 둘·EUR 하나)이 그 시간 내내 남의 손에 있었다.
+
+**재시도는 심사 직전에 한 자리에서 몰아서 한다** — ① 채널 생존 확인(`GET /channels`, 없으면 `POST /channels` + 매핑 +
+`activate`) → ② 재고 푸시(수량 왕복이면 오늘~180일이 한 번에 나간다, 9.2 D) → ③ 로컬 앱 기동 → ④ 부킹닷컴 테스트 예약 →
+⑤ 변경 → ⑥ 취소. 중간에 끊기면 그 사이 만든 예약은 우리에게 오지 않는다(3.1).
 
 ## 4. Channex 문서와 실제가 다른 곳
 
@@ -149,6 +206,11 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
 | 레이트 리밋 "숙소당 분당 요금 10·재고 10"(조사-01, 문서) | 스테이징 헤더는 **분당 6,000** (`ratelimit-policy`). 실제 429 를 못 만들었다 |
 | 잘못된 요청은 400 | **전부 200 + `meta.warnings`** 다. 빈 본문도 200 이다. 400 은 한 번도 못 봤다 |
 | 재고 0 이면 판매중지? | 재고를 0 으로 보내면 Channex 가 `stop_sell: true` 를 **스스로 켠다**(우리는 `false` 를 보냈다). 되읽기로 판매중지를 대조할 때 이걸 감안해야 한다 |
+| 레이트 리밋 상한 | **스테이징 관측값(6,000/분)과 우리 상한(숙소당 분당 재고 10·요금/제약 10, `ChannexSendLimiter`)이 다르다. 우리는 문서 값을 쓴다** — 운영이 더 엄격할 수 있고 상용 인증 기준이 문서 쪽이다 |
+| 공용 테스트 채널 | **예고 없이 회수된다**(`expected_removal_date null` 이었는데 15시간 안에 사라짐). 회수된 사이에 만든 부킹닷컴 예약은 우리에게 오지 않는다. **심사 시연 전 채널 생존 확인이 선행 조건** |
+| 테스트 숙소 안내 표의 통화 | `11140466` 은 GBP 로 적혀 있지만 실제 USD. **표의 통화를 믿지 말고 `connection_details` 로 읽는다** |
+| CRS 예약과 피드 | 문서는 "regular logic … web-hooks and availability changes" 까지만 적는다. **실측: 피드에 뜬다**(2초 안), `is_crs_revision true`, `channel_id null` |
+| 변경·취소 때 Channex 재고 | 생성 때만 스스로 줄인다. 변경·취소는 숙소 설정 `allow_availability_autoupdate_on_modification/cancellation` 기본 `false` 라 그대로다. 우리가 되보낸다(3.3) |
 
 ## 5. 시간과 레이트 리밋
 
@@ -159,3 +221,5 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
 | 30일 요금 변경 | 요청 1번, 값 1개 |
 | 429 | **못 받았다.** 정책 분당 6,000(헤더 실측). 15연속 200 |
 | 200+경고 | 받았다 — 지난 날짜·0 요금·음수 재고·없는 객실·빈 본문 다섯 모양(2.1) |
+| 리비전 → StaySync | 생성 16초, 변경 22초, 취소 38~57초(60초 폴링). CRS 생성 → 피드 2초 |
+| 취소 → Channex 재고 복귀 | 69초(폴링 + 6초 버퍼 + 워커) |
