@@ -150,7 +150,7 @@ public class ChannelReconcileJob {
                                  LocalDate from, LocalDate to, boolean pushesRate) {
         Map<LocalDate, ChannelAriDay> theirs = new HashMap<>();
         for (ChannelAriDay day : adapter.fetchAriSnapshot(
-                creds, mapping.getExternalUnitId(), from, to)) {
+                creds, mapping.getExternalUnitId(), mapping.getExternalRateId(), from, to)) {
             theirs.put(day.date(), day);
         }
 

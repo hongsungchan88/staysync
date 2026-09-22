@@ -50,6 +50,20 @@ public interface ChannelAdapter {
                 type() + " 는 재고·요금 조회를 지원하지 않습니다.");
     }
 
+    /**
+     * 요금제 식별자까지 받는 꼴. 재동기화가 이쪽을 부른다(작업지시-17).
+     *
+     * <p>Channex 는 요금이 객실이 아니라 요금제에 붙어 있어 {@code externalUnitId} 만으로는
+     * 요금을 되읽을 수 없다. 요금제가 없는 채널(Mock)은 기본 구현이 위의 셋짜리로 넘긴다.
+     */
+    default List<ChannelAriDay> fetchAriSnapshot(ChannelCredentials credentials,
+                                                 String externalUnitId,
+                                                 String externalRateId,
+                                                 java.time.LocalDate from,
+                                                 java.time.LocalDate to) {
+        return fetchAriSnapshot(credentials, externalUnitId, from, to);
+    }
+
     // --- 채널 → 우리 ----------------------------------------------------
 
     /**

@@ -361,6 +361,41 @@ NR 25014098·FLEX-1 25014104·NR-BB 25060075, 전부 OBP, 1~2인). `test_connect
 **결과** — 백엔드 **337** · 시뮬레이터 37 · 프론트 **112**(+1). `ModularityTest` 포함. 확인 문서는 `확인-10-Channex연동.md` 1절.
 Channex 에는 쓰지 않았다(실 API 는 브랜치 2 부터). 병합·배포 앞에서 멈췄다.
 
+### 8.2 브랜치 2 `feat/channex-ari` — B 재고·요금 전송 (09-22)
+
+**브랜치 1 은 `1ed2e25` 로 `main` 에 병합·푸시했다(배포 안 함, 지시대로).** CLAUDE.md 는 채널 연동 절 첫 문장만 맞췄다.
+안 쓰는 EUR·GBP 숙소는 Channex 콘솔 이름 앞에 `[미사용]` 을 붙였다(지우지 않음).
+
+**스테이징을 먼저 두드려 모양을 떴다**(확인-10 2.1) — 쓰기·되읽기 본문, 경고 다섯 모양(전부 200), 401, 레이트 리밋 헤더.
+**문서와 다른 것 셋**이 여기서 나왔다: 잘못된 값은 400 이 아니라 200+경고, 레이트 리밋은 분당 10 이 아니라 6,000(429 를
+못 만들었다), 재고 0 이면 Channex 가 `stop_sell` 을 스스로 켠다(확인-10 4절).
+
+| 자리 | 내용 |
+|---|---|
+| `ChannexAdapter.pushAri` | 세그먼트를 **재고(`POST /availability`, `room_type_id`)와 요금·제약(`POST /restrictions`, `rate_plan_id`)으로 갈라** 두 번. 요금 `"120.00"` 문자열, `min_stay_arrival`·`min_stay_through` 둘 다. 요금제 없는 명령은 영구 실패 |
+| 경고 | `meta.warnings` 가 하나라도 있으면 `PermanentChannelException`(사람이 고쳐야 한다 — 지난 날짜, 0 요금, 없는 객실). 워커가 DEAD + `last_error` 에 경고 문장 |
+| 상태 코드 | 401/403/404 영구, 5xx·연결 실패 일시(메시지에 주소·키 없음), 429 → `Retry-After` → `ratelimit` 헤더 `t=` → 60초 |
+| `fetchAriSnapshot` | `ChannelAdapter` 에 **요금제까지 받는 꼴**을 더했다(기본 구현은 옛 셋짜리로 넘김, Mock 그대로). `ChannelReconcileJob` 이 그걸 부른다. Channex 는 `GET /restrictions` 한 번. **재고 0 인 날의 `stop_sell` 은 "모른다"로** — Channex 가 스스로 켠 값이라 매일 새벽 매진일마다 거짓 차이가 난다 |
+| 9.2 B | 채널로 가는 값은 `InventoryLedger.available()`(0 아래로 안 내려감). `overbooked_units` 를 더하지 않는다 — 기존 `ChannelSyncService` 경로 그대로이고, 초과 예약 둘인 날에 `availability: 0` 이 나가는 것을 테스트로 박았다 |
+| 9.2 D | **수량 변경이 채널로 나간다.** `UnitCapacityWriter` 가 `UNIT_CAPACITY_CHANGED`(unitId, 오늘~+180일)를 Outbox 에 남기고 `ChannelSyncService` 가 재고 이벤트로 받는다. 안 보내면 새벽 4시 재동기화(향후 180일 전수 대조)까지 채널이 옛 수량으로 판다 — 열 줄이라 넣었다 |
+| `AdapterType.CHANNEX` | `PUSH_AVAILABILITY`·`PUSH_RATE`·`PUSH_RESTRICTION`. `PULL_BOOKING` 은 브랜치 3 |
+| 로그 | 성공한 전송마다 INFO 한 줄(`Channex 전송. path=… 값=N건 task=…`) — 완료 조건 5 를 운영 로그로 센다 |
+| 마이그레이션 | 없음 |
+
+**실측(로컬 앱 → 스테이징, 확인-10 2.2)** — 30일 일괄 편집이 **요청 1번·값 1개**(완료 조건 5), 14.6s/11.5s 안에 Channex
+되읽기가 새 값(완료 조건 4·3: 취소 뒤 `availability 1`, 다시 예약 뒤 `0`). 부킹닷컴 테스트 예약을 만들 재고가 이제 있다.
+
+**테스트(새)** — `ChannexAriTest` 12건(어댑터 단위 7 + 버퍼→워커→어댑터 5: 30일 요청 한 번, 초과분 0, 수량 변경 전파,
+429 는 그 연결만, 경고는 DEAD). 응답 픽스처는 전부 스테이징 실물(`ChannexStubServer.Responses`). 완료 조건 5·6·7 판정 —
+**6 의 429 는 스텁이다**(스테이징이 429 를 안 준다, 헤더는 실측).
+
+**결과** — 백엔드 **349**(+12) · 시뮬레이터 37 · 프론트 112. 전체 실행에서 `ChannelRoundTripTest` 가 15.29s 로 15s 예산을
+넘겨 한 번 실패(빌드 16분 42초 — 로컬 앱을 띄운 채 돌린 부하, CLAUDE.md 가 적어 둔 그 모양). 단독 재실행 통과. 나머지 348 통과,
+`ModularityTest` 포함. 병합·배포 앞에서 멈췄다.
+
+**남는 것** — 캘린더 막대 색·리포트 채널 믹스의 '부킹닷컴' 확인은 예약이 들어오는 브랜치 3 에서 본다(라벨 맵·리포트
+테스트 픽스처에 `BOOKING_COM` 은 이미 있다).
+
 ## 참고 — Channex 문서 (09-17 확인)
 
 - ARI: `POST /api/v1/availability`, `POST /api/v1/restrictions`. 요금은 "200.00" 문자열 또는

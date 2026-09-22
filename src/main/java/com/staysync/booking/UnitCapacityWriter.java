@@ -3,9 +3,12 @@ package com.staysync.booking;
 import com.staysync.booking.domain.InventoryLedger;
 import com.staysync.property.PropertyService;
 import com.staysync.property.UnitSummary;
+import com.staysync.shared.outbox.OutboxRecorder;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -29,12 +32,21 @@ class UnitCapacityWriter {
 
     private static final Logger log = LoggerFactory.getLogger(UnitCapacityWriter.class);
 
+    /** 채널 전파가 재고 이벤트로 받는다({@code ChannelSyncService.INVENTORY_EVENTS}). */
+    public static final String CAPACITY_CHANGED = "UNIT_CAPACITY_CHANGED";
+
+    /** 채널로 다시 보낼 기간. 재동기화의 180일과 같다 — 그 너머는 어차피 채널이 모른다. */
+    static final int PROPAGATE_DAYS = 180;
+
     private final InventoryLedgerRepository ledgerRepo;
     private final PropertyService propertyService;
+    private final OutboxRecorder outbox;
 
-    UnitCapacityWriter(InventoryLedgerRepository ledgerRepo, PropertyService propertyService) {
+    UnitCapacityWriter(InventoryLedgerRepository ledgerRepo, PropertyService propertyService,
+                       OutboxRecorder outbox) {
         this.ledgerRepo = ledgerRepo;
         this.propertyService = propertyService;
+        this.outbox = outbox;
     }
 
     @Transactional
@@ -55,6 +67,15 @@ class UnitCapacityWriter {
         }
         ledgerRepo.saveAll(rows);
         UnitSummary unit = propertyService.changeUnitCapacity(unitId, orgId, totalUnits);
+        // 채널에도 알린다(작업지시-17 9.2 D). 수량이 바뀌면 오늘 이후 모든 날의 가용이 바뀐다 —
+        // 예약 이벤트와 같은 모양(unitId·checkIn·checkOut)이라 채널 전파가 그대로 받는다.
+        // 안 보내면 새벽 4시 재동기화까지 채널은 옛 수량으로 판다.
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("unitId", unitId);
+        payload.put("totalUnits", (int) totalUnits);
+        payload.put("checkIn", today.toString());
+        payload.put("checkOut", today.plusDays(PROPAGATE_DAYS).toString());
+        outbox.record("UNIT", unitId, CAPACITY_CHANGED, payload);
         log.info("판매 수량을 바꿨다. unitId={} total={} 원장 {}행(오늘 이후)", unitId, totalUnits, rows.size());
         return unit;
     }
