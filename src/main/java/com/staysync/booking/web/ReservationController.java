@@ -138,6 +138,24 @@ class ReservationController {
         return ReservationSummary.from(bookingService.checkOut(reservationId));
     }
 
+    /** 체크인 취소. 사유를 한 줄 받는다(Mews 방식) — 되돌린 이유가 감사 기록에 남는다. */
+    @PostMapping("/{reservationId}/check-in/undo")
+    ReservationSummary undoCheckIn(@PathVariable Long reservationId,
+                                   @Valid @RequestBody UndoRequest request) {
+        requireOwned(reservationId);
+        return ReservationSummary.from(
+                bookingService.undoCheckIn(reservationId, request.reason().strip()));
+    }
+
+    /** 체크아웃 되돌리기. 퇴실일 당일까지, 청소를 아직 시작하지 않았을 때만. */
+    @PostMapping("/{reservationId}/check-out/undo")
+    ReservationSummary undoCheckOut(@PathVariable Long reservationId,
+                                    @Valid @RequestBody UndoRequest request) {
+        requireOwned(reservationId);
+        return ReservationSummary.from(
+                bookingService.undoCheckOut(reservationId, request.reason().strip()));
+    }
+
     // --- 조직 스코핑 ---------------------------------------------------------
 
     /**

@@ -107,6 +107,14 @@ public class BookingService {
         return withUnitLock(reservationId, () -> writer.checkOut(reservationId));
     }
 
+    public Reservation undoCheckIn(Long reservationId, String reason) {
+        return withUnitLock(reservationId, () -> writer.undoCheckIn(reservationId, reason));
+    }
+
+    public Reservation undoCheckOut(Long reservationId, String reason) {
+        return withUnitLock(reservationId, () -> writer.undoCheckOut(reservationId, reason));
+    }
+
     public Reservation markNoShow(Long reservationId) {
         return withUnitLock(reservationId, () -> writer.markNoShow(reservationId));
     }

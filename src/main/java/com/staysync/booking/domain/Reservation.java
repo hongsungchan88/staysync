@@ -238,6 +238,39 @@ public class Reservation {
         touch();
     }
 
+    /**
+     * 체크인 취소. 잘못 누른 체크인을 퇴실 전이면 언제든 되돌린다(작업지시-20 9절).
+     *
+     * <p>재고는 그대로다 — CONFIRMED 와 CHECKED_IN 은 둘 다 재고를 쥔 상태다. 체크인은 감사
+     * 기록 말고는 아무것도 남기지 않는다(이벤트 없음, 자동 발송은 날짜 기반).
+     */
+    public void undoCheckIn() {
+        if (status != ReservationStatus.CHECKED_IN) {
+            throw new IllegalReservationTransition(status, ReservationStatus.CONFIRMED);
+        }
+        this.status = ReservationStatus.CONFIRMED;
+        touch();
+    }
+
+    /**
+     * 체크아웃 되돌리기. <b>퇴실일 당일까지만</b> 된다 — OPERA·RoomKey 의 공통 제약이다.
+     * 퇴실일이 지나면 그 방은 다음 손님 몫이고, 되돌리면 지난 기록을 고쳐 쓰는 일이 된다.
+     *
+     * <p><b>재고를 다시 잡지 않는다.</b> 체크아웃이 재고를 반납하지 않기 때문이다
+     * ({@code ReservationWriter.checkOut}) — 퇴실 뒤에도 그 박들은 이 예약 몫으로 남아 있어,
+     * 되돌려도 초과 판매가 생길 수 없다. 체크아웃이 반납하게 바뀌면 여기서 다시 잡아야 한다.
+     */
+    public void undoCheckOut(LocalDate today) {
+        if (status != ReservationStatus.CHECKED_OUT) {
+            throw new IllegalReservationTransition(status, ReservationStatus.CHECKED_IN);
+        }
+        if (today.isAfter(period.checkOut())) {
+            throw new CheckOutUndoExpiredException(period.checkOut());
+        }
+        this.status = ReservationStatus.CHECKED_IN;
+        touch();
+    }
+
     public void expire() {
         if (status != ReservationStatus.HOLD) {
             return;

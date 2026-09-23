@@ -23,7 +23,8 @@ export async function moveReservation(
   return reservationSummarySchema.parse(body);
 }
 
-export type Transition = 'check-in' | 'check-out';
+/** 앞의 둘은 전이, 뒤의 둘은 되돌리기다(작업지시-20 9절). 되돌리기는 사유가 있어야 한다. */
+export type Transition = 'check-in' | 'check-out' | 'check-in/undo' | 'check-out/undo';
 
 /**
  * 체크인·체크아웃. 4주차 상태 머신의 전이를 화면에서 부르기만 한다(작업지시-15 2절 E).
@@ -35,9 +36,11 @@ export type Transition = 'check-in' | 'check-out';
 export async function transitionReservation(
   reservationId: number,
   transition: Transition,
+  reason?: string,
 ): Promise<ReservationSummary> {
   const body = await apiRequest<unknown>(`/api/reservations/${reservationId}/${transition}`, {
     method: 'POST',
+    body: reason === undefined ? undefined : { reason },
   });
   return reservationSummarySchema.parse(body);
 }

@@ -110,6 +110,53 @@ class ReservationApiTest extends ApiTestBase {
     }
 
     @Test
+    void 체크인_취소와_체크아웃_되돌리기는_사유가_있어야_한다() throws Exception {
+        Fixture f = 숙소와_판매단위(가입(새이메일()));
+        Long reservationId = 예약등록(f, "2027-06-10", "2027-06-12", "100000");
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-in")
+                .header(HttpHeaders.AUTHORIZATION, f.session().bearer()));
+
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-in/undo")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\" \"}"))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-in/undo")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"잘못 눌렀다\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-in")
+                .header(HttpHeaders.AUTHORIZATION, f.session().bearer()));
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-out")
+                .header(HttpHeaders.AUTHORIZATION, f.session().bearer()));
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-out/undo")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"손님이 아직 있다\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CHECKED_IN"));
+    }
+
+    @Test
+    void 남의_조직_예약은_되돌릴_수_없다() throws Exception {
+        Fixture f = 숙소와_판매단위(가입(새이메일()));
+        Long reservationId = 예약등록(f, "2027-06-20", "2027-06-22", "100000");
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-in")
+                .header(HttpHeaders.AUTHORIZATION, f.session().bearer()));
+        Fixture other = 숙소와_판매단위(가입(새이메일()));
+
+        mvc.perform(post("/api/reservations/" + reservationId + "/check-in/undo")
+                        .header(HttpHeaders.AUTHORIZATION, other.session().bearer())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"reason\":\"사유\"}"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void 체크아웃된_예약을_취소하면_400이_나간다_전이오류() throws Exception {
         Fixture f = 숙소와_판매단위(가입(새이메일()));
         Long reservationId = 예약등록(f, "2027-07-01", "2027-07-03", "100000");

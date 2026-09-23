@@ -2,15 +2,17 @@ import { useState } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import type { ReservationBar } from '@/api/schemas';
 import { transitionReservation, type Transition } from '@/api/reservations';
+import { toIso } from '@/lib/dates';
 import { ApiError } from '@/api/client';
 import { channelLabel, guestLabel, isIcalChannel } from './channels';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 /**
  * 캘린더에서 예약 막대를 누르면 열리는 최소 패널. 작업지시-15 2절 E.
  *
- * 새 화면을 만들지 않고 `SelectionPanel` 자리를 쓴다. 하는 일은 체크인과 체크아웃
- * 둘뿐이다 — 상태 전이는 4주차부터 서버에 있었고 화면에서 부르는 곳만 없었다.
+ * 새 화면을 만들지 않고 `SelectionPanel` 자리를 쓴다. 하는 일은 체크인과 체크아웃,
+ * 그리고 그 둘의 되돌리기다(작업지시-20 9절) — 전부 화면 안에서 한 번 더 묻는다.
  * 청소 태스크 자동 생성이 체크아웃에 걸려 있어 이것이 없으면 운영 흐름의 절반이
  * 화면에서 보이지 않는다(확인-08 3절 4번).
  *
@@ -28,6 +30,69 @@ const STATUS_LABELS: Record<string, string> = {
   NO_SHOW: '노쇼',
 };
 
+interface Action {
+  transition: Transition;
+  from: string;
+  label: string;
+  confirmLabel: string;
+  testId: string;
+  undo: boolean;
+  visible: (bar: ReservationBar) => boolean;
+  explain: (bar: ReservationBar) => string;
+}
+
+/**
+ * 상태마다 누를 수 있는 것. 되돌리기 둘은 작업지시-20 9절이다 — 체크인 취소는 퇴실 전이면
+ * 언제든(Mews), 체크아웃 되돌리기는 퇴실일 당일까지(OPERA·RoomKey). 날짜 판정은 서버가 하고
+ * 화면은 지난 예약에 버튼을 두지 않을 뿐이다.
+ */
+const ACTIONS: Action[] = [
+  {
+    transition: 'check-in',
+    from: 'CONFIRMED',
+    label: '체크인',
+    confirmLabel: '체크인합니다',
+    testId: 'check-in-button',
+    undo: false,
+    visible: () => true,
+    explain: () => '이 예약을 체크인합니다. 잘못 눌렀으면 퇴실 전까지 체크인을 취소할 수 있습니다.',
+  },
+  {
+    transition: 'check-out',
+    from: 'CHECKED_IN',
+    label: '체크아웃',
+    confirmLabel: '체크아웃합니다',
+    testId: 'check-out-button',
+    undo: false,
+    visible: () => true,
+    explain: (bar) =>
+      `이 예약을 체크아웃합니다. 청소 태스크가 생기고 인박스에 청소 알림이 남습니다. ` +
+      `퇴실일(${bar.checkOut})까지, 청소를 시작하기 전이면 되돌릴 수 있습니다.`,
+  },
+  {
+    transition: 'check-in/undo',
+    from: 'CHECKED_IN',
+    label: '체크인 취소',
+    confirmLabel: '체크인을 취소합니다',
+    testId: 'undo-check-in-button',
+    undo: true,
+    visible: () => true,
+    explain: () => '체크인을 취소하고 확정 상태로 돌립니다. 재고는 그대로입니다.',
+  },
+  {
+    transition: 'check-out/undo',
+    from: 'CHECKED_OUT',
+    label: '체크아웃 되돌리기',
+    confirmLabel: '체크아웃을 되돌립니다',
+    testId: 'undo-check-out-button',
+    undo: true,
+    visible: (bar) => toIso(new Date()) <= bar.checkOut,
+    explain: () =>
+      '체크아웃을 되돌려 투숙 중으로 돌립니다. 아직 시작하지 않은 청소 태스크는 함께 거둡니다. ' +
+      '청소가 진행 중이거나 끝났으면 되돌릴 수 없습니다. 인박스 알림은 남습니다.',
+  },
+];
+
 interface Props {
   bar: ReservationBar;
   calendarKey: QueryKey;
@@ -40,11 +105,17 @@ export function ReservationPanel({ bar, calendarKey, onClose }: Props) {
   // 남지 않도록 응답의 상태를 여기서 먼저 반영한다.
   const [status, setStatus] = useState(bar.status);
   const [error, setError] = useState<string | null>(null);
+  // 확인을 기다리는 조작과 되돌리기 사유.
+  const [asking, setAsking] = useState<Transition | null>(null);
+  const [reason, setReason] = useState('');
+  const current = ACTIONS.find((action) => action.transition === asking && action.from === status);
 
   const mutation = useMutation({
-    mutationFn: (transition: Transition) => transitionReservation(bar.id, transition),
+    mutationFn: ({ transition, reason }: { transition: Transition; reason?: string }) =>
+      transitionReservation(bar.id, transition, reason),
     onMutate: () => setError(null),
     onSuccess: (summary) => {
+      setAsking(null);
       setStatus(summary.status);
       void client.invalidateQueries({ queryKey: calendarKey });
     },
@@ -106,32 +177,70 @@ export function ReservationPanel({ bar, calendarKey, onClose }: Props) {
         </div>
       </dl>
 
-      <div className="mt-4 flex gap-2 border-t border-rule pt-3">
-        {status === 'CONFIRMED' && (
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-rule pt-3">
+        {ACTIONS.filter((action) => action.from === status && action.visible(bar)).map((action) => (
           <Button
+            key={action.transition}
             size="sm"
-            variant="primary"
+            variant={action.undo ? 'ghost' : 'primary'}
             disabled={mutation.isPending}
-            onClick={() => mutation.mutate('check-in')}
-            data-testid="check-in-button"
+            onClick={() => {
+              setError(null);
+              setReason('');
+              setAsking(asking === action.transition ? null : action.transition);
+            }}
+            aria-expanded={asking === action.transition}
+            data-testid={action.testId}
           >
-            체크인
+            {action.label}
           </Button>
-        )}
-        {status === 'CHECKED_IN' && (
-          <Button
-            size="sm"
-            variant="primary"
-            disabled={mutation.isPending}
-            onClick={() => mutation.mutate('check-out')}
-            data-testid="check-out-button"
-          >
-            체크아웃
-          </Button>
-        )}
+        ))}
       </div>
-      {status === 'CHECKED_IN' && (
-        <p className="mt-1 text-[11px] text-muted">체크아웃하면 청소 태스크가 생깁니다.</p>
+
+      {current && (
+        // 잘못 누르면 되돌리기 번거로운 조작이라 한 번 더 묻는다. 브라우저 모달은 쓰지 않는다.
+        <div
+          role="alertdialog"
+          aria-label={`${current.label} 확인`}
+          className="mt-2 rounded-md border border-warn p-2 text-xs text-body"
+          data-testid="transition-confirm"
+        >
+          <p className="font-medium text-ink">
+            {guestLabel(bar)} · {bar.checkIn} ~ {bar.checkOut}
+          </p>
+          <p className="mt-1">{current.explain(bar)}</p>
+          {current.undo && (
+            <label className="mt-2 block text-muted">
+              사유 (기록에 남습니다)
+              <Input
+                className="mt-1"
+                value={reason}
+                maxLength={200}
+                onChange={(event) => setReason(event.target.value)}
+                data-testid="undo-reason"
+              />
+            </label>
+          )}
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={mutation.isPending || (current.undo && reason.trim() === '')}
+              onClick={() =>
+                mutation.mutate({
+                  transition: current.transition,
+                  reason: current.undo ? reason.trim() : undefined,
+                })
+              }
+              data-testid="transition-confirm-button"
+            >
+              {current.confirmLabel}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setAsking(null)}>
+              취소
+            </Button>
+          </div>
+        </div>
       )}
 
       {error && (

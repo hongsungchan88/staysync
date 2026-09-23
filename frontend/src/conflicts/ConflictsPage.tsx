@@ -142,6 +142,12 @@ function ConflictCard({ conflict }: { conflict: Conflict }) {
         <p className="text-xs text-muted">
           {RESOLUTIONS.find((option) => option.code === resolution)?.hint}
         </p>
+        {resolution === 'CANCELLED' && (
+          // 해소 넷 가운데 이것만 되돌릴 길이 없다(작업지시-20 9절). 고르는 순간 알려 준다.
+          <p className="text-xs font-medium text-warn" data-testid="cancel-irreversible">
+            예약 취소는 되돌릴 수 없습니다. 같은 손님을 다시 받으려면 새 예약으로 만들어야 합니다.
+          </p>
+        )}
 
         {resolution === 'UPGRADED' && (
           <label className="text-xs text-muted">

@@ -15,6 +15,8 @@ import { tokenStore } from '@/auth/tokenStore';
  * 호스트는 예약이 들어오지 않는 이유를 알 수 없다.
  */
 
+let BOARD_NOW: typeof BOARD;
+
 const BOARD = {
   connection: {
     id: 7,
@@ -52,6 +54,7 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
+  BOARD_NOW = BOARD;
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   tokenStore.set('test-token');
   resetRefreshState();
@@ -61,7 +64,7 @@ beforeEach(() => {
       Promise.resolve({
         ok: true,
         status: 200,
-        json: () => Promise.resolve(BOARD),
+        json: () => Promise.resolve(BOARD_NOW),
       } as Response),
     ),
   );
@@ -96,5 +99,40 @@ describe('채널 매핑', () => {
     await waitFor(() => expect(screen.getByText('본채')).toBeInTheDocument());
     // Channex 는 room_type_id 를 요구한다. 채널마다 식별자 모양이 다르므로 안내한다.
     expect(screen.getAllByPlaceholderText('room_type_id')).toHaveLength(1);
+  });
+
+  it('매핑 해제는 화면 안에서 한 번 더 묻고, 확인해야 DELETE 가 나간다', async () => {
+    // 작업지시-20 9절. 해제하면 그 판매 단위의 예약 수신이 끊긴다.
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    render(<ChannelMappingPage />, { wrapper });
+    await waitFor(() => expect(screen.getByText('room_type_1')).toBeInTheDocument());
+    const fetchMock = vi.mocked(fetch);
+    const deleted = () => fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE');
+
+    await userEvent.click(screen.getByRole('button', { name: '매핑 해제' }));
+    expect(deleted()).toBe(false);
+    expect(screen.getByTestId('unmap-confirm-11')).toHaveTextContent('예약 수신이 끊깁니다');
+    // Channex 연결에는 발행 주소 문구가 없다.
+    expect(screen.getByTestId('unmap-confirm-11')).not.toHaveTextContent('발행 주소');
+
+    await userEvent.click(screen.getByTestId('unmap-confirm-button-11'));
+    await waitFor(() => expect(deleted()).toBe(true));
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it('iCal 매핑을 해제하려 하면 발행 주소가 바뀐다고 적는다', async () => {
+    const { default: userEvent } = await import('@testing-library/user-event');
+    BOARD_NOW = {
+      ...BOARD,
+      connection: { ...BOARD.connection, channelCode: 'AIRBNB_ICAL', adapterType: 'ICAL' },
+    };
+    render(<ChannelMappingPage />, { wrapper });
+    await waitFor(() => expect(screen.getByText('room_type_1')).toBeInTheDocument());
+
+    await userEvent.click(screen.getByRole('button', { name: '매핑 해제' }));
+    expect(screen.getByTestId('unmap-confirm-11')).toHaveTextContent('발행 주소');
+    expect(screen.getByTestId('unmap-confirm-11')).toHaveTextContent('에어비앤비');
   });
 });

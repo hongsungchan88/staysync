@@ -42,6 +42,10 @@ final class ReservationDtos {
     }
 
     /** 날짜와 인원 변경. 넘기지 않은 값은 그대로 둔다. */
+    /** 체크인 취소·체크아웃 되돌리기의 사유. 감사 기록에 그대로 남는다. */
+    record UndoRequest(@NotBlank @Size(max = 200) String reason) {
+    }
+
     record UpdateReservationRequest(
             LocalDate checkIn,
             LocalDate checkOut,
