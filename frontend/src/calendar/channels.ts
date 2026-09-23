@@ -30,6 +30,25 @@ export function channelLabel(code: string): string {
   return CHANNEL_LABELS[code] ?? code;
 }
 
+/**
+ * iCal 로 들어온 예약인가. iCal 연결의 채널 코드는 `AIRBNB_ICAL` 처럼 `_ICAL` 로 끝난다.
+ * ponytail: 채널 코드 이름에 기댄다. 규칙을 벗어난 코드가 생기면 막대에 어댑터 종류를 싣는다.
+ */
+export function isIcalChannel(code: string): boolean {
+  return code.endsWith('_ICAL');
+}
+
+/**
+ * 막대에 적을 게스트 이름. iCal 은 발행물에 이름이 없다(계획서 15.3) — 이유 없이
+ * "이름 없음"만 두면 고장으로 읽혀서 짧게 출처를 붙인다. 긴 설명은 예약 패널에 있다.
+ */
+export function guestLabel(bar: { guestName?: string | null; channel: string }): string {
+  if (bar.guestName) {
+    return bar.guestName;
+  }
+  return isIcalChannel(bar.channel) ? '이름 없음(iCal)' : '이름 없음';
+}
+
 /** 범례에 그릴 채널 목록. 순서는 와이어프레임과 같다. */
 export const LEGEND = [
   { code: 'AIRBNB_ICAL', label: '에어비앤비' },

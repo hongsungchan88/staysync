@@ -207,6 +207,35 @@ class CalendarApiTest extends ApiTestBase {
         assertThat(응답).contains("홍길동");
     }
 
+    @Test
+    @DisplayName("인원은 직접예약에만 싣는다 — 채널 예약의 인원은 기본값이라 모르는 값이다")
+    void 인원은_직접예약에만_실린다() throws Exception {
+        Fixture f = 숙소와_판매단위(가입(새이메일()), 2);
+        Long direct = 예약등록(f, "2027-12-01", "2027-12-03");
+        Long channel = 예약등록(f, "2027-12-05", "2027-12-07");
+        // 화면이 가르는 기준은 channel_code 하나다. 채널 수신은 인원을 넘기지 않아 성인 2 가
+        // 그대로 남는데, 그 모양을 코드만 바꿔 만든다.
+        jdbc.update("UPDATE reservation SET channel_code = 'AIRBNB_ICAL' WHERE id = ?", channel);
+
+        MvcResult 결과 = mvc.perform(캘린더요청(f.propertyId(), "2027-12-01", "2027-12-10")
+                        .header(HttpHeaders.AUTHORIZATION, f.session().bearer()))
+                .andExpect(status().isOk())
+                .andReturn();
+
+        var bars = json.readTree(결과.getResponse().getContentAsString()).get("reservations");
+        for (var bar : bars) {
+            if (bar.get("id").asLong() == direct) {
+                assertThat(bar.get("adults").asInt()).isEqualTo(2);
+                assertThat(bar.get("children").asInt()).isZero();
+            } else {
+                assertThat(bar.get("id").asLong()).isEqualTo(channel);
+                assertThat(bar.has("adults")).as("지어낸 인원이 화면에 뜬다").isFalse();
+                assertThat(bar.has("children")).isFalse();
+            }
+        }
+        assertThat(bars.size()).isEqualTo(2);
+    }
+
     // --- 그 밖의 조립 규칙 ---------------------------------------------------
 
     @Test

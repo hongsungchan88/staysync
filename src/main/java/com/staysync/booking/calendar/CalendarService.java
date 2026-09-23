@@ -224,8 +224,14 @@ public class CalendarService {
                         r.getId(), r.getUnitId(),
                         r.getPeriod().checkIn(), r.getPeriod().checkOut(),
                         r.getGuestId() == null ? null : guestNames.get(r.getGuestId()),
-                        r.getChannelCode(), r.getStatus().name(), r.getTotalAmount()))
+                        r.getChannelCode(), r.getStatus().name(), r.getTotalAmount(),
+                        direct(r) ? r.getAdults() : null,
+                        direct(r) ? r.getChildren() : null))
                 .toList();
+    }
+
+    private static boolean direct(Reservation r) {
+        return "DIRECT".equals(r.getChannelCode());
     }
 
     /** 게스트 이름을 한 번에 읽는다. 예약마다 조회하면 막대 수만큼 왕복이 는다. */

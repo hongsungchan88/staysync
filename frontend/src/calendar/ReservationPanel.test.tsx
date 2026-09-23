@@ -120,4 +120,48 @@ describe('체크인·체크아웃 패널', () => {
     expect(screen.getByTestId('reservation-status')).toHaveTextContent('확정');
     expect(screen.getByTestId('check-in-button')).toBeInTheDocument();
   });
+
+  // --- 작업지시-20 B·E -----------------------------------------------------
+
+  it('iCal 예약은 이름이 없는 이유를 적고 금액은 미상으로 쓴다', () => {
+    render(
+      <ReservationPanel
+        bar={{ ...bar('CONFIRMED'), guestName: undefined, channel: 'AIRBNB_ICAL', amount: undefined }}
+        calendarKey={KEY}
+        onClose={() => {}}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText('이름 없음(iCal)')).toBeInTheDocument();
+    expect(screen.getByTestId('reservation-name-reason')).toHaveTextContent('게스트 이름');
+    // 모르는 금액을 0원으로 쓰지 않는다(작업지시-16).
+    expect(screen.getByTestId('reservation-amount')).toHaveTextContent('미상');
+    expect(screen.queryByTestId('reservation-guests')).not.toBeInTheDocument();
+  });
+
+  it('iCal 이 아닌 예약에는 이유 문구가 없고, 이름이 없어도 붙지 않는다', () => {
+    render(
+      <ReservationPanel
+        bar={{ ...bar('CONFIRMED'), guestName: undefined, channel: 'DIRECT' }}
+        calendarKey={KEY}
+        onClose={() => {}}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText('이름 없음')).toBeInTheDocument();
+    expect(screen.queryByTestId('reservation-name-reason')).not.toBeInTheDocument();
+  });
+
+  it('금액과 인원이 있으면 보인다', () => {
+    render(
+      <ReservationPanel
+        bar={{ ...bar('CONFIRMED'), channel: 'DIRECT', adults: 2, children: 1 }}
+        calendarKey={KEY}
+        onClose={() => {}}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByTestId('reservation-amount')).toHaveTextContent('360,000원');
+    expect(screen.getByTestId('reservation-guests')).toHaveTextContent('성인 2 · 아동 1');
+  });
 });

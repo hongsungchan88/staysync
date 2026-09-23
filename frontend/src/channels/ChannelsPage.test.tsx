@@ -159,4 +159,40 @@ describe('채널 목록', () => {
       expect(body.credentials).toEqual({ api_key: 'chnx_key', property_id: '17e754e7-uuid' });
     });
   });
+
+  it('iCal 연결은 받기만 하는 연결이라는 설명으로 시작한다', async () => {
+    render(<ChannelsPage />, { wrapper });
+
+    await waitFor(() => expect(screen.getByText(/받아 오기만 하는 연결/)).toBeInTheDocument());
+    // Channex 카드에는 붙지 않는다.
+    expect(screen.getAllByText(/받아 오기만 하는 연결/)).toHaveLength(1);
+  });
+
+  it('삭제는 화면 안에서 한 번 더 묻고, 주소를 다시 알려 줄 수 없다고 적는다', async () => {
+    // 작업지시-20 C. 확인 없이 지워지면 업체는 iCal 주소를 스스로 다시 붙일 수 없다.
+    const { default: userEvent } = await import('@testing-library/user-event');
+    const confirmSpy = vi.spyOn(window, 'confirm');
+    render(<ChannelsPage />, { wrapper });
+    await waitFor(() => expect(screen.getByText('에어비앤비')).toBeInTheDocument());
+
+    await userEvent.click(screen.getAllByRole('button', { name: '삭제' })[0]!);
+    const deleted = () =>
+      fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE');
+    expect(deleted()).toBe(false);
+    expect(screen.getByTestId('delete-confirm-1')).toHaveTextContent('다시 보여 드릴 수 없습니다');
+    expect(screen.getByTestId('delete-confirm-1')).toHaveTextContent('iCal 내보내기 주소');
+
+    await userEvent.click(screen.getByRole('button', { name: '취소' }));
+    expect(screen.queryByTestId('delete-confirm-1')).not.toBeInTheDocument();
+    expect(deleted()).toBe(false);
+
+    await userEvent.click(screen.getAllByRole('button', { name: '삭제' })[0]!);
+    await userEvent.click(screen.getByTestId('delete-confirm-button-1'));
+    await waitFor(() => expect(deleted()).toBe(true));
+    const call = fetchMock.mock.calls.find(([, init]) => init?.method === 'DELETE')!;
+    expect(String(call[0])).toBe('/api/channels/1');
+    // 브라우저 모달을 쓰지 않는다.
+    expect(confirmSpy).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
 });

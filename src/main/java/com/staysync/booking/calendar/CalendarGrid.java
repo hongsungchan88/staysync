@@ -48,6 +48,9 @@ public record CalendarGrid(
      *
      * <p>계획서 13.5 예시에는 {@code roomId} 가 있지만 담지 않는다. 데이터 모델을
      * 2계층으로 줄이면서 호실 개념을 없앴기 때문이다(결정문서 01). 화면에도 배방이 없다.
+     *
+     * <p>{@code adults}·{@code children} 은 직접예약에만 싣는다. 채널 수신은 인원을 넘기지
+     * 않아 채널 예약의 인원은 전부 기본값(성인 2)이다 — 실으면 지어낸 값이 화면에 뜬다.
      */
     public record ReservationBar(
             Long id,
@@ -57,6 +60,8 @@ public record CalendarGrid(
             String guestName,
             String channel,
             String status,
-            BigDecimal amount) {
+            BigDecimal amount,
+            Short adults,
+            Short children) {
     }
 }

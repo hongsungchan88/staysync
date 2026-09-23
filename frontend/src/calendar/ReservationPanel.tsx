@@ -3,7 +3,7 @@ import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-quer
 import type { ReservationBar } from '@/api/schemas';
 import { transitionReservation, type Transition } from '@/api/reservations';
 import { ApiError } from '@/api/client';
-import { channelLabel } from './channels';
+import { channelLabel, guestLabel, isIcalChannel } from './channels';
 import { Button } from '@/components/ui/button';
 
 /**
@@ -58,11 +58,18 @@ export function ReservationPanel({ bar, calendarKey, onClose }: Props) {
       data-testid="reservation-panel"
     >
       <div className="flex items-start justify-between">
-        <h2 className="text-sm font-semibold text-ink">{bar.guestName ?? '이름 없음'}</h2>
+        <h2 className="text-sm font-semibold text-ink">{guestLabel(bar)}</h2>
         <Button size="sm" variant="ghost" onClick={onClose} data-testid="reservation-close">
           닫기
         </Button>
       </div>
+      {!bar.guestName && isIcalChannel(bar.channel) && (
+        // 예약 상세(DESCRIPTION)는 읽지 않기로 했다(계획서 15.3). 이름을 채우는 대신 이유를 적는다.
+        <p className="mt-1 text-[11px] text-muted" data-testid="reservation-name-reason">
+          {channelLabel(bar.channel)} iCal 은 게스트 이름과 금액을 보내 주지 않습니다. 게스트
+          정보는 {channelLabel(bar.channel)} 예약 화면에서 확인하세요.
+        </p>
+      )}
 
       <dl className="mt-3 space-y-2 text-xs">
         <div>
@@ -75,6 +82,22 @@ export function ReservationPanel({ bar, calendarKey, onClose }: Props) {
           <dt className="text-muted">채널</dt>
           <dd className="text-ink">{channelLabel(bar.channel)}</dd>
         </div>
+        <div>
+          <dt className="text-muted">금액</dt>
+          {/* 모르는 금액을 0원으로 쓰지 않는다(작업지시-16). */}
+          <dd className="tabular-nums text-ink" data-testid="reservation-amount">
+            {bar.amount == null ? '미상' : `${bar.amount.toLocaleString('ko-KR')}원`}
+          </dd>
+        </div>
+        {bar.adults != null && (
+          <div>
+            <dt className="text-muted">인원</dt>
+            <dd className="text-ink" data-testid="reservation-guests">
+              성인 {bar.adults}
+              {bar.children ? ` · 아동 ${bar.children}` : ''}
+            </dd>
+          </div>
+        )}
         <div>
           <dt className="text-muted">상태</dt>
           <dd className="text-ink" data-testid="reservation-status">

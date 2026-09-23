@@ -116,6 +116,15 @@ export function OpsTasksPage() {
 
       {tasks.isLoading && <p className="text-sm text-muted">불러오는 중입니다…</p>}
 
+      {tasks.data?.length === 0 && (
+        // 네 칸이 (0) 으로만 서 있으면 고장으로 읽힌다. 비어 있는 이유와 채워지는 때를 적는다.
+        <p className="rounded-md border border-rule bg-paper p-4 text-sm text-muted" data-testid="tasks-empty">
+          {filter.from || filter.to || filter.assignee
+            ? '조건에 맞는 청소 태스크가 없습니다.'
+            : '청소 태스크가 없습니다. 캘린더에서 예약을 체크아웃하면 그 판매 단위의 청소 태스크가 여기에 자동으로 생깁니다.'}
+        </p>
+      )}
+
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {TASK_STATUSES.map((status) => (

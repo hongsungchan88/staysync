@@ -144,6 +144,12 @@ OBP 숙소(4372137·5868189)는 `occupancies: [1,2]`, `pricing: "OBP"` 로 온�
 다시 만들려 했으나 11140466·10485037(USD)·5868189·6519420(GBP)·4372137(EUR) 전부 422 "already exists". 5분 간격으로
 1시간 재시도했고 그 안에 풀리지 않았다(3.4). **심사 시연 전에는 채널 생존 확인이 선행 조건이다.**
 
+그 예약은 닫는다 — 취소 경로 없음(09-22 확정, 사용자). 채널이 회수돼 우리 Channex 계정에서는 그 예약이 보이지 않고
+(`GET /channels/:id` 404, 숙소 `acc_channels_count 0`), 사용자 쪽에도 취소할 수 있는 길이 없다. 우리 DB 에는 애초에
+들어온 적이 없어(`bookings`·`booking_revisions` 0건) 정리할 것도 없다. 그 예약은 지금 그 숙소를 물고 있는 쪽에 남아 있거나
+어디에도 없다. 여기서 나오는 규칙 — 실물 예약은 만든 그 자리에서 끝낸다(3.4 의 ①~⑥). 이번에 깨진 이유가 "만들어 놓고
+하루 뒤에 썼다"이다.
+
 ### 3.2 Booking CRS 로 실물을 만들었다 (Channex 인증 시험 11 이 허용하는 경로)
 
 `POST /api/v1/applications/install {"application_installation":{"property_id":…,"application_code":"booking_crs"}}` → 200
