@@ -4,7 +4,10 @@ import com.staysync.booking.domain.*;
 import com.staysync.shared.audit.AuditRecorder;
 import com.staysync.shared.outbox.OutboxRecorder;
 import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.slf4j.Logger;
@@ -51,19 +54,22 @@ class ReservationWriter {
     private final OutboxRecorder outbox;
     private final AuditRecorder audit;
     private final ConflictCleanup conflictCleanup;
+    private final List<CheckOutFollowUps> checkOutFollowUps;
 
     ReservationWriter(ReservationRepository reservationRepo,
                       ReservationNightRepository nightRepo,
                       InventoryService inventoryService,
                       OutboxRecorder outbox,
                       AuditRecorder audit,
-                      ConflictCleanup conflictCleanup) {
+                      ConflictCleanup conflictCleanup,
+                      List<CheckOutFollowUps> checkOutFollowUps) {
         this.reservationRepo = reservationRepo;
         this.nightRepo = nightRepo;
         this.inventoryService = inventoryService;
         this.outbox = outbox;
         this.audit = audit;
         this.conflictCleanup = conflictCleanup;
+        this.checkOutFollowUps = checkOutFollowUps;
     }
 
     /** 수기 예약. 재고를 먼저 확보하고 예약을 만든다. 모자라면 전체가 실패한다. */
@@ -200,6 +206,50 @@ class ReservationWriter {
         audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHECK_OUT",
                 before, ReservationEvents.auditSnapshot(reservation));
         return reservation;
+    }
+
+    /**
+     * CHECKED_IN → CONFIRMED. 재고는 그대로다. 체크인은 감사 기록 말고 남긴 것이 없어 거둘 것도 없다.
+     *
+     * <p>되돌리기는 원래 기록을 고치지 않고 <b>감사 행을 하나 더한다</b> — 한 일과 되돌린 일이
+     * 둘 다 남아야 한다. 누가·언제는 감사 기록이 알아서 채우고, 사유는 뒤 값에 싣는다.
+     */
+    @Transactional
+    Reservation undoCheckIn(Long reservationId, String reason) {
+        Reservation reservation = load(reservationId);
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
+        reservation.undoCheckIn();
+
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHECK_IN_UNDONE",
+                before, withReason(reservation, reason));
+        return reservation;
+    }
+
+    /**
+     * CHECKED_OUT → CHECKED_IN. 퇴실일 당일(Asia/Seoul)까지만. 재고는 그대로다 — 체크아웃이
+     * 반납하지 않았다({@link Reservation#undoCheckOut}).
+     *
+     * <p>체크아웃이 만든 청소 태스크는 {@link CheckOutFollowUps} 가 거둔다. 이미 손댄 청소면
+     * 거기서 예외가 나고 전체가 롤백된다. 인박스 알림은 남긴다(작업지시-20 9절).
+     */
+    @Transactional
+    Reservation undoCheckOut(Long reservationId, String reason) {
+        Reservation reservation = load(reservationId);
+        Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
+
+        reservation.undoCheckOut(LocalDate.now(ZoneId.of("Asia/Seoul")));
+        checkOutFollowUps.forEach(followUp -> followUp.withdraw(reservationId));
+
+        audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHECK_OUT_UNDONE",
+                before, withReason(reservation, reason));
+        return reservation;
+    }
+
+    private static Map<String, Object> withReason(Reservation reservation, String reason) {
+        Map<String, Object> after = new LinkedHashMap<>(ReservationEvents.auditSnapshot(reservation));
+        after.put("reason", reason);
+        return after;
     }
 
     /** CONFIRMED → NO_SHOW. 방은 비었지만 요금은 받으므로 재고를 되돌리지 않는다. */

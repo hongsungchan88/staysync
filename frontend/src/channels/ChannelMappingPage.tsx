@@ -32,9 +32,14 @@ export function ChannelMappingPage() {
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['channel-mappings', id] });
+  // 해제하면 예약 수신이 끊기고 iCal 발행 주소가 바뀐다. 한 번 더 묻는다(작업지시-20 9절).
+  const [confirming, setConfirming] = useState<number | null>(null);
   const remove = useMutation({
     mutationFn: (mappingId: number) => deleteMapping(id, mappingId),
-    onSuccess: invalidate,
+    onSuccess: () => {
+      setConfirming(null);
+      return invalidate();
+    },
   });
 
   const connection = board.data?.connection;
@@ -90,11 +95,58 @@ export function ChannelMappingPage() {
                 )}
               </div>
               {unit.mapping && (
-                <Button size="sm" onClick={() => remove.mutate(unit.mapping!.id)}>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    remove.reset();
+                    setConfirming(confirming === unit.mapping!.id ? null : unit.mapping!.id);
+                  }}
+                  aria-expanded={confirming === unit.mapping.id}
+                >
                   매핑 해제
                 </Button>
               )}
             </div>
+
+            {unit.mapping && confirming === unit.mapping.id && (
+              <div
+                role="alertdialog"
+                aria-label="매핑 해제 확인"
+                className="mt-3 rounded-md border border-warn p-3 text-xs text-body"
+                data-testid={`unmap-confirm-${unit.mapping.id}`}
+              >
+                <p>
+                  매핑을 해제하면 {unit.unitName}의 이 채널 예약 수신이 끊깁니다. 이미 받은 예약은
+                  캘린더에 남습니다.
+                </p>
+                {connection?.adapterType === 'ICAL' && (
+                  <p className="mt-1 font-medium text-warn">
+                    이 판매 단위의 iCal 발행 주소도 없어집니다. 다시 매핑하면 주소가 새로 생기므로{' '}
+                    {channelLabel(connection.channelCode)}에 등록해 둔 주소를 새 주소로 바꿔
+                    등록해야 합니다.
+                  </p>
+                )}
+                {remove.isError && (
+                  <p className="mt-1 text-warn" role="alert">
+                    해제하지 못했습니다.
+                  </p>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => remove.mutate(unit.mapping!.id)}
+                    disabled={remove.isPending}
+                    data-testid={`unmap-confirm-button-${unit.mapping.id}`}
+                  >
+                    해제합니다
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>
+                    취소
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {unit.mapping && <ExportUrl connectionId={id} mappingId={unit.mapping.id} />}
 

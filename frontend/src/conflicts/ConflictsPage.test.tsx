@@ -153,4 +153,15 @@ describe('충돌 해소', () => {
     // 같은 방으로 옮기는 것은 아무것도 하지 않는 것이다.
     expect(screen.queryByRole('option', { name: /본채/ })).not.toBeInTheDocument();
   });
+
+  it('취소와 보상을 고르면 되돌릴 수 없다는 문구가 뜬다', async () => {
+    // 작업지시-20 9절. 해소 넷 가운데 이것만 되돌릴 길이 없다.
+    const { default: userEvent } = await import('@testing-library/user-event');
+    render(<ConflictsPage />, { wrapper });
+    await waitFor(() => expect(screen.getByText('SS-AAA111')).toBeInTheDocument());
+
+    expect(screen.queryByTestId('cancel-irreversible')).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: /해소 방법/ }), 'CANCELLED');
+    expect(screen.getByTestId('cancel-irreversible')).toHaveTextContent('되돌릴 수 없습니다');
+  });
 });
