@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCalendar, fetchProperties } from '@/api/calendar';
+import { fetchChannels } from '@/api/channels';
 import { CalendarGrid } from './CalendarGrid';
 import { SelectionPanel } from './SelectionPanel';
 import { useReservationMove, type MoveRequest } from './useReservationMove';
@@ -59,6 +60,16 @@ export function CalendarPage() {
     queryFn: () => fetchCalendar(propertyId!, from, to),
     enabled: propertyId !== null,
   });
+
+  // 범례에는 연결이 있거나 화면에 막대가 있는 채널만 둔다. 연동이 없는 채널이 범례에
+  // 서 있으면 "연결했는데 예약이 안 온다"로 읽힌다(작업지시-20 D). 직접예약은 늘 있다.
+  const channels = useQuery({ queryKey: ['channels'], queryFn: fetchChannels });
+  const legend = useMemo(() => {
+    const live = new Set<string>(['DIRECT']);
+    channels.data?.forEach((c) => live.add(c.channelCode));
+    calendar.data?.reservations.forEach((r) => live.add(r.channel));
+    return LEGEND.filter((entry) => live.has(entry.code));
+  }, [channels.data, calendar.data]);
 
   // 다른 채널의 예약이나 다른 탭의 편집이 이 화면에 즉시 들어온다(계획서 8.2).
   useCalendarStream(calendarKey, propertyId);
@@ -168,7 +179,7 @@ export function CalendarPage() {
           </div>
 
           <div className="flex items-center gap-3 text-xs text-muted">
-            {LEGEND.map((entry) => (
+            {legend.map((entry) => (
               <span key={entry.code} className="flex items-center gap-1">
                 <i
                   className="inline-block h-2.5 w-2.5 rounded-sm"

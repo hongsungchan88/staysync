@@ -11,7 +11,7 @@ import {
   type KeyboardCoordinateGetter,
 } from '@dnd-kit/core';
 import type { CalendarGrid as GridData, ReservationBar } from '@/api/schemas';
-import { channelColor, channelLabel } from './channels';
+import { channelColor, channelLabel, guestLabel } from './channels';
 import {
   DAY_W,
   HEAD_H,
@@ -495,7 +495,7 @@ function DayCell({
           <ul className="space-y-1">
             {folded.map((bar) => (
               <li key={bar.id} className="truncate text-[11px] text-body">
-                {bar.guestName ?? '이름 없음'} · {channelLabel(bar.channel)}
+                {guestLabel(bar)} · {channelLabel(bar.channel)}
               </li>
             ))}
           </ul>
@@ -528,8 +528,8 @@ function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: Reservatio
       data-testid={`bar-${bar.id}`}
       data-bar={bar.id}
       data-movable={movable || undefined}
-      title={`${bar.guestName ?? '이름 없음'} · ${channelLabel(bar.channel)} · ${bar.status}`}
-      aria-label={`${bar.guestName ?? '이름 없음'} 예약 ${bar.checkIn}부터 ${bar.checkOut}까지`}
+      title={`${guestLabel(bar)} · ${channelLabel(bar.channel)} · ${bar.status}`}
+      aria-label={`${guestLabel(bar)} 예약 ${bar.checkIn}부터 ${bar.checkOut}까지`}
       className={cn(
         'absolute flex items-center overflow-hidden rounded px-2 text-[11px] text-paper',
         movable && 'cursor-grab focus:ring-2 focus:ring-ink focus:outline-none',
@@ -557,7 +557,7 @@ function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: Reservatio
       // 잡기로 쓰고, 옮길 수 없는 막대는 포커스를 받지 않는 것이 8주차의 계약이다.
       onClick={() => onClick(bar)}
     >
-      <span className="truncate">{bar.guestName ?? '이름 없음'}</span>
+      <span className="truncate">{guestLabel(bar)}</span>
     </div>
   );
 }

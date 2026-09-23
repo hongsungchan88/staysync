@@ -71,6 +71,9 @@ export const reservationBarSchema = z.object({
   status: z.string(),
   /** 금액 미상(iCal)이면 서버가 키를 뺀다. `number()` 로 두면 캘린더가 통째로 안 뜬다. */
   amount: z.number().nullish(),
+  /** 직접예약에만 온다. 채널 예약의 인원은 채널이 넘기지 않아 모른다. */
+  adults: z.number().nullish(),
+  children: z.number().nullish(),
 });
 export type ReservationBar = z.infer<typeof reservationBarSchema>;
 

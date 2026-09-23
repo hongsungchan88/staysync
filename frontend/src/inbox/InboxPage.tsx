@@ -58,7 +58,9 @@ export function InboxPage() {
           {threads.isLoading && <p className="text-sm text-muted">불러오는 중입니다…</p>}
           {sorted.length === 0 && !threads.isLoading && (
             <p className="rounded-md border border-rule bg-paper p-3 text-sm text-muted">
-              아직 대화가 없습니다.
+              아직 대화가 없습니다. 예약을 체크아웃하면 청소 알림이, 메시지를 주고받는 채널이
+              연결되면 게스트 대화가 여기에 쌓입니다. 에어비앤비 iCal 연결은 메시지를 주고받지
+              않습니다.
             </p>
           )}
 

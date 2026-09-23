@@ -169,4 +169,22 @@ describe('청소 태스크 칸반', () => {
     // 빈칸으로 두면 값이 빠진 것으로 읽힌다. 다음 예약이 아직 없다는 뜻이다.
     expect(within(screen.getByTestId('task-2')).getByText(/열림/)).toBeInTheDocument();
   });
+
+  it('태스크가 없으면 왜 비었고 언제 채워지는지 적는다', async () => {
+    // 작업지시-20 A. 네 칸이 (0) 으로만 서 있으면 고장으로 읽힌다.
+    fetchMock.mockImplementation(() =>
+      Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve([]) } as Response),
+    );
+    render(<OpsTasksPage />, { wrapper });
+
+    await waitFor(() => expect(screen.getByTestId('tasks-empty')).toBeInTheDocument());
+    expect(screen.getByTestId('tasks-empty')).toHaveTextContent('체크아웃하면');
+  });
+
+  it('태스크가 있으면 빈 상태 문구가 없다', async () => {
+    render(<OpsTasksPage />, { wrapper });
+
+    await waitFor(() => expect(screen.getByTestId('task-1')).toBeInTheDocument());
+    expect(screen.queryByTestId('tasks-empty')).not.toBeInTheDocument();
+  });
 });

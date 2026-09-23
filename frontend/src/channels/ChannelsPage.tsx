@@ -21,7 +21,10 @@ import {
   credentialLabel,
 } from './capabilities';
 
-const ADAPTER_TYPES: AdapterType[] = ['ICAL', 'CHANNEX', 'MOCK'];
+// MOCK 은 시뮬레이터 상대역이라 운영 빌드에서는 고를 수 없게 한다(작업지시-20 D).
+const ADAPTER_TYPES: AdapterType[] = import.meta.env.PROD
+  ? ['ICAL', 'CHANNEX']
+  : ['ICAL', 'CHANNEX', 'MOCK'];
 
 /**
  * 채널 연결 목록. 계획서 8.1 의 `/channels` 다.
@@ -32,13 +35,21 @@ const ADAPTER_TYPES: AdapterType[] = ['ICAL', 'CHANNEX', 'MOCK'];
 export function ChannelsPage() {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState<number | null>(null);
+  // 삭제는 되돌릴 수 없다 — 저장된 주소·키를 화면이 다시 보여 주지 못한다. 한 번 더 묻는다.
+  const [confirming, setConfirming] = useState<number | null>(null);
 
   const properties = useQuery({ queryKey: ['properties'], queryFn: fetchProperties });
   const channels = useQuery({ queryKey: ['channels'], queryFn: fetchChannels });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['channels'] });
 
-  const remove = useMutation({ mutationFn: deleteChannel, onSuccess: invalidate });
+  const remove = useMutation({
+    mutationFn: deleteChannel,
+    onSuccess: () => {
+      setConfirming(null);
+      return invalidate();
+    },
+  });
 
   return (
     <div className="mx-auto flex h-full w-full max-w-4xl flex-col gap-5 overflow-auto p-6">
@@ -82,6 +93,13 @@ export function ChannelsPage() {
                   ))}
                   {Object.keys(connection.credentials).length === 0 && '없음'}
                 </p>
+                {connection.adapterType === 'ICAL' && (
+                  // 미지원 셋이 먼저 보이면 고장난 연결로 읽힌다. iCal 은 원래 받기만 한다.
+                  <p className="mt-2 text-xs text-body">
+                    iCal 은 예약을 받아 오기만 하는 연결입니다. 재고·요금·제약은 이 연결로 보내지
+                    않습니다.
+                  </p>
+                )}
                 <CapabilityBadges capabilities={connection.capabilities} />
                 {connection.deadJobs > 0 && (
                   // 조용히 실패하는 자리를 남기지 않는다(작업지시-17 8.3). 재시도가 포기한 전송은
@@ -107,13 +125,55 @@ export function ChannelsPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => remove.mutate(connection.id)}
-                  disabled={remove.isPending}
+                  onClick={() => {
+                    remove.reset();
+                    setConfirming(confirming === connection.id ? null : connection.id);
+                  }}
+                  aria-expanded={confirming === connection.id}
                 >
                   삭제
                 </Button>
               </div>
             </div>
+
+            {confirming === connection.id && (
+              <div
+                role="alertdialog"
+                aria-label="연결 삭제 확인"
+                className="mt-3 rounded-md border border-warn p-3 text-xs text-body"
+                data-testid={`delete-confirm-${connection.id}`}
+              >
+                <p>
+                  이 연결을 삭제하면 매핑도 함께 지워지고 이 연결로 들어오던 예약 수신이 끊깁니다.
+                  이미 받은 예약은 캘린더에 남습니다.
+                </p>
+                <p className="mt-1 font-medium text-warn">
+                  저장된 {credentialLabel(connection.adapterType)}는 보안상 화면에 다시 보여 드릴 수
+                  없습니다. 다시 연결하려면{' '}
+                  {connection.adapterType === 'CHANNEX' ? 'Channex' : channelLabel(connection.channelCode)}에서 주소나 키를 새로
+                  받아 입력하고 매핑도 다시 해야 합니다.
+                </p>
+                {remove.isError && (
+                  <p className="mt-1 text-warn" role="alert">
+                    삭제하지 못했습니다.
+                  </p>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="primary"
+                    onClick={() => remove.mutate(connection.id)}
+                    disabled={remove.isPending}
+                    data-testid={`delete-confirm-button-${connection.id}`}
+                  >
+                    삭제합니다
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setConfirming(null)}>
+                    취소
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {editing === connection.id && (
               <EditForm
