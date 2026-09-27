@@ -267,7 +267,7 @@ class ConflictResolutionTest extends SyncTestBase {
                 BigDecimal.valueOf(200_000), (short) 2, (short) 0, null);
         ChannelBookingResult result = intake.ingest(new ChannelBookingCommand(
                 f.propertyId(), unitId, "MOCK_CONFLICT", 채널예약번호, null,
-                체크인, 체크아웃, BigDecimal.valueOf(200_000), 1, false));
+                체크인, 체크아웃, BigDecimal.valueOf(200_000), 0, 0, 1, false, java.util.Set.of()));
         assertThat(result.outcome())
                 .as("재고를 넘겨 받아들여야 충돌이 생긴다")
                 .isEqualTo(ChannelBookingResult.Outcome.CONFLICT);

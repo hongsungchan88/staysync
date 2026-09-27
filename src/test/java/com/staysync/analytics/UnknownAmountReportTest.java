@@ -106,7 +106,7 @@ class UnknownAmountReportTest extends SyncTestBase {
         // 채널 믹스. 미상 채널의 매출은 미상, 비중은 어느 채널도 없다.
         assertThat(m.channelMix()).hasSize(2);
         ReportMetrics.ChannelShare 에어비앤비 = m.channelMix().stream()
-                .filter(s -> s.channelCode().equals("AIRBNB_ICAL")).findFirst().orElseThrow();
+                .filter(s -> s.channelCode().equals("AIRBNB")).findFirst().orElseThrow();
         ReportMetrics.ChannelShare 직접 = m.channelMix().stream()
                 .filter(s -> s.channelCode().equals("DIRECT")).findFirst().orElseThrow();
         assertThat(에어비앤비.reservations()).isEqualTo(1);
@@ -180,7 +180,7 @@ class UnknownAmountReportTest extends SyncTestBase {
                 BigDecimal.ZERO, (short) 2, (short) 0, null).getId();
         intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_V9",
                 "BK-V9-" + f.unitId(), null, 첫날.plusDays(20), 첫날.plusDays(21),
-                BigDecimal.valueOf(100_000), 1, false));
+                BigDecimal.valueOf(100_000), 0, 0, 1, false, java.util.Set.of()));
 
         // 배포 DB 의 적용 전 상태. V1 의 DEFAULT 0 이 iCal 예약에 0 을 넣어 두었다.
         jdbc.update("UPDATE reservation SET total_amount = 0 WHERE channel_booking_id = 'u-5'");

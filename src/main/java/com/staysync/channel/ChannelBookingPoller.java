@@ -342,13 +342,33 @@ public class ChannelBookingPoller {
                 // 나가지 못했다(작업지시 12 의 5절 1번).
                 booking.guestName(),
                 booking.checkIn(), booking.checkOut(),
-                booking.totalAmount(), booking.revision(), booking.isCancellation()));
+                // 인원도 여기서 떨어지고 있었다(확인-11 4절 ③). 위 이름과 같은 자리, 같은 모양이다.
+                booking.totalAmount(), booking.adults(), booking.children(),
+                booking.revision(), booking.isCancellation(),
+                supersedes(connection)));
 
         if (result.outcome() == ChannelBookingResult.Outcome.CONFLICT) {
             log.warn("재고를 넘겨 받아들였다. reservationId={} 날짜={} 운영자가 해소해야 한다",
                     result.reservationId(), result.conflictDates());
         }
         return result.outcome() != ChannelBookingResult.Outcome.DUPLICATE;
+    }
+
+    /**
+     * Channex 예약이 넘겨받을 수 있는 채널 코드 — 같은 숙소의 iCal 연결들의 코드(작업지시-21 A).
+     *
+     * <p>iCal 에서 Channex 로 옮기면 같은 예약이 Channex 로 다시 온다. 코드가 달라 멱등키가 못 잡고 새 예약 +
+     * 충돌이 된다. 그래서 Channex 만 넘겨받는다. <b>연결이 남아 있어야 코드를 안다</b> — 전환은 iCal 매핑만
+     * 풀고 연결은 지우지 않는다(작업지시-21 9절). 매핑이 풀린 연결은 폴링해도 예약을 넣지 못한다.
+     */
+    private Set<String> supersedes(ChannelConnection connection) {
+        if (connection.getAdapterType() != AdapterType.CHANNEX) {
+            return Set.of();
+        }
+        return connections.findByPropertyIdInOrderByIdAsc(List.of(connection.getPropertyId())).stream()
+                .filter(other -> other.getAdapterType() == AdapterType.ICAL)
+                .map(ChannelConnection::getChannelCode)
+                .collect(java.util.stream.Collectors.toSet());
     }
 
     /**

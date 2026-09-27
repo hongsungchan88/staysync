@@ -204,7 +204,7 @@ class ConflictCleanupTest extends SyncTestBase {
     private ChannelBookingCommand command(Fixture f, String bookingId, int revision, boolean cancellation) {
         return new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_CLEANUP",
                 bookingId + "-" + f.unitId(), null, 체크인, 체크아웃,
-                BigDecimal.valueOf(100_000), revision, cancellation);
+                BigDecimal.valueOf(100_000), 0, 0, revision, cancellation, java.util.Set.of());
     }
 
     private List<OverbookingConflict> 열린충돌(Fixture f) {

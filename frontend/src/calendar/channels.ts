@@ -7,6 +7,8 @@
  */
 const CHANNEL_COLORS: Record<string, string> = {
   AIRBNB_ICAL: '#b25c42',
+  // Channex 로 받는 에어비앤비(작업지시-21 C). iCal 로 받던 것과 같은 에어비앤비라 색·라벨이 같다.
+  AIRBNB: '#b25c42',
   BOOKING_COM: '#3f5a6b',
   NAVER: '#5c7166',
   DIRECT: '#71634a',
@@ -17,6 +19,7 @@ const UNKNOWN_COLOR = '#8a8f96';
 
 const CHANNEL_LABELS: Record<string, string> = {
   AIRBNB_ICAL: '에어비앤비',
+  AIRBNB: '에어비앤비',
   BOOKING_COM: '부킹닷컴',
   NAVER: '네이버',
   DIRECT: '직접예약',
@@ -50,12 +53,12 @@ export function guestLabel(bar: { guestName?: string | null; channel: string }):
 }
 
 /** 범례에 그릴 채널 목록. 순서는 와이어프레임과 같다. */
-export const LEGEND = [
-  { code: 'AIRBNB_ICAL', label: '에어비앤비' },
-  { code: 'BOOKING_COM', label: '부킹닷컴' },
-  { code: 'NAVER', label: '네이버' },
-  { code: 'DIRECT', label: '직접예약' },
-] as const;
+export const LEGEND: { code: string; codes: readonly string[]; label: string }[] = [
+  { code: 'AIRBNB_ICAL', codes: ['AIRBNB_ICAL', 'AIRBNB'], label: '에어비앤비' },
+  { code: 'BOOKING_COM', codes: ['BOOKING_COM'], label: '부킹닷컴' },
+  { code: 'NAVER', codes: ['NAVER'], label: '네이버' },
+  { code: 'DIRECT', codes: ['DIRECT'], label: '직접예약' },
+];
 
 /** 충돌 표시 색. 채널이 아니라 상태다. */
 export const CONFLICT_COLOR = '#b4472c';

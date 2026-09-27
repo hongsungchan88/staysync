@@ -11,6 +11,8 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -112,15 +114,34 @@ public class ReportService {
      */
     private List<ChannelShare> channelMix(List<Long> propertyIds, LocalDate from, LocalDate to,
                                           BigDecimal totalRevenue, boolean amountUnknown) {
-        List<ChannelShare> mix = new ArrayList<>();
+        // 같은 채널의 두 연결 방식(에어비앤비 iCal 과 Channex)을 한 줄로 접는다. 업체 눈에는 같은 에어비앤비다.
+        Map<String, long[]> counts = new LinkedHashMap<>();
+        Map<String, BigDecimal> revenues = new LinkedHashMap<>();
         for (BookingStatistics.ChannelVolume volume
                 : statistics.channelVolumes(propertyIds, from, to)) {
-            mix.add(new ChannelShare(volume.channelCode(), volume.reservations(),
-                    volume.unknownReservations() > 0 ? null : volume.revenue(),
-                    amountUnknown ? null : ratio(volume.revenue(), totalRevenue),
-                    volume.unknownReservations()));
+            String family = channelFamily(volume.channelCode());
+            long[] c = counts.computeIfAbsent(family, k -> new long[2]);
+            c[0] += volume.reservations();
+            c[1] += volume.unknownReservations();
+            revenues.merge(family, volume.revenue() == null ? BigDecimal.ZERO : volume.revenue(), BigDecimal::add);
         }
+        List<ChannelShare> mix = new ArrayList<>();
+        counts.forEach((family, c) -> mix.add(new ChannelShare(family, c[0],
+                c[1] > 0 ? null : revenues.get(family),
+                amountUnknown ? null : ratio(revenues.get(family), totalRevenue),
+                c[1])));
         return mix;
+    }
+
+    /**
+     * 채널 코드 → 리포트에서 묶는 채널. {@code AIRBNB_ICAL} 과 Channex 로 받는 {@code AIRBNB} 가 같은 줄이다
+     * (작업지시-21 C). iCal 연결의 코드가 {@code _ICAL} 로 끝나는 관례는 화면의 {@code isIcalChannel} 과 같다.
+     * ponytail: 코드 이름 관례에 기댄다. 관례를 벗어난 iCal 코드가 생기면 연결의 어댑터 종류로 묶는다.
+     */
+    static String channelFamily(String channelCode) {
+        return channelCode.endsWith("_ICAL")
+                ? channelCode.substring(0, channelCode.length() - "_ICAL".length())
+                : channelCode;
     }
 
     // --- 안쪽 -----------------------------------------------------------------

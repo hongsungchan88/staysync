@@ -103,7 +103,68 @@ class ChannelBookingWriter {
                     command.channelCode(), command.channelBookingId());
             return ChannelBookingResult.of(ChannelBookingResult.Outcome.DUPLICATE, null);
         }
+        Optional<Reservation> replaced = replaceable(command);
+        if (replaced.isPresent()) {
+            return takeOver(replaced.get(), command);
+        }
         return create(command);
+    }
+
+    // --- 넘겨받기 (작업지시-21 A) -----------------------------------------------
+
+    /**
+     * 이 채널 예약이 넘겨받을 예약. 같은 판매 단위, <b>체크인·체크아웃이 똑같고</b>, 살아 있고(HOLD·CONFIRMED·
+     * CHECKED_IN), 채널 코드가 {@code supersedes} 안에 있는 것. 하루라도 다르면 없다 — 새 예약 → 충돌 카드로
+     * 가고 사람이 정리한다(5절 1번). 여럿이면(수량 2 이상인 판매 단위) 먼저 들어온 것부터 하나씩 넘겨받는다.
+     */
+    private Optional<Reservation> replaceable(ChannelBookingCommand command) {
+        if (command.supersedes().isEmpty()) {
+            return Optional.empty();
+        }
+        StayPeriod period = command.period();
+        return reservationRepo.findOverlapping(command.propertyId(), period.checkIn(), period.checkOut(), ACTIVE)
+                .stream()
+                .filter(r -> r.getUnitId().equals(command.unitId()))
+                .filter(r -> r.getPeriod().checkIn().equals(period.checkIn())
+                        && r.getPeriod().checkOut().equals(period.checkOut()))
+                .filter(r -> command.supersedes().contains(r.getChannelCode()))
+                .min(java.util.Comparator.comparing(Reservation::getId));
+    }
+
+    /**
+     * iCal 예약을 이 채널 예약으로 갈아 끼운다. <b>재고 원장은 건드리지 않는다</b> — 같은 밤을 같은 예약이
+     * 계속 잡는다. 박 행은 다시 쓴다(금액이 생겼으니 박당 단가가 생긴다, 리포트가 읽는다).
+     *
+     * <p>이벤트를 내지 않는다. 재고가 안 바뀌어 채널에 보낼 것이 없고, {@code RESERVATION_CONFIRMED} 를 내면
+     * 확정 안내 자동 발송이 이미 묵고 있는 손님에게 나간다.
+     */
+    private ChannelBookingResult takeOver(Reservation reservation, ChannelBookingCommand command) {
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("channelCode", reservation.getChannelCode());
+        before.put("channelBookingId", reservation.getChannelBookingId());
+        before.put("totalAmount", reservation.getTotalAmount());
+        before.put("adults", reservation.getAdults());
+
+        reservation.takeOver(command.channelCode(), command.channelBookingId(),
+                command.revision() == null ? 0 : command.revision(), command.totalAmount(),
+                (short) command.adults(), (short) command.children());
+        if (reservation.getGuestId() == null) {
+            reservation.assignGuest(guestIdOf(command));
+        }
+        reservationRepo.saveAndFlush(reservation);
+        reservationWriter.rewriteNights(reservation);
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("channelCode", command.channelCode());
+        after.put("channelBookingId", command.channelBookingId());
+        after.put("totalAmount", command.totalAmount());
+        after.put("adults", command.adults());
+        after.put("revision", command.revision());
+        audit.recordAs(ActorKind.CHANNEL, null, "RESERVATION", reservation.getId(),
+                "CHANNEL_TAKEOVER", before, after);
+        log.info("채널 예약이 같은 날짜의 예약을 넘겨받았다. reservationId={} {} → {}",
+                reservation.getId(), before.get("channelCode"), command.channelCode());
+        return ChannelBookingResult.of(ChannelBookingResult.Outcome.UPDATED, reservation.getId());
     }
 
     // --- 이미 아는 예약 ---------------------------------------------------------
@@ -139,6 +200,8 @@ class ChannelBookingWriter {
             // 기간은 applyIncoming 이 이미 바꿨다. 옛 기간에서 빠져나간 날의 초과가 풀렸으면 닫는다.
             conflictCleanup.afterRelease(reservation.getPropertyId(), reservation.getUnitId(), oldPeriod);
         }
+        // 수정에 실려 온 인원을 따른다. 버전 판정을 통과한 수정만 여기까지 온다.
+        reservation.changeGuests((short) command.adults(), (short) command.children());
         // 날짜든 금액이든 바뀌었으면 박 행도 옛것이다. 금액만 바뀌어도 박당 단가가 달라진다.
         reservationWriter.rewriteNights(reservation);
 
@@ -230,7 +293,8 @@ class ChannelBookingWriter {
                 bookingService.uniqueCode(),
                 // 버전이 없는 채널은 0 에서 시작한다. 이후 판정도 크기를 보지 않는다.
                 command.revision() == null ? 0 : command.revision(),
-                command.totalAmount(), BigDecimal.ZERO);
+                command.totalAmount(), BigDecimal.ZERO,
+                (short) command.adults(), (short) command.children());
 
         reservation.assignGuest(guestIdOf(command));
 

@@ -48,6 +48,9 @@ class ChannexBookingFeedTest extends SyncTestBase {
     @Autowired
     private ObjectMapper json;
 
+    @Autowired
+    private com.staysync.booking.ChannelBookingIntake intake;
+
     /** 이번 폴링에 줄 리비전들. 테스트마다 갈아 끼운다. */
     private final List<String> feed = new ArrayList<>();
 
@@ -327,6 +330,38 @@ class ChannexBookingFeedTest extends SyncTestBase {
         poller.runChannex();
         assertThat(channex.received("/api/v1/booking_revisions/feed")).isNotEmpty();
         assertThat(예약수("bk-" + f.unitId())).isEqualTo(1);
+    }
+
+    // --- 작업지시-21 A·B ----------------------------------------------------------------
+
+    @Test
+    @DisplayName("같은 숙소의 iCal 예약을 Channex 리비전이 넘겨받는다 — 매핑이 풀린 iCal 연결의 코드로, 인원까지(작업지시-21)")
+    void 폴링이_iCal_예약을_넘겨받는다() {
+        Fixture f = given("channex-넘겨받기");
+        // 전환 순서 그대로 — iCal 연결은 남아 있고 매핑만 풀렸다. 그 사이 받아 둔 예약은 캘린더에 있다.
+        channels.create(f.propertyId(), f.orgId(), "AIRBNB_ICAL", AdapterType.ICAL, "에어비앤비",
+                Map.of("ical_url", "http://127.0.0.1:9/none.ics"));
+        Long icalId = intake.ingest(new com.staysync.booking.ChannelBookingCommand(f.propertyId(), f.unitId(),
+                "AIRBNB_ICAL", "uid-" + f.unitId() + "@airbnb.com", null, 체크인, 체크아웃, null, 0, 0, null,
+                false, java.util.Set.of())).reservationId();
+        connectChannex(f);
+        feed.add(revision("rev-t1", "bk-t-" + f.unitId(), "new", "2026-09-27T05:00:00", 체크인, 체크아웃,
+                "260.00", "USD", ROOM).replace("\"adults\":2", "\"adults\":3"));
+
+        poller.pollChannex();
+
+        assertThat(jdbc.queryForObject("SELECT count(*) FROM reservation WHERE unit_id = ?", Long.class, f.unitId()))
+                .isEqualTo(1);
+        Map<String, Object> row = jdbc.queryForMap(
+                "SELECT id, channel_code, channel_booking_id, total_amount, adults FROM reservation WHERE unit_id = ?",
+                f.unitId());
+        assertThat(((Number) row.get("id")).longValue()).isEqualTo(icalId);
+        assertThat(row.get("channel_code")).isEqualTo("BOOKING_COM");
+        assertThat(row.get("channel_booking_id")).isEqualTo("bk-t-" + f.unitId());
+        assertThat((BigDecimal) row.get("total_amount")).isEqualByComparingTo("260.00");
+        assertThat(((Number) row.get("adults")).intValue()).isEqualTo(3);
+        assertThat(열린충돌(f, 체크인)).isZero();
+        assertThat(acks()).containsExactly("/api/v1/booking_revisions/rev-t1/ack");
     }
 
     // --- 픽스처 ---------------------------------------------------------------------

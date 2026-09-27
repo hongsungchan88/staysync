@@ -429,6 +429,6 @@ class ChannexAriTest extends SyncTestBase {
 
     private static ChannelBookingCommand command(Fixture f, String bookingId, LocalDate day) {
         return new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_OB", bookingId + "-" + f.unitId(),
-                null, day, day.plusDays(1), BigDecimal.valueOf(100), 1, false);
+                null, day, day.plusDays(1), BigDecimal.valueOf(100), 0, 0, 1, false, java.util.Set.of());
     }
 }

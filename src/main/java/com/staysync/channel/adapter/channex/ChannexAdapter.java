@@ -405,7 +405,7 @@ public class ChannexAdapter implements ChannelAdapter {
         if (roomCount == 0) {
             // 방 정보 없는 리비전(취소 통지가 그럴 수 있다). 예약 날짜로 넣는다.
             result.add(new InboundBooking(bookingId, null,
-                    date(a, "arrival_date"), date(a, "departure_date"), guest, 2, 0,
+                    date(a, "arrival_date"), date(a, "departure_date"), guest, 0, 0,
                     money(a.path("amount"), bookingId), version, cancelled, raw));
             return result;
         }
@@ -416,7 +416,8 @@ public class ChannexAdapter implements ChannelAdapter {
             JsonNode amount = roomCount == 1 ? a.path("amount") : room.path("amount");
             result.add(new InboundBooking(id, room.path("room_type_id").asText(null),
                     date(room, "checkin_date"), date(room, "checkout_date"), guest,
-                    room.path("occupancy").path("adults").asInt(2),
+                    // 없으면 0(모름). 2 를 두면 지어낸 인원이 저장된다(확인-11 4절 ③).
+                    room.path("occupancy").path("adults").asInt(0),
                     room.path("occupancy").path("children").asInt(0),
                     money(amount, id), version, cancelled, raw));
         }

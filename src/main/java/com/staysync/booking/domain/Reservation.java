@@ -95,12 +95,16 @@ public class Reservation {
     public static Reservation fromChannel(Long propertyId, Long unitId, StayPeriod period,
                                           String channelCode, String channelBookingId,
                                           String confirmationCode, int revision,
-                                          BigDecimal totalAmount, BigDecimal commissionRate) {
+                                          BigDecimal totalAmount, BigDecimal commissionRate,
+                                          short adults, short children) {
         Reservation r = new Reservation(propertyId, unitId, period,
                 channelCode, confirmationCode, ReservationStatus.CONFIRMED);
         r.channelBookingId = channelBookingId;
         r.revision = revision;
         r.totalAmount = totalAmount;
+        // 0 은 모름(iCal). 필드 기본값 성인 2 를 두면 채널 예약마다 지어낸 인원이 남는다(확인-11 4절 ③).
+        r.adults = adults;
+        r.children = children;
         // 모르는 금액의 수수료도 모른다. 컬럼이 NOT NULL 이라 0 을 두되, 값을 넣는 유일한
         // 경로가 어차피 0 을 넘긴다(ReportMetrics 의 순수익률을 만들지 않은 이유).
         r.channelCommission = totalAmount == null ? BigDecimal.ZERO : totalAmount.multiply(commissionRate);
@@ -404,6 +408,33 @@ public class Reservation {
         this.revision = incomingRevision;
         touch();
         return true;
+    }
+
+    /** 채널 수정이 인원을 바꿨으면 따라간다. 날짜·금액과 같은 수정에 실려 온다. */
+    public void changeGuests(short newAdults, short newChildren) {
+        this.adults = newAdults;
+        this.children = newChildren;
+    }
+
+    /**
+     * 다른 채널로 들어온 같은 예약을 넘겨받는다 — iCal 예약을 Channex 예약으로 갈아 끼운다(작업지시-21 A).
+     *
+     * <p><b>id·기간·상태·재고는 그대로다.</b> 같은 밤을 같은 예약이 계속 잡는다. 바뀌는 것은 이 예약이
+     * 어느 채널의 어느 예약인지와, iCal 이 주지 않던 값(금액·인원)뿐이다. 체크인한 예약도 넘겨받는다 —
+     * 손님이 있는 방을 새 예약 + 충돌로 만들 이유가 없다.
+     */
+    public void takeOver(String newChannelCode, String newChannelBookingId, int newRevision,
+                         BigDecimal newAmount, short newAdults, short newChildren) {
+        if (!isActive()) {
+            throw new IllegalReservationTransition(status, status);
+        }
+        this.channelCode = newChannelCode;
+        this.channelBookingId = newChannelBookingId;
+        this.revision = newRevision;
+        this.totalAmount = newAmount;
+        this.adults = newAdults;
+        this.children = newChildren;
+        touch();
     }
 
     public boolean isHoldExpired(OffsetDateTime now) {
