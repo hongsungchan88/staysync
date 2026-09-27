@@ -142,7 +142,64 @@ Channex 문서는 "소수 문자열(`"200.00"`) 또는 **통화 최소 단위 �
 
 ## 8. 진행 상황
 
-(Claude Code 가 채운다)
+### 8.1 조사와 정한 것 (09-27, Claude Code)
+
+**넘겨받기가 어디서 도는가.** `ChannelBookingWriter.ingest` 가 멱등키로 못 찾은 새 예약을 만들기 직전에, 명령의
+`supersedes`(넘겨받을 수 있는 채널 코드)에 든 코드로 같은 판매 단위·같은 체크인·체크아웃의 살아 있는 예약이 있는지
+본다. 있으면 `Reservation.takeOver` — 채널 코드·채널 예약번호·버전·금액·인원을 바꾸고 손님이 없으면 붙인다. **id·
+기간·상태·재고 원장은 그대로**, 박 행만 다시 쓴다(금액이 생겨 박당 단가가 생긴다 — 리포트가 읽는다). 감사
+`CHANNEL_TAKEOVER`(앞: iCal 코드·UID·금액 null·인원 / 뒤: Channex 값). **이벤트는 내지 않는다** — 재고가 안 바뀌어
+보낼 것이 없고, `RESERVATION_CONFIRMED` 를 내면 이미 묵는 손님에게 확정 안내 자동 발송이 나간다.
+
+**booking 은 어느 코드가 iCal 인지 모른다 → channel 이 정한다.** `ChannelBookingPoller.supersedes` 가 **Channex 연결일
+때만** 같은 숙소의 `ICAL` 연결들의 채널 코드를 넘긴다. 다른 어댑터는 빈 집합이라 넘겨받기가 일어나지 않는다. 그래서
+**전환 때 iCal 연결은 지우지 않고 매핑만 푼다**(9절 4번). 매핑이 풀린 iCal 연결은 폴링해도 그 판매 단위에 넣지 못하고
+`cancelMissing` 도 돌지 않는다 — 리허설 2단계에서 봤다.
+
+**체크인한 예약도 넘겨받는다.** 손님이 방에 있는 예약을 새 예약 + 충돌로 만들 이유가 없고, 상태는 그대로 둔다.
+배포 환경 지니하우스의 앞으로 iCal 예약 12건 가운데 첫 체크인이 09-25 라 실제로 해당될 수 있다(확인-12 4.1).
+취소·만료·체크아웃·노쇼는 대상이 아니다(`isActive`).
+
+**수량 2 이상 판매 단위** — 같은 날짜 후보가 여럿이면 id 가 작은 것부터 하나씩 넘겨받는다. 지니하우스는 1실이라
+해당 없음.
+
+**B — 인원.** `ChannelBookingCommand` 에 `adults`·`children` 을 더했다(0 = 모름). 프로덕션 호출자는 폴러 하나이고
+거기서 `InboundBooking` 의 값을 넘긴다. **편의 생성자를 두지 않았다** — 인원 없이 만드는 길이 있으면 다음 호출자가
+또 떨어뜨린다. 테스트 호출부 16곳은 고쳤다. Channex 어댑터가 `occupancy` 가 없을 때 넣던 **기본값 2 도 0 으로** 바꿨다
+(같은 결함의 다른 입구). 채널 수정이 버전 판정을 통과하면 인원도 따라간다(`changeGuests`).
+캘린더 막대는 **인원을 알 때(성인 1 이상)만** 싣는다 — 20 9절의 "직접예약만"을 푼 것이다. **이 배포 전에 들어온 iCal
+예약은 인원 칸에 기본값 2 가 남아 있어** 화면이 iCal 채널에는 인원을 그리지 않는다. 옛 행을 0 으로 고치는 마이그레이션은
+만들지 않았다 — 6절 10번 "배포로 데이터가 바뀌지 않는다"와 부딪히고, 화면 규칙 하나로 같은 결과가 된다.
+
+**C — 채널 코드는 `AIRBNB`.** Channex 연결을 만들 때 채널 코드로 넣는다. 화면은 `AIRBNB` 를 `AIRBNB_ICAL` 과 같은
+라벨(에어비앤비)·색으로 그리고 범례도 한 항목이다. `_ICAL` 로 끝나지 않으므로 "이름 없음(iCal)"·인원 숨김이 붙지 않는다.
+리포트는 `ReportService.channelFamily` 가 `_ICAL` 을 떼어 **한 줄로 접는다** — 그래서 채널 비중의 에어비앤비 행 코드는
+이제 전환 전에도 `AIRBNB` 로 나간다(라벨은 같다).
+
+**D — 원화 요금 형식은 바꾸지 않는다.** 세 형식이 모두 `170000` 으로 되읽혔다(확인-12 1절). 원화는 최소 단위가 1원이다.
+
+**마이그레이션 없음.** 배포 전 덤프·되돌림은 8.3.
+
+### 8.2 한 것
+
+| | 자리 |
+|---|---|
+| A | `ChannelBookingWriter.replaceable`·`takeOver`, `Reservation.takeOver`, `ChannelBookingPoller.supersedes` |
+| B | `ChannelBookingCommand`(인원·`supersedes`), `Reservation.fromChannel`(인원)·`changeGuests`, `ChannexAdapter`(기본값 0), `CalendarService`(알 때만), 예약 패널(iCal 이면 숨김) |
+| C | `calendar/channels.ts`(`AIRBNB`, 범례 `codes`), `CalendarPage`(범례), `ReportService.channelFamily` |
+| D | 코드 변경 없음. `ChannexAdapter.money` javadoc 에 실측 |
+| E | 로컬 리허설 여섯 단계 + 정리 — 확인-12 2절 |
+| F | 남은 iCal 예약 쿼리·전환 전 기준값·`load_future_reservations` 절차 — 확인-12 4절 |
+
+테스트 — 서버 +10: `ChannelTakeoverTest` 7(넘겨받기·날짜 어긋나면 충돌·코드 없으면 안 함·이후 변경/취소 추적·취소된 것
+제외·투숙 중 포함·새 예약 인원), `ChannexBookingFeedTest` 1(폴러 → 어댑터 → 넘겨받기 → ack, 매핑이 풀린 iCal 연결의
+코드로, 인원 3), `ReportTest` 1(두 코드 한 줄), `CalendarApiTest` 1 고침(알 때만 싣는다). 프론트 +2(Channex 에어비앤비는
+인원·이름, 옛 iCal 기본값 인원은 숨김).
+
+### 8.3 배포
+
+(아래에 채운다)
+
 
 ## 9. 실제 전환 — 사람과 함께, 1~8 이 끝난 뒤
 
