@@ -28,8 +28,16 @@ import java.time.LocalDate;
  *                         암호화 경계를 우회하는 두 번째 입구가 된다(ADR 0007)
  * @param totalAmount      채널이 준 총액. {@code null} 은 금액 미상이고 그대로 저장된다.
  *                         0 으로 바꾸지 않는다(작업지시-16 5절 1번)
+ * @param adults           채널이 알려 준 성인 수. <b>0 은 모름</b>(iCal). 작업지시-21 B 에서 더했다 —
+ *                         {@code InboundBooking} 에는 처음부터 있었는데 이 경계에서 떨어져 채널 예약이 전부
+ *                         기본값 성인 2 로 저장됐다({@code guestName} 과 같은 모양, 확인-11 4절 ③)
+ * @param children         채널이 알려 준 아동 수
  * @param revision         채널 측 수정 버전. 낮은 것이 나중에 와도 무시된다
  * @param cancellation     취소 통지면 참
+ * @param supersedes       이 예약이 넘겨받을 수 있는 채널 코드들(작업지시-21 A). 같은 판매 단위에 체크인·
+ *                         체크아웃이 똑같은 살아 있는 예약이 이 코드로 있으면 새로 만들지 않고 그 예약을
+ *                         이 채널 예약으로 바꾼다. 비어 있으면 넘겨받지 않는다. channel 이 정한다 —
+ *                         booking 은 어느 코드가 iCal 인지 모른다
  */
 public record ChannelBookingCommand(
         Long propertyId,
@@ -40,8 +48,11 @@ public record ChannelBookingCommand(
         LocalDate checkIn,
         LocalDate checkOut,
         BigDecimal totalAmount,
+        int adults,
+        int children,
         Integer revision,
-        boolean cancellation) {
+        boolean cancellation,
+        java.util.Set<String> supersedes) {
 
     public ChannelBookingCommand {
         if (channelCode == null || channelCode.isBlank()) {
@@ -51,6 +62,10 @@ public record ChannelBookingCommand(
             // 멱등성 키가 없으면 같은 예약이 올 때마다 새 예약이 된다.
             throw new IllegalArgumentException("채널 예약번호는 필수입니다. 멱등성 키로 쓰입니다.");
         }
+        if (adults < 0 || children < 0) {
+            throw new IllegalArgumentException("인원은 음수일 수 없습니다: " + adults + "/" + children);
+        }
+        supersedes = supersedes == null ? java.util.Set.of() : java.util.Set.copyOf(supersedes);
     }
 
     /** 기간으로 묶는다. booking 안에서만 쓰인다. */

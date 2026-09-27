@@ -68,7 +68,8 @@ export function CalendarPage() {
     const live = new Set<string>(['DIRECT']);
     channels.data?.forEach((c) => live.add(c.channelCode));
     calendar.data?.reservations.forEach((r) => live.add(r.channel));
-    return LEGEND.filter((entry) => live.has(entry.code));
+    // 에어비앤비는 iCal·Channex 두 코드가 한 항목이다(작업지시-21 C).
+    return LEGEND.filter((entry) => entry.codes.some((code) => live.has(code)));
   }, [channels.data, calendar.data]);
 
   // 다른 채널의 예약이나 다른 탭의 편집이 이 화면에 즉시 들어온다(계획서 8.2).

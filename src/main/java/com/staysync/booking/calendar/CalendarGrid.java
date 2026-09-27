@@ -49,8 +49,9 @@ public record CalendarGrid(
      * <p>계획서 13.5 예시에는 {@code roomId} 가 있지만 담지 않는다. 데이터 모델을
      * 2계층으로 줄이면서 호실 개념을 없앴기 때문이다(결정문서 01). 화면에도 배방이 없다.
      *
-     * <p>{@code adults}·{@code children} 은 직접예약에만 싣는다. 채널 수신은 인원을 넘기지
-     * 않아 채널 예약의 인원은 전부 기본값(성인 2)이다 — 실으면 지어낸 값이 화면에 뜬다.
+     * <p>{@code adults}·{@code children} 은 인원을 알 때만(성인 1 이상) 싣는다. 0 은 모름이다(iCal).
+     * 작업지시-21 B 전에는 채널 수신이 인원을 떨어뜨려 직접예약에만 실었다. 그 전에 들어온 iCal
+     * 예약은 기본값 성인 2 가 남아 있어 화면이 iCal 채널에는 인원을 그리지 않는다.
      */
     public record ReservationBar(
             Long id,

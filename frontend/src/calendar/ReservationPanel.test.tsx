@@ -246,4 +246,33 @@ describe('체크인·체크아웃 패널', () => {
     expect(fetchMock.mock.calls[0]![0]).toBe('/api/reservations/73/check-out/undo');
     expect(screen.getByTestId('reservation-status')).toHaveTextContent('체크아웃');
   });
+
+  // --- 작업지시-21 B·C ------------------------------------------------------
+
+  it('Channex 로 받은 에어비앤비는 인원과 이름이 보이고 iCal 이유 문구가 없다', () => {
+    render(
+      <ReservationPanel
+        bar={{ ...bar('CONFIRMED'), guestName: 'Te st', channel: 'AIRBNB', adults: 3, children: 0 }}
+        calendarKey={KEY}
+        onClose={() => {}}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText('Te st')).toBeInTheDocument();
+    expect(screen.getByText('에어비앤비')).toBeInTheDocument();
+    expect(screen.getByTestId('reservation-guests')).toHaveTextContent('성인 3');
+    expect(screen.queryByTestId('reservation-name-reason')).not.toBeInTheDocument();
+  });
+
+  it('작업지시-21 전에 들어온 iCal 예약의 기본값 인원은 그리지 않는다', () => {
+    render(
+      <ReservationPanel
+        bar={{ ...bar('CONFIRMED'), guestName: undefined, channel: 'AIRBNB_ICAL', adults: 2, children: 0 }}
+        calendarKey={KEY}
+        onClose={() => {}}
+      />,
+      { wrapper },
+    );
+    expect(screen.queryByTestId('reservation-guests')).not.toBeInTheDocument();
+  });
 });

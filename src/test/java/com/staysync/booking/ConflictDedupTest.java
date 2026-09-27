@@ -119,7 +119,7 @@ class ConflictDedupTest extends SyncTestBase {
         // 채널 예약번호는 (channel_code, channel_booking_id) 로 전역 유일이라 픽스처마다 갈라야 한다.
         return new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_DEDUP",
                 bookingId + "-" + f.unitId(), null, checkIn, checkOut,
-                BigDecimal.valueOf(100_000), revision, false);
+                BigDecimal.valueOf(100_000), 0, 0, revision, false, java.util.Set.of());
     }
 
     private List<OverbookingConflict> 열린충돌(Fixture f, LocalDate date) {

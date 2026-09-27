@@ -233,8 +233,28 @@ class ReportTest {
         // 채널이 날짜를 바꾸면 박 행도 따라가야 한다. 옛 박이 남으면 두 배로 센다.
         intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_REPORT",
                 "BK-" + f.unitId(), null, 첫날.plusDays(20), 첫날.plusDays(21),
-                BigDecimal.valueOf(150_000), 2, false));
+                BigDecimal.valueOf(150_000), 0, 0, 2, false, java.util.Set.of()));
         assertThat(reports.of(f.orgId(), f.propertyId(), 첫날, 끝날).soldNights()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("iCal 로 받은 에어비앤비와 Channex 로 받은 에어비앤비는 채널 비중에서 한 줄이다(작업지시-21 C)")
+    void 에어비앤비는_두_코드여도_한_줄이다() {
+        Fixture f = given("리포트-에어비앤비", (short) 2);
+        intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "AIRBNB_ICAL",
+                "uid-" + f.unitId(), null, 첫날.plusDays(2), 첫날.plusDays(4),
+                BigDecimal.valueOf(200_000), 0, 0, null, false, java.util.Set.of()));
+        intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "AIRBNB",
+                "chx-" + f.unitId(), "Te st", 첫날.plusDays(10), 첫날.plusDays(11),
+                BigDecimal.valueOf(100_000), 2, 0, 1, false, java.util.Set.of()));
+
+        ReportMetrics m = reports.of(f.orgId(), f.propertyId(), 첫날, 끝날);
+
+        assertThat(m.channelMix()).singleElement().satisfies(share -> {
+            assertThat(share.channelCode()).isEqualTo("AIRBNB");
+            assertThat(share.reservations()).isEqualTo(2);
+            assertThat(share.revenue()).isEqualByComparingTo("300000");
+        });
     }
 
     // --- 완료 조건 14 --------------------------------------------------------
@@ -286,7 +306,7 @@ class ReportTest {
     private void 채널예약(Fixture f, LocalDate 체크인, LocalDate 체크아웃, int 금액) {
         // 채널 예약번호는 (channel_code, channel_booking_id) 로 전역 유일이라 픽스처마다 갈라야 한다.
         intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "MOCK_REPORT",
-                "BK-" + f.unitId(), null, 체크인, 체크아웃, BigDecimal.valueOf(금액), 1, false));
+                "BK-" + f.unitId(), null, 체크인, 체크아웃, BigDecimal.valueOf(금액), 0, 0, 1, false, java.util.Set.of()));
     }
 
     private Fixture given(String name, short totalUnits) {

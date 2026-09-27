@@ -209,7 +209,7 @@ class MessagingCoreTest extends SyncTestBase {
     private void 예약을_넣는다(Fixture f, String channelBookingId) {
         bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
                 f.propertyId(), f.unitId(), 채널코드(f), channelBookingId, null,
-                체크인, 체크아웃, BigDecimal.valueOf(200_000), 1, false));
+                체크인, 체크아웃, BigDecimal.valueOf(200_000), 0, 0, 1, false, java.util.Set.of()));
     }
 
     /** 예약 수신의 채널 코드는 연결의 코드와 같아야 스레드가 이어진다. */

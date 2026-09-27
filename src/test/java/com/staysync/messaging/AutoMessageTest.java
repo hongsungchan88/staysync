@@ -233,7 +233,7 @@ class AutoMessageTest extends SyncTestBase {
     private Long 예약(Setup s, String channelBookingId, LocalDate 체크인) {
         return bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
                 s.propertyId(), s.unitId(), s.channelCode(), channelBookingId, null,
-                체크인, 체크인.plusDays(2), BigDecimal.valueOf(200_000), 1, false))
+                체크인, 체크인.plusDays(2), BigDecimal.valueOf(200_000), 0, 0, 1, false, java.util.Set.of()))
                 .reservationId();
     }
 
@@ -241,7 +241,7 @@ class AutoMessageTest extends SyncTestBase {
     private Long 이름있는_예약(Setup s, String channelBookingId, LocalDate 체크인, String 이름) {
         return bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
                 s.propertyId(), s.unitId(), s.channelCode(), channelBookingId, 이름,
-                체크인, 체크인.plusDays(2), BigDecimal.valueOf(200_000), 1, false))
+                체크인, 체크인.plusDays(2), BigDecimal.valueOf(200_000), 0, 0, 1, false, java.util.Set.of()))
                 .reservationId();
     }
 
@@ -249,7 +249,7 @@ class AutoMessageTest extends SyncTestBase {
         bookingIntake.ingest(new com.staysync.booking.ChannelBookingCommand(
                 s.propertyId(), s.unitId(), s.channelCode(), channelBookingId, null,
                 LocalDate.now().plusDays(1), LocalDate.now().plusDays(3),
-                BigDecimal.valueOf(200_000), 2, true));
+                BigDecimal.valueOf(200_000), 0, 0, 2, true, java.util.Set.of()));
     }
 
     private int 발송기록(Long ruleId, Long reservationId) {

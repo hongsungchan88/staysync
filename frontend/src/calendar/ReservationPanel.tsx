@@ -160,7 +160,8 @@ export function ReservationPanel({ bar, calendarKey, onClose }: Props) {
             {bar.amount == null ? '미상' : `${bar.amount.toLocaleString('ko-KR')}원`}
           </dd>
         </div>
-        {bar.adults != null && (
+        {/* 작업지시-21 전에 들어온 iCal 예약은 지어낸 성인 2 가 남아 있다. iCal 에는 인원이 없다. */}
+        {bar.adults != null && !isIcalChannel(bar.channel) && (
           <div>
             <dt className="text-muted">인원</dt>
             <dd className="text-ink" data-testid="reservation-guests">

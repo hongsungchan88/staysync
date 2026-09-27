@@ -208,14 +208,13 @@ class CalendarApiTest extends ApiTestBase {
     }
 
     @Test
-    @DisplayName("인원은 직접예약에만 싣는다 — 채널 예약의 인원은 기본값이라 모르는 값이다")
-    void 인원은_직접예약에만_실린다() throws Exception {
+    @DisplayName("인원은 알 때만 싣는다 — 0 은 모름이다(iCal)")
+    void 인원을_모르면_싣지_않는다() throws Exception {
         Fixture f = 숙소와_판매단위(가입(새이메일()), 2);
-        Long direct = 예약등록(f, "2027-12-01", "2027-12-03");
-        Long channel = 예약등록(f, "2027-12-05", "2027-12-07");
-        // 화면이 가르는 기준은 channel_code 하나다. 채널 수신은 인원을 넘기지 않아 성인 2 가
-        // 그대로 남는데, 그 모양을 코드만 바꿔 만든다.
-        jdbc.update("UPDATE reservation SET channel_code = 'AIRBNB_ICAL' WHERE id = ?", channel);
+        Long known = 예약등록(f, "2027-12-01", "2027-12-03");
+        Long unknown = 예약등록(f, "2027-12-05", "2027-12-07");
+        // iCal 수신이 남기는 모양. 인원을 안 주는 채널은 0 으로 저장된다(작업지시-21 B).
+        jdbc.update("UPDATE reservation SET channel_code = 'AIRBNB_ICAL', adults = 0 WHERE id = ?", unknown);
 
         MvcResult 결과 = mvc.perform(캘린더요청(f.propertyId(), "2027-12-01", "2027-12-10")
                         .header(HttpHeaders.AUTHORIZATION, f.session().bearer()))
@@ -223,17 +222,17 @@ class CalendarApiTest extends ApiTestBase {
                 .andReturn();
 
         var bars = json.readTree(결과.getResponse().getContentAsString()).get("reservations");
+        assertThat(bars.size()).isEqualTo(2);
         for (var bar : bars) {
-            if (bar.get("id").asLong() == direct) {
+            if (bar.get("id").asLong() == known) {
                 assertThat(bar.get("adults").asInt()).isEqualTo(2);
                 assertThat(bar.get("children").asInt()).isZero();
             } else {
-                assertThat(bar.get("id").asLong()).isEqualTo(channel);
-                assertThat(bar.has("adults")).as("지어낸 인원이 화면에 뜬다").isFalse();
+                assertThat(bar.get("id").asLong()).isEqualTo(unknown);
+                assertThat(bar.has("adults")).as("모르는 인원을 0 명으로 그리면 안 된다").isFalse();
                 assertThat(bar.has("children")).isFalse();
             }
         }
-        assertThat(bars.size()).isEqualTo(2);
     }
 
     // --- 그 밖의 조립 규칙 ---------------------------------------------------

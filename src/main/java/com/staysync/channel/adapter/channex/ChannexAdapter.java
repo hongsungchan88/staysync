@@ -228,7 +228,13 @@ public class ChannexAdapter implements ChannelAdapter {
         return value;
     }
 
-    /** {@code "120.00"}. 정수로 보내면 최소 단위로 읽혀 통화마다 다르게 틀린다. */
+    /**
+     * {@code "120.00"}. 정수로 보내면 최소 단위로 읽혀 통화마다 다르게 틀린다(USD {@code 10000} → 100.00).
+     *
+     * <p><b>원화도 이 형식 그대로다</b>(작업지시-21 D, 스테이징 KRW 숙소 되읽기, 확인-12 1절).
+     * {@code "170000.00"}·{@code 170000}·{@code "170000"} 이 모두 {@code "170000"} 으로 되읽혔다 — 소수 자리가
+     * 없는 통화라 최소 단위 = 1원이다. 원 미만은 조용히 반올림된다({@code "170000.50"} → 170001).
+     */
     static String money(BigDecimal amount) {
         return amount.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
@@ -405,7 +411,7 @@ public class ChannexAdapter implements ChannelAdapter {
         if (roomCount == 0) {
             // 방 정보 없는 리비전(취소 통지가 그럴 수 있다). 예약 날짜로 넣는다.
             result.add(new InboundBooking(bookingId, null,
-                    date(a, "arrival_date"), date(a, "departure_date"), guest, 2, 0,
+                    date(a, "arrival_date"), date(a, "departure_date"), guest, 0, 0,
                     money(a.path("amount"), bookingId), version, cancelled, raw));
             return result;
         }
@@ -416,7 +422,8 @@ public class ChannexAdapter implements ChannelAdapter {
             JsonNode amount = roomCount == 1 ? a.path("amount") : room.path("amount");
             result.add(new InboundBooking(id, room.path("room_type_id").asText(null),
                     date(room, "checkin_date"), date(room, "checkout_date"), guest,
-                    room.path("occupancy").path("adults").asInt(2),
+                    // 없으면 0(모름). 2 를 두면 지어낸 인원이 저장된다(확인-11 4절 ③).
+                    room.path("occupancy").path("adults").asInt(0),
                     room.path("occupancy").path("children").asInt(0),
                     money(amount, id), version, cancelled, raw));
         }
