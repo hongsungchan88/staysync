@@ -196,9 +196,26 @@ Channex 문서는 "소수 문자열(`"200.00"`) 또는 **통화 최소 단위 �
 코드로, 인원 3), `ReportTest` 1(두 코드 한 줄), `CalendarApiTest` 1 고침(알 때만 싣는다). 프론트 +2(Channex 에어비앤비는
 인원·이름, 옛 iCal 기본값 인원은 숨김).
 
-### 8.3 배포
+### 8.3 배포 (09-27 17:3x KST)
 
-(아래에 채운다)
+브랜치 `feat/channex-airbnb-switch` — `68d0059`(지시서) · `dae4a65`(A·B·C) · `1571bd4`(D javadoc) · `7ed139f`(문서).
+병합 `d5f0e51`, `origin/main` 푸시. **마이그레이션 없음.**
+
+| | |
+|---|---|
+| 테스트 | 백엔드 382 + 시뮬레이터 37(`./gradlew test`) → 프론트 129(`vitest run`), 차례로 전부 통과 |
+| 배포 전 백업 | 서버 `/opt/staysync/backup/predeploy-wo21-2026-09-27.dump`(126,268B). 14일 정리에 안 걸리는 이름 |
+| 되돌림 | `cd82093` 을 체크아웃해 `deploy/push.sh staysync`. 덤프 복원은 필요 없다(스키마·데이터를 바꾸지 않았다) |
+| 배포 | `deploy/push.sh staysync` → healthy. 배포 뒤 5분 앱 로그 ERROR·Exception 0 |
+| 번들 | `index-D8-iZRvm.js` — 개발 PC·서버 `/opt/staysync/web`·`https://staysync.kr` 셋이 같다. 배포된 번들에 범례 `codes:["AIRBNB_ICAL","AIRBNB"]` |
+| **`1차 심사` 데이터 불변(6절 10번)** | 배포 직전·직후 읽기 전용 집계가 같다 — 예약 70(살아 있는 59), 인원 합 145, 박 행 298, 원장 행 289, `booked_units` 합 270, 열린 충돌 0, 채널 연결 3 |
+
+**배포 뒤 달라지는 것(운영 중).** 새로 들어오거나 날짜가 바뀐 iCal 예약은 인원 0(모름)으로 저장된다. 리포트 채널 비중의
+에어비앤비 행 코드가 `AIRBNB` 로 나간다(라벨은 에어비앤비 그대로). CHANNEX 연결은 여전히 0 건 — 9절 전까지 넘겨받기는
+돌 일이 없다.
+
+**여기서 멈춘다.** 9절은 호스트 승인 뒤 Cowork·사용자와 함께 한다. 9절에 들어갈 때 확인-12 에 쓸 것 — 실물 Channex 숙소
+(지니하우스 전용) 생성, 9절 3번 재고·요금 선전송의 되읽기, 4.1 쿼리 결과, `load_future_reservations` 를 부른 방법.
 
 
 ## 9. 실제 전환 — 사람과 함께, 1~8 이 끝난 뒤
