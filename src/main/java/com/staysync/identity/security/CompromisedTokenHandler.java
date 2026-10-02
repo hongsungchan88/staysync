@@ -31,7 +31,7 @@ class CompromisedTokenHandler {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    int revokeAllOf(Long userId, OffsetDateTime now) {
-        return repository.revokeAllOfUser(userId, now);
+    int revokeFamily(String familyId, OffsetDateTime now) {
+        return repository.revokeFamily(familyId, now);
     }
 }

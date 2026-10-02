@@ -10,9 +10,11 @@ import java.time.OffsetDateTime;
  * 적은 값이며, 갱신 요청이 오면 들어온 토큰을 같은 방식으로 해시해 대조한다.
  * 데이터베이스가 통째로 유출돼도 저장된 값을 그대로 제시할 수 없다.
  *
- * <p>{@code replacedBy} 가 회전 체인을 잇는다. 값이 있으면 이미 교체된 토큰이라는
- * 뜻이고, 그런 토큰이 다시 들어오면 유출로 간주한다. 정상 사용자는 교체된 토큰을
- * 다시 쓸 이유가 없기 때문이다.
+ * <p>{@code replacedBy} 가 회전 체인을 잇는다. 값이 있으면 이미 교체된 토큰이다. 교체된 토큰이
+ * 다시 들어오면 <b>교체 뒤 유예 안이면</b> 정상(탭 겹침·응답 유실 재시도)으로, 밖이면 유출로 본다.
+ *
+ * <p>{@code familyId} 는 한 번의 로그인에서 이어진 토큰들의 묶음이다. 유출로 보면 그 묶음만 끊는다 —
+ * 같은 계정의 다른 로그인(공용 계정의 다른 사람)은 살린다(V11, ADR 0005 결과 절).
  *
  * <p>근거는 docs/adr/0005-리프레시-토큰-회전.md.
  */
@@ -43,13 +45,30 @@ public class RefreshToken {
     @Column(name = "revoked_at")
     private OffsetDateTime revokedAt;
 
+    @Column(name = "family_id", nullable = false, length = 40)
+    private String familyId;
+
+    /** 교체된 시각. 유예는 여기서부터 센다. V11 이전에 교체된 토큰은 비어 있고 유예 밖으로 본다. */
+    @Column(name = "rotated_at")
+    private OffsetDateTime rotatedAt;
+
     protected RefreshToken() {
     }
 
-    public RefreshToken(Long userId, String tokenHash, OffsetDateTime expiresAt) {
+    public RefreshToken(Long userId, String tokenHash, OffsetDateTime expiresAt, String familyId) {
         this.userId = userId;
         this.tokenHash = tokenHash;
         this.expiresAt = expiresAt;
+        this.familyId = familyId;
+    }
+
+    public String getFamilyId() {
+        return familyId;
+    }
+
+    /** 교체된 지 {@code grace} 안인지. 교체되지 않았거나 교체 시각을 모르면 아니다. */
+    public boolean rotatedWithin(java.time.Duration grace, OffsetDateTime now) {
+        return rotatedAt != null && !now.isAfter(rotatedAt.plus(grace));
     }
 
     public Long getId() {
@@ -84,11 +103,6 @@ public class RefreshToken {
     /** 갱신에 쓸 수 있는 상태인지. 회전, 무효화, 만료 중 하나라도 걸리면 못 쓴다. */
     public boolean isUsableAt(OffsetDateTime now) {
         return !isRotated() && !isRevoked() && !isExpiredAt(now);
-    }
-
-    /** 회전. 새 토큰을 발급하면서 이 토큰을 체인의 이전 고리로 만든다. */
-    public void rotateTo(Long successorId) {
-        this.replacedBy = successorId;
     }
 
     public void revoke(OffsetDateTime at) {
