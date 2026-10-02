@@ -3,6 +3,7 @@ package com.staysync.messaging;
 import com.staysync.booking.ReservationBrief;
 import com.staysync.booking.ReservationDirectory;
 import com.staysync.messaging.domain.MessageTrigger;
+import com.staysync.shared.time.ServiceZone;
 import java.time.LocalDate;
 import java.util.List;
 import org.slf4j.Logger;
@@ -50,9 +51,9 @@ public class ScheduledMessageJob {
         this.auto = auto;
     }
 
-    @Scheduled(cron = "${staysync.messaging.schedule-cron:0 0 9 * * *}", zone = "Asia/Seoul")
+    @Scheduled(cron = "${staysync.messaging.schedule-cron:0 0 9 * * *}", zone = ServiceZone.ID)
     public void run() {
-        runFor(LocalDate.now());
+        runFor(ServiceZone.today());
     }
 
     /**

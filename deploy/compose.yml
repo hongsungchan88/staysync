@@ -35,7 +35,12 @@ services:
       SPRING_PROFILES_ACTIVE: prod
       # 컨테이너에서 힙을 안 정하면 JVM 이 호스트 메모리 기준으로 잡는다(4절).
       # 2GB 에서 PostgreSQL·Caddy 와 나눠 쓰므로 이 값이 상한이다. 실측은 확인-09.
-      JAVA_TOOL_OPTIONS: -Xms256m -Xmx640m -XX:MaxMetaspaceSize=160m
+      #
+      # -Duser.timezone=UTC 는 바꾸지 말 것(작업지시-22). 저장된 LocalTime 원시 값(체크인·체크아웃 시각)이
+      # "JVM UTC + hibernate.jdbc.time_zone Asia/Seoul" 조합으로 +9시간 들어가 있다(16:00 → 01:00). JVM 시간대가
+      # 바뀌면 화면의 체크인·체크아웃 시각이 9시간 어긋난다. 이미지 기본값이 우연히 UTC 이던 것을 의도된 설정으로
+      # 묶어 둔다. 바꾸려면 원시 값 마이그레이션이 함께 가야 한다(P6). 코드는 서버 시간대에 기대지 않는다.
+      JAVA_TOOL_OPTIONS: -Xms256m -Xmx640m -XX:MaxMetaspaceSize=160m -Duser.timezone=UTC
     depends_on:
       postgres:
         condition: service_healthy

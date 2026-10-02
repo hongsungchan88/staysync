@@ -2,6 +2,7 @@ package com.staysync.property;
 
 import com.staysync.property.domain.RatePlan;
 import com.staysync.property.domain.Unit;
+import java.time.ZoneId;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -67,7 +68,8 @@ class UnitCatalogService implements UnitCatalog {
     public StayTimes stayTimesOf(Long propertyId) {
         return propertyRepo.findById(propertyId)
                 .map(property -> new StayTimes(
-                        property.getCheckInTime(), property.getCheckOutTime()))
+                        property.getCheckInTime(), property.getCheckOutTime(),
+                        ZoneId.of(property.getTimezone())))
                 .orElseThrow(() -> new PropertyNotFoundException(propertyId));
     }
 

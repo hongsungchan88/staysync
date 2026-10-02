@@ -5,6 +5,7 @@ import com.staysync.booking.InventoryService;
 import com.staysync.channel.adapter.ical.IcalWriter;
 import com.staysync.channel.domain.ChannelMapping;
 import com.staysync.property.UnitCatalog;
+import com.staysync.shared.time.ServiceZone;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -71,7 +72,7 @@ public class IcalExportService {
     }
 
     private String export(ChannelMapping mapping) {
-        LocalDate from = LocalDate.now();
+        LocalDate from = ServiceZone.today();
         LocalDate to = from.plusDays(horizonDays);
         short totalUnits = unitCatalog.totalUnitsOf(mapping.getUnitId());
 

@@ -4,8 +4,8 @@ import com.staysync.booking.domain.InventoryLedger;
 import com.staysync.property.PropertyService;
 import com.staysync.property.UnitSummary;
 import com.staysync.shared.outbox.OutboxRecorder;
+import com.staysync.shared.time.ServiceZone;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +51,7 @@ class UnitCapacityWriter {
 
     @Transactional
     UnitSummary change(Long unitId, Long orgId, short totalUnits) {
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        LocalDate today = ServiceZone.today();
         List<InventoryLedger> rows = ledgerRepo.findFromForUpdate(unitId, today);
 
         List<LocalDate> blocking = rows.stream()
