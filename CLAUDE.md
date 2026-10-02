@@ -734,9 +734,12 @@ ADR 13건(0012 에 고아 되살리기와 재동기화를 이어 적었다), 백
 로그아웃되던 것을 로그인 묶음 + 30초 유예 + 조건부 회전으로 고쳤다. ADR 0005 결과 절, 확인-12 5절.
 
 - **배포 컨테이너의 JVM 은 UTC 이고 `hibernate.jdbc.time_zone` 은 Asia/Seoul 이다.** 그래서 `property.check_in_time` 같은
-  `LocalTime` 칸은 원시 값이 화면 값 + 9시간이다(API 는 맞다). psql 로 읽은 값을 그대로 믿지 말 것. 이 엇갈림 때문에
-  **청소 마감이 배포 환경에서 20:00 KST 로 계산되는 결함이 있다**(`OpsTaskService` 의 `ZoneId.systemDefault()`, 확인-12 6.4,
-  아직 안 고침). 개발 PC 는 JVM 이 Asia/Seoul 이라 테스트가 못 잡는다
+  `LocalTime` 칸은 원시 값이 화면 값 + 9시간이다(API 는 맞다). psql 로 읽은 값을 그대로 믿지 말 것. **compose 가
+  `-Duser.timezone=UTC` 로 묶어 둔다 — 바꾸면 체크인·체크아웃 시각이 9시간 어긋난다**(원시 값 마이그레이션은 P6).
+  **서버 시간대에 기대지 않는다 — 배포 JVM 은 UTC 다.** 숙소가 있으면 숙소 시간대(`StayTimes.zone()`), 없으면
+  `shared.time.ServiceZone`. 인자 없는 `LocalDate.now()`·`ZoneId.systemDefault()` 를 쓰지 말 것 — 청소 마감이 20:00 KST 로
+  계산되던 결함이 이것이었다(작업지시-22 에서 고침, 확인-12 6.4). 개발 PC 는 JVM 이 Asia/Seoul 이라 테스트가 못 잡는다 —
+  `CleaningTaskTest` 처럼 기본 시간대를 바꿔 돌리고 `finally` 에서 되돌린다
 
 **작업지시-21 1~8절(2026-09-27, 브랜치 `feat/channex-airbnb-switch`). 지니하우스 Channex 전환 준비.**
 9절(실제 전환)은 호스트 승인 뒤 사람과 함께 한다 — 혼자 하지 않는다. 기록은 `docs/확인-12-지니하우스Channex전환.md`.
