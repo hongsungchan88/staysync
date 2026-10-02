@@ -98,12 +98,39 @@ class CleaningTaskTest {
 
         OpsTask task = tasks.board(f.orgId(), null, null, null).get(0);
         // 숙소 기본값은 체크인 15:00, 체크아웃 11:00 이다. 돌려받은 값은 UTC 기준이라
-        // 같은 순간을 이 지역 시각으로 옮겨 비교한다 — 문자 그대로 비교하면 시차만큼
+        // 같은 순간을 숙소 시각으로 옮겨 비교한다 — 문자 그대로 비교하면 시차만큼
         // 어긋난 값을 보게 된다.
         assertThat(현지시각(task.getDueFrom()))
                 .isEqualTo(체크아웃.atTime(11, 0));
         assertThat(현지시각(task.getDueTo()))
                 .isEqualTo(체크아웃.plusDays(1).atTime(15, 0));
+    }
+
+    @Test
+    @DisplayName("JVM 기본 시간대가 UTC 여도 청소 마감은 퇴실일 11:00 KST, 기한 끝은 다음 체크인 16:00 KST 다")
+    void 서버가_UTC_여도_마감은_숙소_시간대다() {
+        // 배포 컨테이너를 흉내 낸다(작업지시-22, 확인-12 6.4). JVM 은 UTC, 숙소 원시 값은 그 조합으로 저장된
+        // 01:00·20:00 — 엔티티로 읽으면 16:00·11:00 이다. 옛 코드는 여기서 마감이 20:00 KST 였다.
+        java.util.TimeZone 원래 = java.util.TimeZone.getDefault();
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("UTC"));
+        try {
+            Fixture f = given("청소UTC");
+            jdbc.update("UPDATE property SET check_in_time = '01:00', check_out_time = '20:00' WHERE id = ?",
+                    f.propertyId());
+            booking.registerManual(f.propertyId(), f.unitId(),
+                    new StayPeriod(체크아웃.plusDays(1), 체크아웃.plusDays(3)),
+                    BigDecimal.valueOf(200_000), (short) 2, (short) 0, null);
+            체크아웃까지(f);
+
+            relay.relayPending();
+
+            OpsTask task = tasks.board(f.orgId(), null, null, null).get(0);
+            assertThat(현지시각(task.getDueFrom())).isEqualTo(체크아웃.atTime(11, 0));
+            assertThat(현지시각(task.getDueTo())).isEqualTo(체크아웃.plusDays(1).atTime(16, 0));
+        } finally {
+            // 되돌리지 않으면 뒤 테스트가 UTC 로 돈다.
+            java.util.TimeZone.setDefault(원래);
+        }
     }
 
     @Test
@@ -274,7 +301,8 @@ class CleaningTaskTest {
     }
 
     private static java.time.LocalDateTime 현지시각(java.time.OffsetDateTime at) {
-        return at.atZoneSameInstant(java.time.ZoneId.systemDefault()).toLocalDateTime();
+        // 숙소 시간대(Asia/Seoul)로 옮긴다. JVM 기본 시간대로 옮기면 UTC 테스트에서 비교가 같이 틀어진다.
+        return at.atZoneSameInstant(java.time.ZoneId.of("Asia/Seoul")).toLocalDateTime();
     }
 
     private String statusOf(Long taskId) {

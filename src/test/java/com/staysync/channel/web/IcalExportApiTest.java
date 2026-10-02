@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.staysync.shared.time.ServiceZone;
 import com.staysync.support.ApiTestBase;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -13,7 +14,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MvcResult;
 
 /**
@@ -24,6 +27,9 @@ import org.springframework.test.web.servlet.MvcResult;
  * 게스트 이름은 인증이 URL 하나뿐인 응답에 실리면 그대로 유출이다.
  */
 class IcalExportApiTest extends ApiTestBase {
+
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private static final DateTimeFormatter ICAL_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
@@ -69,6 +75,41 @@ class IcalExportApiTest extends ApiTestBase {
         assertThat(ics).contains("DTSTART;VALUE=DATE:" + 중지시작.format(ICAL_DATE));
         // 일괄 편집은 두 날짜를 포함으로 다룬다. 막힌 마지막 날의 다음 날이 DTEND 다.
         assertThat(ics).contains("DTEND;VALUE=DATE:" + 중지시작.plusDays(2).format(ICAL_DATE));
+    }
+
+    @Test
+    @DisplayName("서버의 오늘이 KST 의 오늘과 달라도 발행은 KST 오늘부터다")
+    void 발행_구간은_KST_오늘부터다() throws Exception {
+        Session 세션 = 가입(새이메일());
+        Long propertyId = 숙소등록(세션);
+        Long unitId = 판매단위등록(세션, propertyId);
+        String url = 발행URL(세션, propertyId, unitId);
+
+        // KST 어제와 오늘을 막는다. 지난 날은 API 로 못 막으므로 원장에 직접 쓴다.
+        LocalDate 오늘 = ServiceZone.today();
+        for (LocalDate d : new LocalDate[] {오늘.minusDays(1), 오늘}) {
+            jdbc.update("""
+                    INSERT INTO inventory_ledger (unit_id, stay_date, total_units, stop_sell)
+                    VALUES (?, ?, 1, true)
+                    ON CONFLICT (unit_id, stay_date) DO UPDATE SET stop_sell = true""", unitId, d);
+        }
+
+        // JVM 의 오늘을 KST 의 오늘과 다른 날로 만든다. 배포(UTC)에서 KST 새벽에 생기는 일이다.
+        // UTC-12 는 KST 21시 전까지 하루 늦고, 그 뒤에는 UTC+14 가 하루 이르다 — 언제 돌려도 날짜가 갈린다.
+        java.util.TimeZone 원래 = java.util.TimeZone.getDefault();
+        String 서버 = java.time.LocalTime.now(ServiceZone.SEOUL).getHour() < 21 ? "Etc/GMT+12" : "Pacific/Kiritimati";
+        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone(서버));
+        String ics;
+        try {
+            assertThat(LocalDate.now()).as("전제 — JVM 의 오늘이 KST 와 다르다").isNotEqualTo(오늘);
+            ics = 발행물(url);
+        } finally {
+            java.util.TimeZone.setDefault(원래);
+        }
+
+        // 서버가 하루 늦으면 어제부터, 하루 이르면 오늘이 빠진다. KST 오늘에서 시작해야 맞다.
+        assertThat(ics).contains("DTSTART;VALUE=DATE:" + 오늘.format(ICAL_DATE));
+        assertThat(ics).doesNotContain("DTSTART;VALUE=DATE:" + 오늘.minusDays(1).format(ICAL_DATE));
     }
 
     @Test

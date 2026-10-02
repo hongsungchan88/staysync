@@ -1,6 +1,7 @@
 package com.staysync.identity.security;
 
 import com.staysync.identity.RefreshTokenRepository;
+import com.staysync.shared.time.ServiceZone;
 import java.time.Duration;
 import java.time.OffsetDateTime;
 import org.slf4j.Logger;
@@ -34,7 +35,7 @@ public class RefreshTokenCleanupJob {
     }
 
     /** 매일 새벽 4시. 사용이 가장 적은 시간대다. */
-    @Scheduled(cron = "0 0 4 * * *", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 0 4 * * *", zone = ServiceZone.ID)
     public void run() {
         deleteExpired(OffsetDateTime.now());
     }

@@ -9,9 +9,9 @@ import com.staysync.property.OwnedResources;
 import com.staysync.shared.audit.ActorKind;
 import com.staysync.shared.audit.AuditRecorder;
 import com.staysync.shared.outbox.OutboxRecorder;
+import com.staysync.shared.time.ServiceZone;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -247,7 +247,7 @@ class ChannelBookingWriter {
     @Transactional
     int cancelMissing(Long unitId, String channelCode, java.util.Set<String> present) {
         int cancelled = 0;
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Seoul"));
+        LocalDate today = ServiceZone.today();
         for (Reservation reservation : reservationRepo.findActiveOfChannel(unitId, channelCode)) {
             if (present.contains(reservation.getChannelBookingId())) {
                 continue;

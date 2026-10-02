@@ -10,6 +10,7 @@ import com.staysync.property.OwnedResources;
 import com.staysync.property.StayTimes;
 import com.staysync.property.UnitCatalog;
 import com.staysync.property.UnitHousekeeping;
+import com.staysync.shared.time.ServiceZone;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -103,7 +104,8 @@ public class OpsTaskService {
         }
 
         StayTimes times = unitCatalog.stayTimesOf(reservation.propertyId());
-        ZoneId zone = ZoneId.systemDefault();
+        // 숙소 시간대로 붙인다. 서버 기본 시간대는 배포에서 UTC 라 9시간 늦어진다(작업지시-22).
+        ZoneId zone = times.zone();
         OffsetDateTime dueFrom = reservation.checkOut().atTime(times.checkOut())
                 .atZone(zone).toOffsetDateTime();
 
@@ -149,7 +151,8 @@ public class OpsTaskService {
         if (propertyIds.isEmpty()) {
             return List.of();
         }
-        ZoneId zone = ZoneId.systemDefault();
+        // 여러 숙소에 걸친 날짜 필터라 숙소 하나의 시간대를 고를 수 없다. 지금은 전부 Asia/Seoul 이다.
+        ZoneId zone = ServiceZone.SEOUL;
         // 필터가 없으면 넓은 경계를 준다. 질의에 null 타임스탬프를 바인딩하면
         // PostgreSQL 이 자료형을 추론하지 못해 거절한다.
         return tasks.search(propertyIds,

@@ -12,6 +12,7 @@ import com.staysync.pricing.DayRate;
 import com.staysync.pricing.RateCalendarView;
 import com.staysync.property.UnitCatalog;
 import com.staysync.property.UnitSummary;
+import com.staysync.shared.time.ServiceZone;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -90,7 +91,7 @@ public class ChannelReconcileJob {
     }
 
     /** 계획서 6.6 의 새벽 4시. 사람도 채널도 한가한 시간이다. */
-    @Scheduled(cron = "${staysync.channel.reconcile-cron:0 0 4 * * *}", zone = "Asia/Seoul")
+    @Scheduled(cron = "${staysync.channel.reconcile-cron:0 0 4 * * *}", zone = ServiceZone.ID)
     public void run() {
         reconcileAll();
     }
@@ -129,7 +130,7 @@ public class ChannelReconcileJob {
             boolean pushesRate = registry.capabilitiesOf(connection.getAdapterType())
                     .contains(Capability.PUSH_RATE);
 
-            LocalDate from = LocalDate.now();
+            LocalDate from = ServiceZone.today();
             LocalDate to = from.plusDays(horizonDays);
 
             int drift = 0;

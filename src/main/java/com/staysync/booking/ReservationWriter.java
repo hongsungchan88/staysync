@@ -3,11 +3,11 @@ package com.staysync.booking;
 import com.staysync.booking.domain.*;
 import com.staysync.shared.audit.AuditRecorder;
 import com.staysync.shared.outbox.OutboxRecorder;
+import com.staysync.shared.time.ServiceZone;
 import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.slf4j.Logger;
@@ -238,7 +238,7 @@ class ReservationWriter {
         Reservation reservation = load(reservationId);
         Map<String, Object> before = ReservationEvents.auditSnapshot(reservation);
 
-        reservation.undoCheckOut(LocalDate.now(ZoneId.of("Asia/Seoul")));
+        reservation.undoCheckOut(ServiceZone.today());
         checkOutFollowUps.forEach(followUp -> followUp.withdraw(reservationId));
 
         audit.record(ReservationEvents.AGGREGATE_TYPE, reservation.getId(), "CHECK_OUT_UNDONE",
