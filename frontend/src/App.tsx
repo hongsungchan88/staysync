@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Route, Routes as RouterRoutes } from 'react-router-dom';
 import { LoginPage } from '@/auth/LoginPage';
 import { SignupPage } from '@/auth/SignupPage';
+import { PasswordPage } from '@/auth/PasswordPage';
 import { CalendarPage } from '@/calendar/CalendarPage';
 import { ChannelsPage } from '@/channels/ChannelsPage';
 import { ChannelMappingPage } from '@/channels/ChannelMappingPage';
@@ -100,6 +101,8 @@ function Routes() {
       <Route path="/reports" element={<ReportsPage />} />
       {/* 작업지시-19. 숙소·판매 단위 등록·편집. 호스트가 혼자 시작하는 자리다. */}
       <Route path="/properties" element={<PropertiesPage />} />
+      {/* 작업지시-23 D. 로그인한 사용자의 비밀번호 변경. */}
+      <Route path="/account/password" element={<PasswordPage />} />
       {/* 알 수 없는 경로는 캘린더로. 404 화면을 만들 이유가 아직 없다. */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </RouterRoutes>
