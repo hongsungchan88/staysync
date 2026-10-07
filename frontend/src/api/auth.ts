@@ -50,6 +50,20 @@ export async function logout(): Promise<void> {
   }
 }
 
+/**
+ * 비밀번호 변경(작업지시-23 D). 성공하면 204 이고 이 로그인은 그대로다 — 서버가 리프레시 쿠키로 이 로그인을
+ * 알아 남기고, 같은 계정의 다른 로그인만 끊는다.
+ *
+ * 현재 비밀번호가 틀리면 401 이 아니라 400(`CURRENT_PASSWORD_MISMATCH`)이 온다. 401 이면 갱신·로그아웃
+ * 흐름을 타게 되므로 서버가 그렇게 정했다.
+ */
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  await apiRequest<void>('/api/auth/password', {
+    method: 'POST',
+    body: { currentPassword, newPassword },
+  });
+}
+
 export async function fetchMe(): Promise<MeResponse> {
   return meResponseSchema.parse(await apiRequest<unknown>('/api/auth/me'));
 }

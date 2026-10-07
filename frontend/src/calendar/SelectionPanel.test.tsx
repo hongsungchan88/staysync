@@ -101,9 +101,10 @@ describe('요금·제약 편집 패널', () => {
   it('선택 범위와 적용 대상을 그대로 보여 준다', () => {
     renderPanel();
 
-    expect(screen.getByTestId('selection-range')).toHaveTextContent(
-      `${FROM} ~ ${addDays(FROM, 6)} (7일)`,
-    );
+    // 기간은 고칠 수 있는 입력 두 칸이고, 처음 값이 드래그로 고른 범위다.
+    expect(screen.getByTestId('range-from')).toHaveValue(FROM);
+    expect(screen.getByTestId('range-to')).toHaveValue(addDays(FROM, 6));
+    expect(screen.getByTestId('range-hint')).toHaveTextContent('7일');
     expect(screen.getByTestId('selection-units')).toHaveTextContent('객실 01');
     expect(screen.getByTestId('selection-units')).toHaveTextContent('객실 02');
     expect(screen.getByTestId('selection-units')).not.toHaveTextContent('객실 03');
@@ -174,7 +175,9 @@ describe('요금·제약 편집 패널', () => {
     fireEvent.click(screen.getByTestId('preview-button'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('bulk-edit-preview')).toHaveTextContent('14칸이 바뀝니다'),
+      expect(screen.getByTestId('bulk-edit-preview')).toHaveTextContent(
+        `${FROM} ~ ${addDays(FROM, 6)} · 판매 단위 2개 · 14칸 · 요금`,
+      ),
     );
     // 미리보기는 아무것도 쓰지 않으므로 다시 불러올 것도 없다.
     expect(invalidate).not.toHaveBeenCalled();
@@ -189,7 +192,7 @@ describe('요금·제약 편집 패널', () => {
     fireEvent.click(screen.getByTestId('apply-button'));
 
     await waitFor(() =>
-      expect(screen.getByTestId('bulk-edit-applied')).toHaveTextContent('14칸을 바꿨습니다'),
+      expect(screen.getByTestId('bulk-edit-applied')).toHaveTextContent('바꿨습니다'),
     );
     // 적용하면 요금뿐 아니라 판매중지가 잔여 재고 표시를 바꾼다. 다시 불러오지 않으면
     // 화면이 원장과 어긋난 채 남는다.
@@ -216,6 +219,56 @@ describe('요금·제약 편집 패널', () => {
     );
     // 실패했는데 결과 문구가 남아 있으면 적용된 것으로 읽힌다.
     expect(screen.queryByTestId('bulk-edit-applied')).not.toBeInTheDocument();
+  });
+
+  it('고친 기간이 화면 밖까지 요청의 from·to 로 나간다', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(200, result({ unitCount: 2, dayCount: 104, cellCount: 208 })),
+    );
+    renderPanel();
+
+    // 드래그는 7일이지만 1년으로 늘린다. 캘린더에 보이는 30일 밖이다.
+    const 종료 = addDays(FROM, 364);
+    fireEvent.change(screen.getByTestId('range-to'), { target: { value: 종료 } });
+    fireEvent.click(screen.getByTestId('weekday-FRIDAY'));
+    fireEvent.click(screen.getByTestId('weekday-SATURDAY'));
+    fireEvent.click(screen.getByTestId('price-mode-fixed'));
+    fireEvent.change(screen.getByTestId('price-input'), { target: { value: '221000' } });
+    fireEvent.click(screen.getByTestId('preview-button'));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(lastBody()).toMatchObject({ from: FROM, to: 종료, unitIds: [1, 2] });
+    // 화면 밖 날짜라 눈으로 볼 길이 이 문구뿐이다. 요청한 기간이 그대로 보여야 한다.
+    await waitFor(() =>
+      expect(screen.getByTestId('bulk-edit-preview')).toHaveTextContent(
+        `${FROM} ~ ${종료} · 판매 단위 2개 · 208칸 · 요금`,
+      ),
+    );
+  });
+
+  it.each([
+    ['시작일이 종료일보다 늦으면', { from: '2027-03-10', to: '2027-03-01' }, '시작일이 종료일보다 늦습니다'],
+    ['빈 칸이 있으면', { from: '', to: '2027-03-01' }, '모두 정해야 합니다'],
+    ['366일을 넘으면', { from: '2027-03-01', to: '2028-03-02' }, '366일까지'],
+  ])('%s 버튼이 막히고 이유가 보인다', (_이름, 기간, 이유) => {
+    renderPanel();
+    fireEvent.change(screen.getByTestId('min-stay-input'), { target: { value: '2' } });
+    fireEvent.change(screen.getByTestId('range-from'), { target: { value: 기간.from } });
+    fireEvent.change(screen.getByTestId('range-to'), { target: { value: 기간.to } });
+
+    expect(screen.getByTestId('range-hint')).toHaveTextContent(이유);
+    expect(screen.getByTestId('preview-button')).toBeDisabled();
+    expect(screen.getByTestId('apply-button')).toBeDisabled();
+  });
+
+  it('366일은 한 번에 된다', () => {
+    renderPanel();
+    fireEvent.change(screen.getByTestId('min-stay-input'), { target: { value: '2' } });
+    // 2028 은 윤년이라 2027-03-01 ~ 2028-02-29 가 366일이다.
+    fireEvent.change(screen.getByTestId('range-to'), { target: { value: '2028-02-29' } });
+
+    expect(screen.getByTestId('range-hint')).toHaveTextContent('366일');
+    expect(screen.getByTestId('preview-button')).toBeEnabled();
   });
 
   it('선택을 바꾸면 앞의 미리보기가 사라진다', async () => {

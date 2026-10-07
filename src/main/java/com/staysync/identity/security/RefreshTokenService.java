@@ -161,6 +161,26 @@ public class RefreshTokenService {
                 .ifPresent(token -> repository.revokeFamily(token.getFamilyId(), now));
     }
 
+    /**
+     * 비밀번호 변경 뒤. 이 사용자의 <b>지금 로그인 묶음만 남기고</b> 나머지 로그인을 끊는다.
+     *
+     * <p>지금 로그인은 요청에 실려 온 리프레시 토큰(쿠키 경로가 {@code /api/auth})으로 안다. 그 토큰이 없거나
+     * 이 사용자의 살아 있는 토큰이 아니면 남길 묶음을 모르므로 전부 끊는다 — 이 브라우저도 액세스 토큰이
+     * 만료되면 다시 로그인한다. 남기는 쪽으로 틀리는 것보다 낫다.
+     *
+     * @return 무효화된 토큰 행 수
+     */
+    @Transactional
+    public int revokeOtherLogins(Long userId, String currentRawToken, OffsetDateTime now) {
+        String keep = currentRawToken == null || currentRawToken.isBlank()
+                ? null
+                : repository.findByTokenHash(sha256Hex(currentRawToken))
+                        .filter(token -> token.getUserId().equals(userId) && !token.isRevoked())
+                        .map(RefreshToken::getFamilyId)
+                        .orElse(null);
+        return repository.revokeOtherFamilies(userId, keep, now);
+    }
+
     private Issued issueInternal(Long userId, String familyId, OffsetDateTime now) {
         String rawToken = randomToken();
         RefreshToken saved = repository.save(new RefreshToken(
