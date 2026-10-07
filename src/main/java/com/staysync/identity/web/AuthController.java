@@ -85,6 +85,24 @@ class AuthController {
                 .build();
     }
 
+    /**
+     * 비밀번호 변경. 로그인이 필요하다({@code /api/auth} 아래에서 열려 있는 것은 가입·로그인·갱신뿐).
+     *
+     * <p>이 경로가 {@code /api/auth} 아래인 이유가 쿠키다 — 리프레시 쿠키의 경로가 {@code /api/auth} 라 여기에만
+     * 실려 오고, 그것으로 "이 로그인"을 알아 남긴다. 다른 로그인은 끊긴다.
+     */
+    @PostMapping("/password")
+    ResponseEntity<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request,
+                                        HttpServletRequest http) {
+        AuthenticatedUser principal = AuthenticatedUser.current()
+                .orElseThrow(() -> new IllegalStateException(
+                        "인증이 필요한 경로인데 주체가 없다. SecurityConfig 설정을 확인할 것."));
+        authService.changePassword(principal.userId(), request.currentPassword(),
+                request.newPassword(), refreshCookie.readFrom(http).orElse(null),
+                OffsetDateTime.now());
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/me")
     MeResponse me() {
         AuthenticatedUser principal = AuthenticatedUser.current()

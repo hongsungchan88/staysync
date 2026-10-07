@@ -31,6 +31,24 @@ public interface RefreshTokenRepository extends JpaRepository<RefreshToken, Long
     int revokeFamily(@Param("familyId") String familyId, @Param("now") OffsetDateTime now);
 
     /**
+     * 한 사용자의 로그인 묶음 가운데 {@code keepFamilyId} 를 뺀 나머지를 전부 무효화한다. 비밀번호를 바꿀 때
+     * 부른다 — 옛 비밀번호로 들어와 있던 다른 로그인(공용 계정의 다른 사람 포함)은 다시 로그인해야 한다.
+     * {@code keepFamilyId} 가 {@code null} 이면 전부다.
+     *
+     * @return 무효화된 행 수
+     */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update RefreshToken t
+               set t.revokedAt = :now
+             where t.userId = :userId
+               and t.revokedAt is null
+               and (:keepFamilyId is null or t.familyId <> :keepFamilyId)
+            """)
+    int revokeOtherFamilies(@Param("userId") Long userId, @Param("keepFamilyId") String keepFamilyId,
+                            @Param("now") OffsetDateTime now);
+
+    /**
      * 조건부 회전. <b>아직 교체되지 않았고 무효화되지 않은 경우에만</b> 교체 표시를 한다.
      *
      * <p>읽고 나서 쓰는 방식이면 같은 순간의 두 요청이 둘 다 "아직 교체 안 됨"을 보고 회전이 두 갈래가 돼

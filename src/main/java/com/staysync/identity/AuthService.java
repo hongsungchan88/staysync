@@ -4,10 +4,12 @@ import com.staysync.identity.domain.*;
 import com.staysync.identity.security.JwtTokenService;
 import com.staysync.identity.security.LoginAttemptLimiter;
 import com.staysync.identity.security.RefreshTokenService;
+import com.staysync.shared.audit.AuditRecorder;
 import com.staysync.shared.security.AuthenticatedUser;
 import com.staysync.shared.security.Role;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,19 +33,22 @@ public class AuthService {
     private final JwtTokenService jwtTokenService;
     private final RefreshTokenService refreshTokenService;
     private final LoginAttemptLimiter loginAttemptLimiter;
+    private final AuditRecorder audit;
 
     public AuthService(OrganizationRepository organizationRepo,
                        UserAccountRepository userRepo,
                        PasswordEncoder passwordEncoder,
                        JwtTokenService jwtTokenService,
                        RefreshTokenService refreshTokenService,
-                       LoginAttemptLimiter loginAttemptLimiter) {
+                       LoginAttemptLimiter loginAttemptLimiter,
+                       AuditRecorder audit) {
         this.organizationRepo = organizationRepo;
         this.userRepo = userRepo;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenService = jwtTokenService;
         this.refreshTokenService = refreshTokenService;
         this.loginAttemptLimiter = loginAttemptLimiter;
+        this.audit = audit;
     }
 
     /**
@@ -143,6 +148,43 @@ public class AuthService {
     @Transactional
     public void logout(String rawRefreshToken, OffsetDateTime now) {
         refreshTokenService.revoke(rawRefreshToken, now);
+    }
+
+    /**
+     * 로그인한 사용자가 자기 비밀번호를 바꾼다.
+     *
+     * <p><b>현재 비밀번호 확인은 로그인과 같은 시도 제한에 센다</b>(이메일 기준). 안 그러면 액세스 토큰 하나로
+     * 이 경로를 무차별 대입 통로로 쓸 수 있다. 잠겨 있으면 로그인과 같이 429 다.
+     *
+     * <p>바꾸면 <b>이 로그인 묶음만 남기고</b> 같은 계정의 다른 로그인을 끊는다(ADR 0005 의 묶음 단위). 업체
+     * 계정은 심사자가 함께 쓰므로 다른 사람은 다시 로그인한다 — 작업지시-23 2절 D 에서 정했다.
+     *
+     * @param currentRefreshToken 이 요청에 실려 온 리프레시 토큰. 남길 로그인을 가리킨다. 없으면 전부 끊는다
+     */
+    @Transactional
+    public void changePassword(Long userId, String currentPassword, String newPassword,
+                               String currentRefreshToken, OffsetDateTime now) {
+        UserAccount user = userRepo.findById(userId).orElseThrow(RefreshFailedException::new);
+        Instant instant = now.toInstant();
+
+        if (loginAttemptLimiter.isLocked(user.getEmail(), instant)) {
+            log.warn("비밀번호 변경 거절: 시도 제한. userId={}", userId);
+            throw new TooManyLoginAttemptsException();
+        }
+        if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
+            loginAttemptLimiter.recordFailure(user.getEmail(), instant);
+            log.warn("비밀번호 변경 실패: 현재 비밀번호 불일치. userId={}", userId);
+            throw new CurrentPasswordMismatchException();
+        }
+        loginAttemptLimiter.recordSuccess(user.getEmail());
+
+        user.changePassword(passwordEncoder.encode(newPassword));
+        int revoked = refreshTokenService.revokeOtherLogins(userId, currentRefreshToken, now);
+
+        // 비밀번호도 해시도 남기지 않는다. 끊은 토큰 수만 — 누가 언제 바꿨고 얼마나 밀려났는지가 남는다.
+        audit.record("USER_ACCOUNT", userId, "PASSWORD_CHANGED", null,
+                Map.of("revokedTokens", revoked));
+        log.info("비밀번호 변경. userId={} 다른 로그인 토큰 {}건 무효화", userId, revoked);
     }
 
     @Transactional(readOnly = true)
