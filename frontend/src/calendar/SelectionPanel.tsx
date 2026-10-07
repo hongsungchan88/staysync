@@ -7,6 +7,7 @@ import type { SelectionRect } from './selection';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
+import { daysBetween } from '@/lib/dates';
 import { ReservationPanel } from './ReservationPanel';
 
 /**
@@ -40,6 +41,28 @@ const WEEKDAYS = [
   { code: 'SUNDAY', label: '일' },
 ] as const;
 
+/** 미리보기 문구의 항목 이름. 서버의 `changed` 값을 그대로 옮긴다. */
+const FIELD_LABELS: Record<string, string> = {
+  price: '요금',
+  minStay: '최소 숙박',
+  closedToArrival: '체크인 금지',
+  stopSell: '판매 중지',
+};
+
+/**
+ * 한 번에 바꿀 수 있는 최대 일수. 서버에는 상한이 없다(작업지시-23 8.1) — 1년 치를 한 번에 고치되
+ * 실수로 몇 년을 바꾸지 않게 화면에서 막는다.
+ */
+const MAX_DAYS = 366;
+
+/** 기간 입력이 틀렸으면 그 이유, 맞으면 null. */
+function rangeProblem(from: string, to: string): string | null {
+  if (from === '' || to === '') return '시작일과 종료일을 모두 정해야 합니다.';
+  if (from > to) return '시작일이 종료일보다 늦습니다.';
+  if (daysBetween(from, to) + 1 > MAX_DAYS) return `기간은 ${MAX_DAYS}일까지 정할 수 있습니다.`;
+  return null;
+}
+
 export function SelectionPanel({ data, rect, propertyId, calendarKey, bar, onCloseBar }: Props) {
   if (bar) {
     // key 로 막대마다 패널을 새로 만든다. 다른 막대를 누르면 앞 막대의 상태·오류가 남지 않는다.
@@ -72,9 +95,13 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
 
   const units = data.units.slice(rect.fromUnit, rect.toUnit + 1);
   const dates = data.units[0]?.days ?? [];
-  const from = dates[rect.fromDate]?.date ?? '';
-  const to = dates[rect.toDate]?.date ?? '';
-  const days = rect.toDate - rect.fromDate + 1;
+  const dragFrom = dates[rect.fromDate]?.date ?? '';
+  const dragTo = dates[rect.toDate]?.date ?? '';
+
+  // 처음 값은 드래그로 고른 범위이고, 사람이 고치면 그 값이 요청에 실린다. 캘린더에 보이는 30일 밖도 된다.
+  const [from, setFrom] = useState(dragFrom);
+  const [to, setTo] = useState(dragTo);
+  const problem = rangeProblem(from, to);
 
   const [weekdays, setWeekdays] = useState<string[]>([]);
   const [priceMode, setPriceMode] = useState<PriceMode | null>(null);
@@ -82,15 +109,23 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
   const [percent, setPercent] = useState('');
   const [minStay, setMinStay] = useState('');
   const [stopSell, setStopSell] = useState<boolean | null>(null);
-  const [preview, setPreview] = useState<BulkEditResult | null>(null);
+  // 결과와 함께 그 요청의 기간을 둔다. 화면 밖 날짜를 바꾸는 것이라 눈으로 확인할 길이 이 문구뿐이다.
+  const [preview, setPreview] = useState<(BulkEditResult & { from: string; to: string }) | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
 
-  // 선택이 바뀌면 앞의 미리보기는 다른 범위의 결과다. 남겨 두면 지금 고른 범위의
+  // 다시 끌면 그 범위로 돌아간다.
+  useEffect(() => {
+    setFrom(dragFrom);
+    setTo(dragTo);
+  }, [dragFrom, dragTo]);
+  // 선택이나 기간이 바뀌면 앞의 미리보기는 다른 범위의 결과다. 남겨 두면 지금 고른 범위의
   // 결과로 읽힌다.
   useEffect(() => {
     setPreview(null);
     setError(null);
-  }, [rect.fromUnit, rect.toUnit, rect.fromDate, rect.toDate]);
+  }, [rect.fromUnit, rect.toUnit, from, to]);
 
   const input = (dryRun: boolean): BulkEditInput => ({
     unitIds: units.map((unit) => unit.id),
@@ -111,9 +146,14 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
     (priceMode === null || (priceMode === 'FIXED' ? price === '' : percent === '')) &&
     minStay === '' &&
     stopSell === null;
+  const blocked = nothingToChange || problem !== null;
 
   const mutation = useMutation({
-    mutationFn: (dryRun: boolean) => bulkEdit(propertyId, input(dryRun)),
+    mutationFn: async (dryRun: boolean) => ({
+      ...(await bulkEdit(propertyId, input(dryRun))),
+      from,
+      to,
+    }),
     onMutate: () => setError(null),
     onSuccess: (result) => {
       setPreview(result);
@@ -142,9 +182,28 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
       <dl className="mt-3 space-y-2 text-xs">
         <div>
           <dt className="text-muted">기간</dt>
-          <dd className="tabular-nums text-ink" data-testid="selection-range">
-            {from} ~ {to} ({days}일)
+          <dd className="mt-1 flex items-center gap-1 tabular-nums" data-testid="selection-range">
+            <Input
+              type="date"
+              aria-label="시작일"
+              className="h-8 px-1.5 text-xs"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              data-testid="range-from"
+            />
+            <span className="text-muted">~</span>
+            <Input
+              type="date"
+              aria-label="종료일"
+              className="h-8 px-1.5 text-xs"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              data-testid="range-to"
+            />
           </dd>
+          <p className="mt-1 text-[11px] text-muted" data-testid="range-hint">
+            {problem ?? `${daysBetween(from, to) + 1}일. 캘린더에 보이지 않는 날짜도 고칠 수 있습니다.`}
+          </p>
         </div>
         <div>
           <dt className="text-muted">적용 대상 {units.length}개</dt>
@@ -266,7 +325,7 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
       <div className="mt-4 flex gap-2 border-t border-rule pt-3">
         <Button
           size="sm"
-          disabled={nothingToChange || mutation.isPending}
+          disabled={blocked || mutation.isPending}
           onClick={() => mutation.mutate(true)}
           data-testid="preview-button"
         >
@@ -275,7 +334,7 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
         <Button
           size="sm"
           variant="primary"
-          disabled={nothingToChange || mutation.isPending}
+          disabled={blocked || mutation.isPending}
           onClick={() => mutation.mutate(false)}
           data-testid="apply-button"
         >
@@ -295,9 +354,9 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
           role="status"
           data-testid={preview.dryRun ? 'bulk-edit-preview' : 'bulk-edit-applied'}
         >
-          {preview.dryRun
-            ? `판매 단위 ${preview.unitCount}개 × ${preview.dayCount}일 = ${preview.cellCount}칸이 바뀝니다.`
-            : `${preview.cellCount}칸을 바꿨습니다.`}
+          {preview.dryRun ? '바뀔 것: ' : '바꿨습니다: '}
+          {`${preview.from} ~ ${preview.to} · 판매 단위 ${preview.unitCount}개 · ${preview.cellCount}칸 · `}
+          {preview.changed.map((field) => FIELD_LABELS[field] ?? field).join(', ')}
         </p>
       )}
 
