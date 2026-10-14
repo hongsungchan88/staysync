@@ -345,7 +345,7 @@ public class ChannelBookingPoller {
                 // 인원도 여기서 떨어지고 있었다(확인-11 4절 ③). 위 이름과 같은 자리, 같은 모양이다.
                 booking.totalAmount(), booking.adults(), booking.children(),
                 booking.revision(), booking.isCancellation(),
-                supersedes(connection)));
+                supersedes(connection, mapping.getUnitId())));
 
         if (result.outcome() == ChannelBookingResult.Outcome.CONFLICT) {
             log.warn("재고를 넘겨 받아들였다. reservationId={} 날짜={} 운영자가 해소해야 한다",
@@ -360,13 +360,35 @@ public class ChannelBookingPoller {
      * <p>iCal 에서 Channex 로 옮기면 같은 예약이 Channex 로 다시 온다. 코드가 달라 멱등키가 못 잡고 새 예약 +
      * 충돌이 된다. 그래서 Channex 만 넘겨받는다. <b>연결이 남아 있어야 코드를 안다</b> — 전환은 iCal 매핑만
      * 풀고 연결은 지우지 않는다(작업지시-21 9절). 매핑이 풀린 연결은 폴링해도 예약을 넣지 못한다.
+     *
+     * <p><b>반대 방향도 있다(작업지시-24 3절 B).</b> Channex 매핑을 풀고 iCal 을 되살리면 iCal 피드의 같은 예약이 다시
+     * 온다. 그때 iCal 은 같은 숙소 Channex 연결들의 코드를 넘겨받는다 — 단 <b>이 판매 단위의 Channex 매핑이 꺼져
+     * 있을 때만</b>(켜져 있으면 Channex 가 그 예약의 주인이다). 반대 방향의 나머지 조건(하나일 때만, 값 유지)은
+     * booking 이 본다.
      */
-    private Set<String> supersedes(ChannelConnection connection) {
-        if (connection.getAdapterType() != AdapterType.CHANNEX) {
+    private Set<String> supersedes(ChannelConnection connection, Long unitId) {
+        List<ChannelConnection> siblings =
+                connections.findByPropertyIdInOrderByIdAsc(List.of(connection.getPropertyId()));
+        if (connection.getAdapterType() == AdapterType.CHANNEX) {
+            return siblings.stream()
+                    .filter(other -> other.getAdapterType() == AdapterType.ICAL)
+                    .map(ChannelConnection::getChannelCode)
+                    .collect(java.util.stream.Collectors.toSet());
+        }
+        if (connection.getAdapterType() != AdapterType.ICAL) {
             return Set.of();
         }
-        return connections.findByPropertyIdInOrderByIdAsc(List.of(connection.getPropertyId())).stream()
-                .filter(other -> other.getAdapterType() == AdapterType.ICAL)
+        List<ChannelConnection> channex = siblings.stream()
+                .filter(other -> other.getAdapterType() == AdapterType.CHANNEX)
+                .toList();
+        boolean channexOn = channex.stream()
+                .filter(ChannelConnection::isSyncEnabled)
+                .anyMatch(other -> mappings.findByConnectionIdOrderByIdAsc(other.getId()).stream()
+                        .anyMatch(m -> m.getUnitId().equals(unitId)));
+        if (channexOn) {
+            return Set.of();
+        }
+        return channex.stream()
                 .map(ChannelConnection::getChannelCode)
                 .collect(java.util.stream.Collectors.toSet());
     }

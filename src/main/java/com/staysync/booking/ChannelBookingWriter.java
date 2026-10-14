@@ -122,13 +122,32 @@ class ChannelBookingWriter {
             return Optional.empty();
         }
         StayPeriod period = command.period();
-        return reservationRepo.findOverlapping(command.propertyId(), period.checkIn(), period.checkOut(), ACTIVE)
+        List<Reservation> candidates = reservationRepo
+                .findOverlapping(command.propertyId(), period.checkIn(), period.checkOut(), ACTIVE)
                 .stream()
                 .filter(r -> r.getUnitId().equals(command.unitId()))
                 .filter(r -> r.getPeriod().checkIn().equals(period.checkIn())
                         && r.getPeriod().checkOut().equals(period.checkOut()))
                 .filter(r -> command.supersedes().contains(r.getChannelCode()))
-                .min(java.util.Comparator.comparing(Reservation::getId));
+                .sorted(java.util.Comparator.comparing(Reservation::getId))
+                .toList();
+        if (isTakeBack(command)) {
+            // 되찾기는 하나일 때만이다(작업지시-24). iCal 은 날짜 말고는 아무것도 안 줘서 둘 중 어느 것이 이 예약인지
+            // 가릴 수 없다 — 잘못 고르면 손님이 바뀐다. 둘 이상이면 지금처럼 새 예약 + 충돌로 사람이 고른다.
+            return candidates.size() == 1 ? Optional.of(candidates.get(0)) : Optional.empty();
+        }
+        return candidates.stream().findFirst();
+    }
+
+    /**
+     * 반대 방향(작업지시-24 3절 B) — Channex 매핑을 푼 뒤 iCal 이 Channex 가 넘겨받았던 예약을 되찾는다.
+     *
+     * <p>버전이 없는 명령이 넘겨받는 쪽이면 반대 방향이다. iCal 만 버전이 없고({@code IcalAdapter}), iCal 명령의
+     * {@code supersedes} 에는 Channex 코드만 실린다({@code ChannelBookingPoller.supersedes}).
+     * shortcut: 버전 없는 채널이 iCal 하나뿐이라는 전제, 그런 채널이 하나 더 붙으면 명령에 방향을 싣는다.
+     */
+    private static boolean isTakeBack(ChannelBookingCommand command) {
+        return command.revision() == null;
     }
 
     /**
@@ -139,6 +158,9 @@ class ChannelBookingWriter {
      * 확정 안내 자동 발송이 이미 묵고 있는 손님에게 나간다.
      */
     private ChannelBookingResult takeOver(Reservation reservation, ChannelBookingCommand command) {
+        if (isTakeBack(command)) {
+            return takeBack(reservation, command);
+        }
         Map<String, Object> before = new LinkedHashMap<>();
         before.put("channelCode", reservation.getChannelCode());
         before.put("channelBookingId", reservation.getChannelBookingId());
@@ -163,6 +185,29 @@ class ChannelBookingWriter {
         audit.recordAs(ActorKind.CHANNEL, null, "RESERVATION", reservation.getId(),
                 "CHANNEL_TAKEOVER", before, after);
         log.info("채널 예약이 같은 날짜의 예약을 넘겨받았다. reservationId={} {} → {}",
+                reservation.getId(), before.get("channelCode"), command.channelCode());
+        return ChannelBookingResult.of(ChannelBookingResult.Outcome.UPDATED, reservation.getId());
+    }
+
+    /**
+     * iCal 이 같은 날짜의 Channex 예약을 되찾는다. <b>채널 코드·예약번호만 바꾼다</b> — 금액·게스트·인원은 iCal 이
+     * 주지 않으니 덮지 않는다(작업지시-16 — 모르는 값을 0·빈 값으로 만들지 않는다). 원장도 박 행도 그대로다. 이벤트도
+     * 내지 않는다({@link #takeOver} 와 같은 이유). 이후의 변경·취소는 iCal 피드를 따라간다.
+     */
+    private ChannelBookingResult takeBack(Reservation reservation, ChannelBookingCommand command) {
+        Map<String, Object> before = new LinkedHashMap<>();
+        before.put("channelCode", reservation.getChannelCode());
+        before.put("channelBookingId", reservation.getChannelBookingId());
+
+        reservation.takeBack(command.channelCode(), command.channelBookingId());
+        reservationRepo.saveAndFlush(reservation);
+
+        Map<String, Object> after = new LinkedHashMap<>();
+        after.put("channelCode", command.channelCode());
+        after.put("channelBookingId", command.channelBookingId());
+        audit.recordAs(ActorKind.CHANNEL, null, "RESERVATION", reservation.getId(),
+                "CHANNEL_TAKEBACK", before, after);
+        log.info("iCal 이 같은 날짜의 예약을 되찾았다. reservationId={} {} → {}",
                 reservation.getId(), before.get("channelCode"), command.channelCode());
         return ChannelBookingResult.of(ChannelBookingResult.Outcome.UPDATED, reservation.getId());
     }

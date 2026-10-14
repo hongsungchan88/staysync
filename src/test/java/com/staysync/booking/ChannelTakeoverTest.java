@@ -169,6 +169,23 @@ class ChannelTakeoverTest {
         assertThat(r.getChildren()).isEqualTo((short) 1);
     }
 
+    @Test
+    @DisplayName("되찾기(iCal 이 Channex 예약을)는 같은 날짜 후보가 하나일 때만 — 둘 이상이면 새 예약 + 충돌")
+    void 되찾기는_하나일_때만() {
+        Fixture f = given("되찾기둘", (short) 2);
+        Long 첫째 = intake.ingest(channex(f, "chx-8a", 체크인, 체크아웃, 100, false, Set.of())).reservationId();
+        Long 둘째 = intake.ingest(channex(f, "chx-8b", 체크인, 체크아웃, 100, false, Set.of())).reservationId();
+
+        // iCal 은 날짜 말고는 아무것도 안 줘서 둘 중 어느 것인지 가릴 수 없다.
+        ChannelBookingResult result = intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(),
+                "AIRBNB_ICAL", "uid-8@airbnb.com", null, 체크인, 체크아웃, null, 0, 0, null, false, Set.of("AIRBNB")));
+
+        assertThat(result.outcome()).isEqualTo(ChannelBookingResult.Outcome.CONFLICT);
+        assertThat(reservations.findById(첫째).orElseThrow().getChannelCode()).isEqualTo("AIRBNB");
+        assertThat(reservations.findById(둘째).orElseThrow().getChannelCode()).isEqualTo("AIRBNB");
+        assertThat(예약수(f)).isEqualTo(3);
+    }
+
     // --- 도우미 --------------------------------------------------------------
 
     /** iCal 수신이 넘기는 모양 — 이름·금액·인원이 없고 버전도 없다(IcalAdapter). */
@@ -196,13 +213,17 @@ class ChannelTakeoverTest {
     }
 
     private Fixture given(String name) {
+        return given(name, (short) 1);
+    }
+
+    private Fixture given(String name, short totalUnits) {
         Long orgId = jdbc.queryForObject(
                 "INSERT INTO organization (name) VALUES (?) RETURNING id", Long.class, name);
         Long propertyId = jdbc.queryForObject(
                 "INSERT INTO property (org_id, name) VALUES (?, ?) RETURNING id",
                 Long.class, orgId, name + " 숙소");
         Long unitId = unitRegistration.register(propertyId, name + " 객실", UnitKind.ENTIRE_PLACE,
-                (short) 1, BigDecimal.valueOf(100_000));
+                totalUnits, BigDecimal.valueOf(100_000));
         return new Fixture(propertyId, unitId);
     }
 
