@@ -437,6 +437,20 @@ public class Reservation {
         touch();
     }
 
+    /**
+     * {@link #takeOver} 의 반대 방향(작업지시-24). 채널 코드·예약번호만 바꾸고 금액·인원은 그대로 둔다 — 되찾는
+     * 채널(iCal)이 그 값을 주지 않는다. 버전은 0 으로 — iCal 은 버전 없이 값으로 비교한다(ADR 0013).
+     */
+    public void takeBack(String newChannelCode, String newChannelBookingId) {
+        if (!isActive()) {
+            throw new IllegalReservationTransition(status, status);
+        }
+        this.channelCode = newChannelCode;
+        this.channelBookingId = newChannelBookingId;
+        this.revision = 0;
+        touch();
+    }
+
     public boolean isHoldExpired(OffsetDateTime now) {
         return status == ReservationStatus.HOLD
                 && holdExpiresAt != null
