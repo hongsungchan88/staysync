@@ -280,7 +280,8 @@ iCal 매핑을 푼 뒤 Channex 가 같은 예약을 넘겨줄 때까지의 틈�
    Channex 객실 정원도 맞춘다(확인-12 6.1)
 3. **연결 링크 전달** — 스테이징 콘솔에서 Airbnb 채널을 만들며 "Connect to Airbnb" 링크를 복사해 호스트에게 보낸다(확인-12 6.2).
    **링크는 사용자가 콘솔에 로그인하면 만든다.** 채널 설정:
-   - **Booking Amount = `Total Paid Amount`**(10-02 사용자 결정). 에어비앤비가 소프트웨어 연결 리스팅에 호스트 전용 수수료(15.5%)를
+   - **Booking Total Type = `Amount including Commission`**(10-02 사용자 결정의 뜻, 이름은 10-14 고침 — 콘솔 선택지는 `Payout Amount`·
+     `Amount including Commission` 둘뿐이고 "Total Paid Amount" 는 없다, 작업지시-24 2절 1번). 에어비앤비가 소프트웨어 연결 리스팅에 호스트 전용 수수료(15.5%)를
      적용하므로 게스트 결제액 = 리스팅 가격 — 우리 요금·직접예약과 같은 기준이다. 수수료를 `channel_commission` 에 채우지 않는다
    - **Min Stay Type = `Arrival`** — 우리 최소 숙박이 도착일 기준(`min_stay_arrival`)
    - Send Property Notification 끔, Enable Rate Plans 끔(요금제 하나)

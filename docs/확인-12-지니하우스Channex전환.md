@@ -229,7 +229,8 @@ auth_redirect`)·`scope`(`property_management,messages_read,messages_write`)가 
 자체는 적지 않는다). 내장 브라우저에 로그인해 두면 Claude Code 가 이어서 할 수 있다.
 
 **연결 설정 — 9절 전에 정할 것**(서술자 `params`):
-- **Booking Amount = `Total Paid Amount`**(10-02 사용자 결정). `Payout Amount`(기본)는 호스트 정산액이다. 근거 둘 — 직접예약
+- **Booking Total Type = `Amount including Commission`**(10-02 사용자 결정의 뜻, 이름은 10-14 고침 — 콘솔 선택지는 `Payout Amount`·
+  `Amount including Commission` 둘뿐이고 "Total Paid Amount" 는 없다, 작업지시-24 2절 1번). `Payout Amount`(기본)는 호스트 정산액이다. 근거 둘 — 직접예약
   금액은 손님이 낸 총액이고, **에어비앤비는 소프트웨어로 연결된 리스팅에 호스트 전용 수수료(15.5%)를 적용하므로 게스트
   결제액이 리스팅 가격과 같아**(사용자 근거) 우리 요금·직접예약과 같은 기준이 된다. 수수료를 `channel_commission` 에 채우는
   일은 하지 않는다
