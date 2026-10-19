@@ -1,0 +1,128 @@
+{
+  "data": [
+    {
+      "attributes": {
+        "id": "0a325d32-d9d9-472e-a0d4-8aaa5415072d",
+        "meta": {
+          "amount_type": "Total Paid Amount",
+          "cohost_payout": null,
+          "converter_version": "7ac5c05",
+          "is_imported": true,
+          "listing_id": "1450311972082292442",
+          "thread_id": "<가림>"
+        },
+        "status": "new",
+        "services": [],
+        "currency": "KRW",
+        "amount": "226435",
+        "agent": null,
+        "unique_id": "ABB-HMXXXXXXXX",
+        "inserted_at": "2026-10-19T07:46:46.833240",
+        "channel_id": "f598e0b4-b2b0-49bf-a3fe-2013e85fd8ba",
+        "ota_reservation_code": "HMXXXXXXXX",
+        "system_id": "e0f77d23-1a18-4e65-9957-f3434043253e",
+        "ota_name": "AirBNB",
+        "property_id": "701f5b6d-cde1-45aa-a248-65341d08ec6e",
+        "rooms": [
+          {
+            "meta": {
+              "mapping_id": "0629e8f6-bcc6-4df2-ac9c-1a86861541cb",
+              "cancel_penalties": [],
+              "days_breakdown": [
+                {
+                  "amount": "176435",
+                  "date": "2026-11-14",
+                  "promotion": null,
+                  "rate_code": null,
+                  "rate_plan": "16679bb6-c54b-4798-8478-ad2040de36b8"
+                }
+              ]
+            },
+            "taxes": [],
+            "services": [
+              {
+                "excluded": true,
+                "is_inclusive": false,
+                "name": "Cleaning Fee",
+                "nights": 1,
+                "persons": 1,
+                "price_mode": "Per booking",
+                "price_per_unit": "50000",
+                "service_rph": null,
+                "total_price": "50000",
+                "type": "Cleaning Fee"
+              }
+            ],
+            "amount": "226435",
+            "days": {
+              "2026-11-14": "176435"
+            },
+            "rate_plan_id": "16679bb6-c54b-4798-8478-ad2040de36b8",
+            "ota_commission": null,
+            "guests": null,
+            "occupancy": {
+              "children": 0,
+              "adults": 2,
+              "ages": null,
+              "infants": 0
+            },
+            "room_type_id": "d7ff261c-05dc-42ab-899d-c01cb48cca44",
+            "booking_room_id": "bcf29fd0-85eb-4657-8550-92991e293615",
+            "checkout_date": "2026-11-15",
+            "checkin_date": "2026-11-14",
+            "is_cancelled": false,
+            "ota_unique_id": null
+          }
+        ],
+        "booking_id": "246b0154-59fe-419f-9937-214ea2726f9e",
+        "arrival_date": "2026-11-14",
+        "arrival_hour": null,
+        "customer": {
+          "name": "<가림>",
+          "zip": null,
+          "address": null,
+          "city": null,
+          "country": null,
+          "language": "ko",
+          "mail": null,
+          "phone": "<가림>",
+          "surname": "<가림>"
+        },
+        "departure_date": "2026-11-15",
+        "deposits": [],
+        "notes": "<가림>",
+        "ota_commission": "35097",
+        "payment_collect": "ota",
+        "payment_type": "bank_transfer",
+        "occupancy": {
+          "children": 0,
+          "adults": 2,
+          "ages": null,
+          "infants": 0
+        },
+        "guarantee": null,
+        "secondary_ota": null,
+        "acknowledge_status": "acknowledged",
+        "raw_message": "<가림>",
+        "is_crs_revision": false
+      },
+      "id": "0a325d32-d9d9-472e-a0d4-8aaa5415072d",
+      "type": "booking_revision",
+      "relationships": {
+        "data": {
+          "property": {
+            "id": "701f5b6d-cde1-45aa-a248-65341d08ec6e",
+            "type": "property"
+          },
+          "booking": {
+            "id": "246b0154-59fe-419f-9937-214ea2726f9e",
+            "type": "booking"
+          }
+        }
+      }
+    }
+  ],
+  "meta": {
+    "note": "2026-10-19 Pull Future Reservations 로 온 실물 에어비앤비 리비전. 게스트 개인정보·예약 코드·대화 id 를 가렸다(작업지시-24 8.2)"
+  }
+}
