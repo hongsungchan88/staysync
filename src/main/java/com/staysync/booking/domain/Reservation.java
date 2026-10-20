@@ -382,19 +382,21 @@ public class Reservation {
      * <p>대신 값이 달라졌는지만 본다. 순서 역전은 이런 채널에서 일어나지 않는다 —
      * 매번 전체 스냅샷을 받기 때문이다. 근거는 ADR 0013.
      *
+     * <p><b>들어온 금액이 NULL 이면 "모름"이지 "바뀜"이 아니다</b>(작업지시-27). iCal 은 금액을 주지 않는다 — 비교도 덮기도 하지
+     * 않는다. 그러지 않으면 넘겨받기·되찾기로 금액을 가진 iCal 예약이 다음 폴링에 NULL 로 지워진다(작업지시-24 8.3.1).
+     *
      * @return 실제로 달라져서 반영했으면 true
      */
     public boolean applyValues(StayPeriod newPeriod, BigDecimal newAmount) {
         boolean sameDates = period.checkIn().equals(newPeriod.checkIn())
                 && period.checkOut().equals(newPeriod.checkOut());
-        boolean sameAmount = totalAmount == null
-                ? newAmount == null
-                : newAmount != null && totalAmount.compareTo(newAmount) == 0;
+        boolean sameAmount = newAmount == null
+                || (totalAmount != null && totalAmount.compareTo(newAmount) == 0);
         if (sameDates && sameAmount) {
             return false;
         }
         this.period = newPeriod;
-        this.totalAmount = newAmount;
+        keepUnlessUnknown(newAmount);
         touch();
         return true;
     }
@@ -404,14 +406,28 @@ public class Reservation {
             return false;
         }
         this.period = newPeriod;
-        this.totalAmount = newAmount;
+        // 수정 리비전에 금액이 빠지면 저장된 값을 유지한다. "미상(NULL)"은 새 예약의 금액이 없을 때의 규칙이다(작업지시-27 5절 2번).
+        keepUnlessUnknown(newAmount);
         this.revision = incomingRevision;
         touch();
         return true;
     }
 
-    /** 채널 수정이 인원을 바꿨으면 따라간다. 날짜·금액과 같은 수정에 실려 온다. */
+    private void keepUnlessUnknown(BigDecimal newAmount) {
+        if (newAmount != null) {
+            this.totalAmount = newAmount;
+        }
+    }
+
+    /**
+     * 채널 수정이 인원을 바꿨으면 따라간다. 날짜·금액과 같은 수정에 실려 온다.
+     *
+     * <p>성인 0 은 "모름"(iCal, {@code ChannelBookingCommand})이라 저장된 인원을 지우지 않는다(작업지시-27).
+     */
     public void changeGuests(short newAdults, short newChildren) {
+        if (newAdults <= 0) {
+            return;
+        }
         this.adults = newAdults;
         this.children = newChildren;
     }
