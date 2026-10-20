@@ -159,7 +159,14 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
     (priceMode === null || (priceMode === 'FIXED' ? price === '' : percent === '')) &&
     minStay === '' &&
     stopSell === null;
-  const blocked = nothingToChange || problem !== null;
+  // 서버와 같은 하한(작업지시-26 E). 서버가 방어선이고 여기는 보내기 전에 이유를 보여 줄 뿐이다.
+  const valueProblem =
+    priceMode === 'FIXED' && price !== '' && Number(price) < 0
+      ? '요금은 0 이상이어야 합니다.'
+      : priceMode === 'PERCENT' && percent !== '' && Number(percent) <= -100
+        ? '비율은 -100% 보다 커야 합니다.'
+        : null;
+  const blocked = nothingToChange || problem !== null || valueProblem !== null;
 
   const mutation = useMutation({
     mutationFn: async (dryRun: boolean) => ({
@@ -290,6 +297,7 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
             type="number"
             className="mt-1.5"
             placeholder="250000"
+            min={0}
             value={price}
             onChange={(e) => setPrice(e.target.value)}
             data-testid="price-input"
@@ -304,6 +312,11 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
             onChange={(e) => setPercent(e.target.value)}
             data-testid="percent-input"
           />
+        )}
+        {valueProblem && (
+          <p className="mt-1 text-[11px] text-warn" data-testid="price-problem">
+            {valueProblem}
+          </p>
         )}
       </fieldset>
 

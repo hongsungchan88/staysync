@@ -113,6 +113,12 @@ class ReservationController {
         StayPeriod newPeriod = new StayPeriod(
                 request.checkIn() == null ? existing.getPeriod().checkIn() : request.checkIn(),
                 request.checkOut() == null ? existing.getPeriod().checkOut() : request.checkOut());
+        boolean datesChanged = !newPeriod.checkIn().equals(existing.getPeriod().checkIn())
+                || !newPeriod.checkOut().equals(existing.getPeriod().checkOut());
+        if (!isDirect(existing) && datesChanged) {
+            // 인원은 바꿔도 된다. 날짜만 막는다 — 채널 수신(ChannelBookingWriter)은 이 경로를 거치지 않는다.
+            throw new ChannelReservationLockedException("채널에서 들어온 예약은 그 채널에서 날짜를 바꿔야 합니다.");
+        }
         short adults = request.adults() == null ? existing.getAdults() : request.adults();
         short children = request.children() == null ? existing.getChildren() : request.children();
 
@@ -122,7 +128,10 @@ class ReservationController {
 
     @PostMapping("/{reservationId}/cancel")
     ReservationSummary cancel(@PathVariable Long reservationId) {
-        requireOwned(reservationId);
+        if (!isDirect(requireOwned(reservationId))) {
+            // 채널 취소는 채널이 알려 준다(수신·충돌 해소는 이 경로를 거치지 않는다).
+            throw new ChannelReservationLockedException("채널에서 들어온 예약은 그 채널에서 취소해야 합니다.");
+        }
         return ReservationSummary.from(bookingService.cancel(reservationId));
     }
 
@@ -164,6 +173,11 @@ class ReservationController {
      * <p>모든 단건 경로가 이걸 먼저 거친다. 확인을 컨트롤러마다 손으로 반복하면 한 곳만
      * 빠뜨려도 다른 조직의 예약이 새어 나간다.
      */
+    /** 우리가 받은 예약(수기·위젯)인지. 그 밖은 채널이 주인이다. */
+    private static boolean isDirect(Reservation reservation) {
+        return "DIRECT".equals(reservation.getChannelCode());
+    }
+
     private Reservation requireOwned(Long reservationId) {
         Reservation reservation = reservationRepo.findById(reservationId)
                 .orElseThrow(() -> new ReservationNotFoundException(reservationId));

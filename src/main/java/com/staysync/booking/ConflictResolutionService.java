@@ -110,6 +110,7 @@ public class ConflictResolutionService {
                                        String resolution, Long reservationId,
                                        Long targetUnitId, String memo) {
         OverbookingConflict conflict = load(conflictId, orgId);
+        requireReservationOf(conflict, resolution, reservationId);
 
         if (!OverbookingConflict.UPGRADED.equals(resolution)) {
             // 재고를 옮기지 않는다. 취소는 ReservationWriter 가 자기 락을 잡는다.
@@ -175,6 +176,28 @@ public class ConflictResolutionService {
         if (!belongs) {
             // 다른 숙소의 방으로 옮기는 것은 업그레이드가 아니라 대체 숙소 안내다.
             throw new UnitNotFoundException(targetUnitId);
+        }
+    }
+
+    /**
+     * 예약을 움직이는 해소(취소·업그레이드)는 <b>그 충돌의 예약만</b> 움직인다(작업지시-26 A).
+     *
+     * <p>충돌의 소유는 {@link #load} 가 봤지만 요청의 예약 식별자는 따로 온다. 여기서 거르지 않으면 OPEN 충돌
+     * 하나로 다른 조직의 예약을 취소하거나 자기 판매 단위로 옮길 수 있었다(검토-02 3절 0). 해소 기록·재고 이동보다
+     * 앞이라 거절되면 아무것도 바뀌지 않는다.
+     */
+    private static void requireReservationOf(OverbookingConflict conflict, String resolution,
+                                             Long reservationId) {
+        boolean movesReservation = OverbookingConflict.CANCELLED.equals(resolution)
+                || OverbookingConflict.UPGRADED.equals(resolution);
+        if (!movesReservation) {
+            return;
+        }
+        if (reservationId == null) {
+            throw new InvalidConflictResolutionException("어느 예약을 움직일지 골라야 합니다.");
+        }
+        if (!conflict.getReservationIds().contains(reservationId)) {
+            throw new InvalidConflictResolutionException("이 충돌에 걸린 예약이 아닙니다.");
         }
     }
 

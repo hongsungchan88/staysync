@@ -20,11 +20,16 @@ public final class BulkEdit {
     /** 요금을 어떻게 바꿀지. 계획서 8.4 의 "고정값 / 기존 대비 ±%" 두 가지다. */
     public sealed interface PriceChange {
 
-        /** 고른 셀을 전부 이 값으로 만든다. */
+        /**
+         * 고른 셀을 전부 이 값으로 만든다.
+         *
+         * <p>잘못된 값은 400({@link InvalidBulkEditException})이다 — 사람이 화면에서 넣는 값이라 500 "서버 오류"로
+         * 떨어지면 안 된다(작업지시-26 E).
+         */
         record Fixed(BigDecimal price) implements PriceChange {
             public Fixed {
                 if (price == null || price.signum() < 0) {
-                    throw new IllegalArgumentException("요금은 0 이상이어야 합니다. price=" + price);
+                    throw new InvalidBulkEditException("요금은 0 이상이어야 합니다.");
                 }
             }
         }
@@ -38,11 +43,11 @@ public final class BulkEdit {
         record Percent(BigDecimal rate) implements PriceChange {
             public Percent {
                 if (rate == null) {
-                    throw new IllegalArgumentException("비율이 필요합니다.");
+                    throw new InvalidBulkEditException("비율이 필요합니다.");
                 }
                 if (rate.compareTo(BigDecimal.ONE.negate()) <= 0) {
                     // -100% 이하면 요금이 0 이하가 된다. 무료로 파는 것은 이 화면의 조작이 아니다.
-                    throw new IllegalArgumentException("비율은 -100% 보다 커야 합니다. rate=" + rate);
+                    throw new InvalidBulkEditException("비율은 -100% 보다 커야 합니다.");
                 }
             }
 

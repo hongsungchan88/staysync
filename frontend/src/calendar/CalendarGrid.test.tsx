@@ -275,6 +275,23 @@ describe('그리드 조작', () => {
     expect(selections).toHaveLength(0);
   });
 
+  it('채널 예약은 확정이어도 잡히지 않고, 이유를 툴팁에 적는다 — 작업지시-26 C', () => {
+    stubViewport();
+    const data = grid(1, 30, () => [
+      { ...bar(1, 1, 0, 1), channel: 'DIRECT' },
+      { ...bar(2, 1, 2, 1), channel: 'AIRBNB_ICAL' },
+      { ...bar(3, 1, 4, 1), channel: 'AIRBNB' },
+    ]);
+
+    renderGrid(data);
+
+    expect(screen.getByTestId('bar-1')).toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-2')).not.toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-3')).not.toHaveAttribute('data-movable');
+    expect(screen.getByTestId('bar-2').getAttribute('title')).toContain('날짜는 그 채널에서 바꿉니다');
+    expect(screen.getByTestId('bar-1').getAttribute('title')).not.toContain('그 채널에서');
+  });
+
   it('취소·체크아웃된 예약은 잡히지 않는다', () => {
     stubViewport();
     const data = grid(1, 30, () => [

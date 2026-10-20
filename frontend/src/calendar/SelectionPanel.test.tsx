@@ -213,6 +213,24 @@ describe('요금·제약 편집 패널', () => {
     );
   });
 
+  it('음수 고정가·-100% 이하 비율은 이유를 보이고 보내지 않는다 — 작업지시-26 E', () => {
+    renderPanel();
+
+    fireEvent.click(screen.getByTestId('price-mode-fixed'));
+    fireEvent.change(screen.getByTestId('price-input'), { target: { value: '-1000' } });
+    expect(screen.getByTestId('price-problem')).toHaveTextContent('요금은 0 이상이어야 합니다.');
+    expect(screen.getByTestId('apply-button')).toBeDisabled();
+
+    fireEvent.click(screen.getByTestId('price-mode-percent'));
+    fireEvent.change(screen.getByTestId('percent-input'), { target: { value: '-100' } });
+    expect(screen.getByTestId('price-problem')).toHaveTextContent('비율은 -100% 보다 커야 합니다.');
+    expect(screen.getByTestId('apply-button')).toBeDisabled();
+
+    fireEvent.change(screen.getByTestId('percent-input'), { target: { value: '-20' } });
+    expect(screen.queryByTestId('price-problem')).not.toBeInTheDocument();
+    expect(screen.getByTestId('apply-button')).toBeEnabled();
+  });
+
   it('판매 재개만 골라도 미리보기와 적용이 눌린다', () => {
     renderPanel();
 

@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { WidgetPage } from './WidgetPage';
 import { tokenStore } from '@/auth/tokenStore';
+import { toIso } from '@/lib/dates';
 
 /**
  * 완료 조건 4·5·6 의 화면 쪽. 직접예약 위젯.
@@ -145,6 +146,15 @@ describe('직접예약 위젯', () => {
 
     // 2박 20만원. 화면은 서버가 준 날짜별 요금을 더하기만 한다.
     expect(await screen.findByText('2박 200,000원')).toBeInTheDocument();
+  });
+
+  it('날짜 칸의 최솟값이 오늘이다 — 작업지시-26 B(막는 것은 서버다)', () => {
+    serve([객실], 홀드성공);
+    render(<WidgetPage />, { wrapper });
+
+    const today = toIso(new Date());
+    expect(screen.getByLabelText('체크인')).toHaveAttribute('min', today);
+    expect(screen.getByLabelText('체크아웃').getAttribute('min')! > today).toBe(true);
   });
 
   it('어느 숙소인지 화면에 밝힌다', async () => {

@@ -6,6 +6,7 @@ import com.staysync.booking.domain.Guest;
 import com.staysync.booking.domain.Reservation;
 import com.staysync.booking.domain.StayPeriod;
 import com.staysync.property.OwnedResources;
+import com.staysync.property.UnitCatalog;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -38,13 +39,15 @@ public class PublicBookingService {
     private final BookingService booking;
     private final GuestRegistrar guests;
     private final OwnedResources owned;
+    private final UnitCatalog unitCatalog;
 
     PublicBookingService(CalendarService calendar, BookingService booking,
-                         GuestRegistrar guests, OwnedResources owned) {
+                         GuestRegistrar guests, OwnedResources owned, UnitCatalog unitCatalog) {
         this.calendar = calendar;
         this.booking = booking;
         this.guests = guests;
         this.owned = owned;
+        this.unitCatalog = unitCatalog;
     }
 
     /** 위젯이 그릴 날짜 한 칸. 게스트 정보도 예약도 담기지 않는다. */
@@ -145,6 +148,12 @@ public class PublicBookingService {
     public HoldResult hold(Long propertyId, Long unitId, StayPeriod period,
                            BigDecimal quotedAmount, short adults, short children,
                            String guestName, String guestPhone, String guestEmail) {
+        // 지난 날은 원장 행이 없으면 팔 수 있는 날로 보인다. 숙소 시간대의 오늘부터만 판다 — 서버 JVM 은 UTC 다
+        // (작업지시-26 B). 오늘 체크인은 된다.
+        LocalDate today = LocalDate.now(unitCatalog.stayTimesOf(propertyId).zone());
+        if (period.checkIn().isBefore(today)) {
+            throw new InvalidPublicBookingException("지난 날짜는 예약할 수 없습니다.");
+        }
         List<PublicDay> nights = nightsOf(propertyId, unitId, period);
 
         for (PublicDay night : nights) {
