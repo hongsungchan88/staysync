@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, NavLink } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCalendar, fetchProperties } from '@/api/calendar';
 import { fetchChannels } from '@/api/channels';
@@ -12,6 +12,8 @@ import type { ReservationBar } from '@/api/schemas';
 import { CONFLICT_COLOR, LEGEND, channelColor } from './channels';
 import { Button } from '@/components/ui/button';
 import { addDays, monthLabel, toIso } from '@/lib/dates';
+import { cn } from '@/lib/utils';
+import { useNarrow } from '@/lib/useNarrow';
 import { logout } from '@/api/auth';
 import { useTokenStore } from '@/auth/tokenStore';
 
@@ -23,6 +25,29 @@ import { useTokenStore } from '@/auth/tokenStore';
  * (`docs/측정-02-*.md` 의 재현 방법).
  */
 const WINDOW_DAYS = 30;
+
+/** 주 메뉴. 링크 그대로이고 지금 화면은 NavLink 가 `aria-current="page"` 를 단다(작업지시-29). */
+const MAIN_MENU = [
+  { to: '/', label: '캘린더' },
+  { to: '/properties', label: '숙소' },
+  { to: '/channels', label: '채널 연결' },
+  { to: '/conflicts', label: '충돌' },
+  { to: '/inbox', label: '인박스' },
+  { to: '/ops/tasks', label: '청소' },
+  { to: '/reports', label: '리포트' },
+] as const;
+
+const menuClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-md border px-3 text-xs hover:bg-faint',
+    isActive ? 'border-clay font-semibold text-clay' : 'border-rule-strong text-body',
+  );
+
+const accountClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-xs hover:bg-faint',
+    isActive ? 'font-semibold text-clay' : 'text-muted',
+  );
 
 export function CalendarPage() {
   const [from, setFrom] = useState(() => toIso(new Date()));
@@ -37,6 +62,21 @@ export function CalendarPage() {
     }
   }, []);
   const [rejection, setRejection] = useState<string | null>(null);
+
+  // 좁은 화면의 아래 판은 Esc 와 닫기로 접는다(작업지시-29). 넓은 화면의 동작은 바꾸지 않는다.
+  const narrow = useNarrow();
+  const closePanel = useCallback(() => {
+    setSelection(null);
+    setBar(null);
+  }, []);
+  useEffect(() => {
+    if (!narrow) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closePanel();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [narrow, closePanel]);
 
   const properties = useQuery({
     queryKey: ['properties'],
@@ -87,15 +127,19 @@ export function CalendarPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-rule bg-paper px-5 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-baseline gap-3">
-            <h1 className="text-lg font-semibold text-ink">통합 캘린더</h1>
+      <header className="border-b border-rule bg-paper px-3 py-2 md:px-5 md:py-3">
+        {/*
+          넓은 화면은 한 줄(왼쪽 제목·숙소, 오른쪽 메뉴·계정), 좁으면 메뉴 묶음이 다음 줄로 내려가고 메뉴는 가로로 넘긴다
+          (작업지시-29). 줄바꿈은 띄어쓰기에서만 — index.css 의 keep-all.
+        */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-baseline gap-3">
+            <h1 className="shrink-0 whitespace-nowrap text-lg font-semibold text-ink">통합 캘린더</h1>
             {properties.data && properties.data.length > 1 ? (
               <select
                 aria-label="숙소"
                 data-testid="property-select"
-                className="h-8 rounded-md border border-rule-strong bg-paper px-2 text-sm text-ink"
+                className="h-8 min-w-0 max-w-[14rem] truncate rounded-md border border-rule-strong bg-paper px-2 text-sm text-ink"
                 value={propertyId ?? ''}
                 onChange={(event) => {
                   setChosenPropertyId(Number(event.target.value));
@@ -111,65 +155,38 @@ export function CalendarPage() {
                 ))}
               </select>
             ) : (
-              <span className="text-sm text-muted">{property?.name ?? '숙소를 불러오는 중'}</span>
+              <span className="truncate whitespace-nowrap text-sm text-muted">{property?.name ?? '숙소를 불러오는 중'}</span>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Link
-              to="/properties"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              숙소
-            </Link>
-            <Link
-              to="/channels"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              채널 연결
-            </Link>
-            <Link
-              to="/conflicts"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              충돌
-            </Link>
-            <Link
-              to="/inbox"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              인박스
-            </Link>
-            <Link
-              to="/ops/tasks"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              청소
-            </Link>
-            <Link
-              to="/reports"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              리포트
-            </Link>
-            <Link
-              to="/account/password"
-              className="inline-flex h-8 items-center rounded-md border border-rule-strong px-3 text-xs text-body hover:bg-faint"
-            >
-              비밀번호 변경
-            </Link>
-            <Button
-              size="sm"
-              onClick={async () => {
-                await logout();
-                useTokenStore.getState().clear();
-              }}
-            >
-              로그아웃
-            </Button>
+          <div className="flex min-w-0 max-w-full items-center gap-2">
+            <nav aria-label="주 메뉴" className="flex min-w-0 items-center gap-2 overflow-x-auto" data-testid="main-nav">
+              {MAIN_MENU.map((item) => (
+                <NavLink key={item.to} to={item.to} end className={menuClass}>
+                  {item.label}
+                </NavLink>
+              ))}
+            </nav>
+            {/* 계정은 주 메뉴와 떨어진 오른쪽 끝, 테두리 없는 모양으로 구분한다. */}
+            <div role="group" aria-label="계정" className="flex shrink-0 items-center gap-1 border-l border-rule pl-2">
+              <NavLink to="/account/password" end className={accountClass}>
+                비밀번호 변경
+              </NavLink>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="whitespace-nowrap text-muted"
+                onClick={async () => {
+                  await logout();
+                  useTokenStore.getState().clear();
+                }}
+              >
+                로그아웃
+              </Button>
+            </div>
           </div>
         </div>
 
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-2 flex flex-wrap items-center justify-between gap-2 md:mt-3">
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setFrom(addDays(from, -WINDOW_DAYS))}>
               이전
@@ -185,7 +202,7 @@ export function CalendarPage() {
             </Button>
           </div>
 
-          <div className="flex items-center gap-3 text-xs text-muted">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
             {legend.map((entry) => (
               <span key={entry.code} className="flex items-center gap-1">
                 <i
@@ -223,14 +240,15 @@ export function CalendarPage() {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
+      {/* 좁은 화면은 표가 전체 폭이고 패널은 표 아래 판이 된다(작업지시-29). 넓은 화면은 그대로 오른쪽. */}
+      <div className="flex min-h-0 flex-1 max-md:flex-col">
         {/*
           `min-w-0` 이 없으면 가로 가상 스크롤이 통째로 죽는다. flex 항목의 기본
           `min-width` 는 `auto` 라 안쪽 내용(90일 × 66px = 5,940px)만큼 늘어나고, 그러면
           스크롤 컨테이너의 `offsetWidth` 가 곧 전체 너비가 돼 "보이는 구간"이 전부가 된다.
           세로가 멀쩡했던 것은 `min-h-0` 이 이미 있었기 때문이다. 재측정에서 잡혔다.
         */}
-        <main className="min-h-0 min-w-0 flex-1 p-4">
+        <main className="min-h-0 min-w-0 flex-1 p-1 md:p-4">
           <StateSwitch
             isLoading={properties.isLoading || calendar.isLoading}
             error={properties.error ?? calendar.error}
@@ -252,14 +270,27 @@ export function CalendarPage() {
         </main>
 
         {calendar.data && propertyId !== null && (
-          <SelectionPanel
-            data={calendar.data}
-            rect={selection}
-            bar={bar}
-            onCloseBar={() => setBar(null)}
-            propertyId={propertyId}
-            calendarKey={calendarKey}
-          />
+          <div
+            className="flex min-h-0 max-md:max-h-[55vh] max-md:flex-col max-md:overflow-y-auto max-md:border-t max-md:border-rule max-md:[&>aside]:w-full max-md:[&>aside]:border-l-0"
+            data-testid="panel-dock"
+          >
+            {/* 기간 편집 패널에는 닫기가 없다(넓은 화면은 다시 끌면 바뀐다). 좁은 화면의 판에는 닫기를 단다. */}
+            {narrow && selection !== null && bar === null && (
+              <div className="flex justify-end border-b border-rule bg-paper px-2 py-1">
+                <Button size="sm" variant="ghost" onClick={closePanel} data-testid="panel-close">
+                  닫기
+                </Button>
+              </div>
+            )}
+            <SelectionPanel
+              data={calendar.data}
+              rect={selection}
+              bar={bar}
+              onCloseBar={() => setBar(null)}
+              propertyId={propertyId}
+              calendarKey={calendarKey}
+            />
+          </div>
         )}
       </div>
     </div>

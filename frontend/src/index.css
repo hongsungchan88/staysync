@@ -35,4 +35,6 @@ body {
   font-family: system-ui, -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  /* 한국어를 글자 단위가 아니라 띄어쓰기에서 줄바꿈한다. 좁은 폭에서 "숙/소"처럼 단어 중간이 끊기던 것(작업지시-29) */
+  word-break: keep-all;
 }

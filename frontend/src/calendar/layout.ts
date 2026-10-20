@@ -10,6 +10,8 @@ import { daysBetween } from '@/lib/dates';
  */
 export const DAY_W = 66;
 export const LEFT_W = 216;
+/** 휴대폰 폭(작업지시-29)의 판매 단위 칸. 375px 에서 날짜가 네 칸쯤 보인다. */
+export const NARROW_LEFT_W = 96;
 export const HEAD_H = 58;
 
 /** 셀의 잔여 재고·요금·표식이 차지하는 높이. 막대는 이 아래에 쌓인다. */

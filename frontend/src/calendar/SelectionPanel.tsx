@@ -107,13 +107,14 @@ function IdlePanel({ data, propertyId, calendarKey }: Pick<Props, 'data' | 'prop
     );
   }
   return (
-    <aside className="w-72 shrink-0 border-l border-rule bg-paper p-4" data-testid="selection-panel">
-      <h2 className="text-sm font-semibold text-ink">기간 선택</h2>
-      <p className="mt-2 text-xs leading-relaxed text-muted">
+    <aside className="w-72 shrink-0 border-l border-rule bg-paper p-4 max-md:p-2" data-testid="selection-panel">
+      {/* 좁은 화면(표 아래 판)에서는 설명을 숨기고 "예약 추가"만 작게 둔다(작업지시-29). */}
+      <h2 className="text-sm font-semibold text-ink max-md:hidden">기간 선택</h2>
+      <p className="mt-2 text-xs leading-relaxed text-muted max-md:hidden">
         달력에서 셀을 끌면 선택한 범위가 여기에 나타납니다. 여러 판매 단위에 걸쳐 고를 수
         있습니다.
       </p>
-      <div className="mt-4 border-t border-rule pt-3">
+      <div className="mt-4 border-t border-rule pt-3 max-md:mt-0 max-md:border-0 max-md:pt-0">
         <Button size="sm" onClick={() => setAdding(true)} data-testid="add-reservation-button">
           예약 추가
         </Button>
