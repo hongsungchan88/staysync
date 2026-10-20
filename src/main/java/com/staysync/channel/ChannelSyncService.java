@@ -31,6 +31,7 @@ import org.springframework.stereotype.Component;
  *
  * <pre>
  *   RATE_BULK_EDITED       → 요금·제약이 바뀌었다 → PUSH_RATE 지원 연결로
+ *                            (판매 중지가 바뀌었으면 PUSH_AVAILABILITY 로도 — 원장의 stop_sell)
  *   RESERVATION_HELD       → 재고가 줄었다(임시)  → PUSH_AVAILABILITY 지원 연결로
  *   RESERVATION_CONFIRMED  → 재고가 줄었다        → PUSH_AVAILABILITY 지원 연결로
  *   RESERVATION_CANCELLED  → 재고가 늘었다              "
@@ -129,8 +130,15 @@ class ChannelSyncService implements DomainEventPublisher {
             log.warn("일괄 편집 이벤트에 범위가 없어 전파하지 않는다. payload={}", payload);
             return;
         }
+        boolean stopSellChanged = containsText(payload.get("changed"), "stopSell");
         for (Long unitId : unitIds) {
             propagate(unitId, from, to, Capability.PUSH_RATE, null);
+            if (stopSellChanged) {
+                // 판매 중지는 원장(booking)의 값이라 요금 갈래가 싣지 않는다(stopSell null). 재고 갈래가 원장의
+                // stop_sell 을 그대로 싣는다 — 이것이 없으면 04:00 재동기화까지 채널은 옛 값이었다(작업지시-25 B).
+                // 요금만 바꾼 편집은 여기를 타지 않으므로 채널의 판매 중지를 건드리지 않는다.
+                propagate(unitId, from, to, Capability.PUSH_AVAILABILITY, null);
+            }
         }
     }
 
@@ -277,6 +285,18 @@ class ChannelSyncService implements DomainEventPublisher {
         List<Long> values = new ArrayList<>();
         node.forEach(element -> values.add(element.asLong()));
         return values;
+    }
+
+    private static boolean containsText(JsonNode node, String value) {
+        if (node == null || !node.isArray()) {
+            return false;
+        }
+        for (JsonNode element : node) {
+            if (value.equals(element.asText())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Long asLong(JsonNode node) {

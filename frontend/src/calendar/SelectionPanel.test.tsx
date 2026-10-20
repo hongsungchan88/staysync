@@ -183,12 +183,51 @@ describe('요금·제약 편집 패널', () => {
     expect(invalidate).not.toHaveBeenCalled();
   });
 
+  it('판매 중지는 처음에 바꾸지 않음이고, 셋 중 고른 값이 stopSell 로 나간다', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, result({ changed: ['price'] })));
+    renderPanel();
+
+    expect(screen.getByTestId('stop-sell-keep')).toBeChecked();
+    // 요금만 정하면 판매 중지는 null — 서버가 판매 중지를 건드리지 않는다.
+    fireEvent.click(screen.getByTestId('price-mode-fixed'));
+    fireEvent.change(screen.getByTestId('price-input'), { target: { value: '250000' } });
+    fireEvent.click(screen.getByTestId('preview-button'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(lastBody().stopSell).toBeNull();
+
+    fetchMock.mockResolvedValue(jsonResponse(200, result({ changed: ['price', 'stopSell'] })));
+    fireEvent.click(screen.getByTestId('stop-sell-on'));
+    fireEvent.click(screen.getByTestId('preview-button'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(lastBody().stopSell).toBe(true);
+    await waitFor(() =>
+      expect(screen.getByTestId('bulk-edit-preview')).toHaveTextContent('14칸 · 요금, 판매 중지'),
+    );
+
+    fireEvent.click(screen.getByTestId('stop-sell-off'));
+    fireEvent.click(screen.getByTestId('preview-button'));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3));
+    expect(lastBody().stopSell).toBe(false);
+    await waitFor(() =>
+      expect(screen.getByTestId('bulk-edit-preview')).toHaveTextContent('14칸 · 요금, 판매 재개'),
+    );
+  });
+
+  it('판매 재개만 골라도 미리보기와 적용이 눌린다', () => {
+    renderPanel();
+
+    // false 는 "바꿀 것 있음"이다. null 과 헷갈리면 판매 재개만 하려는 사람이 막힌다.
+    fireEvent.click(screen.getByTestId('stop-sell-off'));
+    expect(screen.getByTestId('preview-button')).toBeEnabled();
+    expect(screen.getByTestId('stop-sell-hint')).toHaveTextContent('판매 중지를 풉니다');
+  });
+
   it('적용하면 캘린더를 다시 불러온다', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, result({ dryRun: false })));
     const invalidate = vi.spyOn(client, 'invalidateQueries');
     renderPanel();
 
-    fireEvent.click(screen.getByTestId('stop-sell-input'));
+    fireEvent.click(screen.getByTestId('stop-sell-on'));
     fireEvent.click(screen.getByTestId('apply-button'));
 
     await waitFor(() =>
