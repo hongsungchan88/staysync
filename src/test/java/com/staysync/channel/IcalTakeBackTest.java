@@ -131,6 +131,128 @@ class IcalTakeBackTest extends SyncTestBase {
         assertThat(예약수(f)).isEqualTo(2);
     }
 
+    // --- 작업지시-27. "모름"은 "바뀜"이 아니다 ---------------------------------------------
+
+    @Test
+    @DisplayName("되찾은 예약은 같은 피드로 두 번 더 폴링해도 금액·인원·박 단가가 그대로이고 CHANNEL_REVISION 이 없다 — 작업지시-27 완료 조건 1")
+    void 되찾은_예약은_다음_폴링에도_값을_유지한다() {
+        Fixture f = given("되찾기-유지");
+        String uid = "uid-" + java.util.UUID.randomUUID();
+        Long r = 되찾은_예약(f, uid, inA, outA);
+
+        poller.pollOne(icalOf(f));
+        poller.pollOne(icalOf(f));
+
+        assertThat(값(r)).containsExactly("340000.00", 3, 1);
+        assertThat(박단가(r)).containsExactly("170000.00", "170000.00");
+        assertThat(감사(r, "CHANNEL_REVISION")).as("날짜가 같고 나머지는 모름 — 아무것도 안 한 것").isZero();
+    }
+
+    @Test
+    @DisplayName("금액이 있는 iCal 예약의 날짜가 피드에서 바뀌면 날짜는 옮기고 금액·인원은 유지, 박 단가는 새 박 수로 — 완료 조건 2")
+    void 날짜가_바뀌어도_금액과_인원은_유지한다() {
+        Fixture f = given("되찾기-이동");
+        String uid = "uid-" + java.util.UUID.randomUUID();
+        Long r = 되찾은_예약(f, uid, inA, outA);
+
+        // 2박 → 3박(체크아웃 하루 뒤로).
+        feed.publish(calendar(vevent(uid, inA, outA.plusDays(1))), null);
+        poller.pollOne(icalOf(f));
+
+        assertThat(jdbc.queryForObject("SELECT check_out FROM reservation WHERE id = ?", LocalDate.class, r))
+                .isEqualTo(outA.plusDays(1));
+        assertThat(값(r)).containsExactly("340000.00", 3, 1);
+        assertThat(박단가(r)).as("ReservationNight.split — 나머지는 첫 밤")
+                .containsExactly("113333.34", "113333.33", "113333.33");
+        assertThat(booked(f, outA)).as("늘어난 밤도 재고를 잡는다").isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("금액 NULL·인원 0 인 보통 iCal 예약의 날짜 변경·취소는 전과 같다 — 완료 조건 3")
+    void 보통_iCal_예약은_전과_같다() {
+        Fixture f = given("보통-iCal");
+        ChannelConnection ical = icalConnection(f);
+        String uid = "uid-" + java.util.UUID.randomUUID();
+        feed.publish(calendar(vevent(uid, inA, outA)), null);
+        poller.pollOne(ical);
+        Long r = id(uid);
+        assertThat(값(r)).containsExactly(null, 0, 0);
+
+        feed.publish(calendar(vevent(uid, inA.plusDays(1), outA.plusDays(1))), null);
+        poller.pollOne(ical);
+        assertThat(jdbc.queryForObject("SELECT check_in FROM reservation WHERE id = ?", LocalDate.class, r))
+                .isEqualTo(inA.plusDays(1));
+        assertThat(값(r)).containsExactly(null, 0, 0);
+        assertThat(박단가(r)).containsExactly(null, null);
+        assertThat(감사(r, "CHANNEL_REVISION")).isEqualTo(1);
+
+        feed.publish(calendar(), null);
+        poller.pollOne(ical);
+        assertThat(status(r)).isEqualTo("CANCELLED");
+    }
+
+    @Test
+    @DisplayName("Channex 수정 리비전에 금액이 빠지면 저장된 금액을 유지한다 — 완료 조건 4")
+    void Channex_수정에_금액이_없으면_유지한다() {
+        Fixture f = given("Channex-금액없음");
+        connectWithoutMapping(f, "AIRBNB", AdapterType.CHANNEX, "http://unused");
+        String bookingId = "chx-" + java.util.UUID.randomUUID();
+        Long r = intake.ingest(channex(f, bookingId, inB, outB)).reservationId();
+
+        intake.ingest(new ChannelBookingCommand(f.propertyId(), f.unitId(), "AIRBNB", bookingId, "Te st",
+                inB, outB.plusDays(1), null, 3, 1, 101, false, Set.of("AIRBNB_ICAL")));
+
+        assertThat(jdbc.queryForObject("SELECT check_out FROM reservation WHERE id = ?", LocalDate.class, r))
+                .isEqualTo(outB.plusDays(1));
+        assertThat(값(r)).containsExactly("340000.00", 3, 1);
+        assertThat(jdbc.queryForObject("SELECT revision FROM reservation WHERE id = ?", Integer.class, r))
+                .isEqualTo(101);
+    }
+
+    /** iCal 예약 → Channex 가 넘겨받음(금액·인원) → 매핑 되돌려 iCal 이 되찾음. 되찾는 첫 폴링까지. */
+    private Long 되찾은_예약(Fixture f, String uid, LocalDate in, LocalDate out) {
+        ChannelConnection ical = icalConnection(f);
+        connectWithoutMapping(f, "AIRBNB", AdapterType.CHANNEX, "http://unused");
+        feed.publish(calendar(vevent(uid, in, out)), null);
+        poller.pollOne(ical);
+        Long r = id(uid);
+
+        unmap(ical);
+        intake.ingest(channex(f, "chx-" + java.util.UUID.randomUUID(), in, out));
+        channels.addMapping(ical.getId(), f.orgId(), f.unitId(), "listing-1", null);
+        poller.pollOne(ical);
+        assertThat(code(r)).isEqualTo("AIRBNB_ICAL");
+        assertThat(감사(r, "CHANNEL_TAKEBACK")).isEqualTo(1);
+        assertThat(값(r)).as("되찾는 순간은 원래 맞았다").containsExactly("340000.00", 3, 1);
+        return r;
+    }
+
+    private ChannelConnection icalOf(Fixture f) {
+        Long id = jdbc.queryForObject(
+                "SELECT id FROM channel_connection WHERE property_id = ? AND adapter_type = 'ICAL'",
+                Long.class, f.propertyId());
+        return channels.get(id, f.orgId());
+    }
+
+    /** {금액(소수 둘째 자리 문자열 또는 null), 성인, 아동}. */
+    private java.util.List<Object> 값(Long id) {
+        return jdbc.queryForObject("SELECT total_amount, adults, children FROM reservation WHERE id = ?",
+                (rs, i) -> java.util.Arrays.asList(
+                        rs.getBigDecimal(1) == null ? null : rs.getBigDecimal(1).setScale(2).toPlainString(),
+                        rs.getInt(2), rs.getInt(3)), id);
+    }
+
+    private java.util.List<String> 박단가(Long id) {
+        return jdbc.query("SELECT price FROM reservation_night WHERE reservation_id = ? ORDER BY stay_date",
+                (rs, i) -> rs.getBigDecimal(1) == null ? null : rs.getBigDecimal(1).setScale(2).toPlainString(), id);
+    }
+
+    private int 감사(Long id, String action) {
+        return jdbc.queryForObject(
+                "SELECT count(*) FROM audit_log WHERE entity_type = 'RESERVATION' AND entity_id = ? AND action = ?",
+                Integer.class, id, action);
+    }
+
     // --- 픽스처 -----------------------------------------------------------------
 
     private ChannelConnection icalConnection(Fixture f) {
