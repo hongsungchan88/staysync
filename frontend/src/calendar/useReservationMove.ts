@@ -17,6 +17,14 @@ import { addDays } from '@/lib/dates';
  */
 export const MOVABLE_STATUSES = new Set(['HOLD', 'CONFIRMED']);
 
+/**
+ * 끌어 옮길 수 있는 막대. 상태에 더해 **직접예약만**이다(작업지시-26 C) — 채널 예약을 여기서 옮겨도 채널에는 나가지
+ * 않고, 채널이 같은 예약을 다시 보내면 원래 날짜로 돌아온다. 서버도 409 로 막는다.
+ */
+export function isMovable(bar: { status: string; channel: string }): boolean {
+  return MOVABLE_STATUSES.has(bar.status) && bar.channel === 'DIRECT';
+}
+
 export interface MoveRequest {
   reservationId: number;
   /** 며칠 옮길지. 음수면 앞으로 당긴다. 숙박 일수는 유지한다. */

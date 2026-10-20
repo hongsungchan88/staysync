@@ -23,8 +23,10 @@ export async function moveReservation(
   return reservationSummarySchema.parse(body);
 }
 
-/** 앞의 둘은 전이, 뒤의 둘은 되돌리기다(작업지시-20 9절). 되돌리기는 사유가 있어야 한다. */
-export type Transition = 'check-in' | 'check-out' | 'check-in/undo' | 'check-out/undo';
+/**
+ * 체크인·체크아웃과 그 되돌리기(작업지시-20 9절 — 되돌리기는 사유가 있어야 한다), 그리고 직접예약 취소(작업지시-26 D).
+ */
+export type Transition = 'check-in' | 'check-out' | 'check-in/undo' | 'check-out/undo' | 'cancel';
 
 /**
  * 체크인·체크아웃. 4주차 상태 머신의 전이를 화면에서 부르기만 한다(작업지시-15 2절 E).

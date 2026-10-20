@@ -12,6 +12,7 @@ import {
   type PublicUnit,
 } from '@/api/publicBooking';
 import { loadPortOne } from './portone';
+import { toIso } from '@/lib/dates';
 
 /**
  * 직접예약 위젯. 계획서 8.7 의 `/widget/:propertyId` 다.
@@ -46,6 +47,8 @@ export function WidgetPage() {
   const [guestEmail, setGuestEmail] = useState('');
   const [held, setHeld] = useState<HoldResult | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
+  // 지난 날짜를 고르지 못하게(작업지시-26 B). 손님 기기의 오늘이다 — 막는 것은 서버(숙소 시간대)가 한다.
+  const today = toIso(new Date());
 
   // 마지막 밤까지 묻는다. 체크아웃일은 숙박하지 않으므로 재고를 차지하지 않는다.
   const lastNight = checkOut ? addDays(checkOut, -1) : '';
@@ -127,6 +130,7 @@ export function WidgetPage() {
               type="date"
               aria-label="체크인"
               className={inputClass}
+              min={today}
               value={checkIn}
               onChange={(event) => {
                 setCheckIn(event.target.value);
@@ -139,6 +143,7 @@ export function WidgetPage() {
               type="date"
               aria-label="체크아웃"
               className={inputClass}
+              min={checkIn ? addDays(checkIn, 1) : addDays(today, 1)}
               value={checkOut}
               onChange={(event) => {
                 setCheckOut(event.target.value);

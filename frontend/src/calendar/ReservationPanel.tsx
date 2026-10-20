@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
  * 캘린더에서 예약 막대를 누르면 열리는 최소 패널. 작업지시-15 2절 E.
  *
  * 새 화면을 만들지 않고 `SelectionPanel` 자리를 쓴다. 하는 일은 체크인과 체크아웃,
- * 그리고 그 둘의 되돌리기다(작업지시-20 9절) — 전부 화면 안에서 한 번 더 묻는다.
+ * 그 둘의 되돌리기(작업지시-20 9절), 직접예약 취소(작업지시-26 D)다 — 전부 화면 안에서 한 번 더 묻는다.
  * 청소 태스크 자동 생성이 체크아웃에 걸려 있어 이것이 없으면 운영 흐름의 절반이
  * 화면에서 보이지 않는다(확인-08 3절 4번).
  *
@@ -91,6 +91,20 @@ const ACTIONS: Action[] = [
       '체크아웃을 되돌려 투숙 중으로 돌립니다. 아직 시작하지 않은 청소 태스크는 함께 거둡니다. ' +
       '청소가 진행 중이거나 끝났으면 되돌릴 수 없습니다. 인박스 알림은 남습니다.',
   },
+  // 직접예약만 여기서 취소한다(작업지시-26 D). 채널 예약은 채널에서 취소해야 한다 — 서버도 409 로 막는다.
+  ...(['HOLD', 'CONFIRMED'] as const).map(
+    (from): Action => ({
+      transition: 'cancel',
+      from,
+      label: '예약 취소',
+      confirmLabel: '예약을 취소합니다',
+      testId: 'cancel-button',
+      undo: false,
+      visible: (bar) => bar.channel === 'DIRECT',
+      explain: () =>
+        '예약을 취소하고 날짜를 다시 엽니다. 취소는 되돌릴 수 없습니다. 결제 환불은 결제사에서 따로 해야 합니다.',
+    }),
+  ),
 ];
 
 interface Props {
@@ -183,7 +197,7 @@ export function ReservationPanel({ bar, calendarKey, onClose }: Props) {
           <Button
             key={action.transition}
             size="sm"
-            variant={action.undo ? 'ghost' : 'primary'}
+            variant={action.undo || action.transition === 'cancel' ? 'ghost' : 'primary'}
             disabled={mutation.isPending}
             onClick={() => {
               setError(null);

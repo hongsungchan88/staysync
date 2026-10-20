@@ -31,7 +31,7 @@ import {
   type Cell,
   type SelectionRect,
 } from './selection';
-import { MOVABLE_STATUSES, type MoveRequest } from './useReservationMove';
+import { MOVABLE_STATUSES, isMovable, type MoveRequest } from './useReservationMove';
 import { dayOfMonth, isWeekend, weekdayLabel } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 
@@ -516,7 +516,9 @@ function DayCell({
  */
 function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: ReservationBar) => void }) {
   const { bar, lane, startIndex, endIndex } = placed;
-  const movable = MOVABLE_STATUSES.has(bar.status);
+  const movable = isMovable(bar);
+  // 살아 있는데 못 끄는 막대는 채널 예약이다. 왜 안 끌리는지 툴팁으로 알린다.
+  const channelLocked = MOVABLE_STATUSES.has(bar.status) && !movable;
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: bar.id,
     disabled: !movable,
@@ -528,7 +530,9 @@ function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: Reservatio
       data-testid={`bar-${bar.id}`}
       data-bar={bar.id}
       data-movable={movable || undefined}
-      title={`${guestLabel(bar)} · ${channelLabel(bar.channel)} · ${bar.status}`}
+      title={`${guestLabel(bar)} · ${channelLabel(bar.channel)} · ${bar.status}${
+        channelLocked ? ' · 날짜는 그 채널에서 바꿉니다' : ''
+      }`}
       aria-label={`${guestLabel(bar)} 예약 ${bar.checkIn}부터 ${bar.checkOut}까지`}
       className={cn(
         'absolute flex items-center overflow-hidden rounded px-2 text-[11px] text-paper',

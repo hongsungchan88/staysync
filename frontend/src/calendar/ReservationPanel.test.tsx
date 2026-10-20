@@ -174,6 +174,37 @@ describe('체크인·체크아웃 패널', () => {
 
   // --- 작업지시-20 9절 ------------------------------------------------------
 
+  it('직접예약에만 예약 취소가 있고, 확인 뒤 cancel 경로를 부른다 — 작업지시-26 D', async () => {
+    const { unmount } = render(
+      <ReservationPanel bar={{ ...bar('CONFIRMED'), channel: 'AIRBNB_ICAL' }} calendarKey={KEY} onClose={() => {}} />,
+      { wrapper },
+    );
+    // 채널 예약은 채널에서 취소해야 한다. 서버도 409 로 막는다.
+    expect(screen.queryByTestId('cancel-button')).not.toBeInTheDocument();
+    unmount();
+
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, summary('CANCELLED')));
+    render(
+      <ReservationPanel bar={{ ...bar('CONFIRMED'), channel: 'DIRECT' }} calendarKey={KEY} onClose={() => {}} />,
+      { wrapper },
+    );
+    fireEvent.click(screen.getByTestId('cancel-button'));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByTestId('transition-confirm')).toHaveTextContent('결제 환불은 결제사에서 따로');
+
+    fireEvent.click(screen.getByTestId('transition-confirm-button'));
+    await waitFor(() => expect(screen.getByTestId('reservation-status')).toHaveTextContent('취소'));
+    expect(fetchMock.mock.calls[0]![0]).toBe('/api/reservations/73/cancel');
+    expect(screen.queryByTestId('cancel-button')).not.toBeInTheDocument();
+  });
+
+  it('결제 대기(HOLD) 직접예약도 취소할 수 있다', () => {
+    render(<ReservationPanel bar={{ ...bar('HOLD'), channel: 'DIRECT' }} calendarKey={KEY} onClose={() => {}} />, {
+      wrapper,
+    });
+    expect(screen.getByTestId('cancel-button')).toBeInTheDocument();
+  });
+
   it('확인 단계에서 취소하면 아무것도 보내지 않는다', () => {
     const confirmSpy = vi.spyOn(window, 'confirm');
     render(<ReservationPanel bar={bar('CONFIRMED')} calendarKey={KEY} onClose={() => {}} />, {
