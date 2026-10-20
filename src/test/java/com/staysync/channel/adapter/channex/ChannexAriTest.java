@@ -308,6 +308,52 @@ class ChannexAriTest extends SyncTestBase {
     }
 
     @Test
+    @DisplayName("일괄 편집의 판매 중지·재개가 04:00 을 기다리지 않고 stop_sell true / false 로 나간다 — 작업지시-25 B")
+    void 판매_중지와_재개가_바로_나간다() throws Exception {
+        Fixture f = given("channex-판매중지");
+        ChannelConnection connection = connectChannex(f);
+        LocalDate day = LocalDate.of(2027, 3, 3);
+
+        판매중지(f, day, true);
+        assertThat(마지막_stop_sell(day)).as("판매 중지").isTrue();
+
+        channex.reset();
+        channex.replyAll(Reply.ok(Responses.TASK_ACCEPTED));
+        판매중지(f, day, false);
+        assertThat(마지막_stop_sell(day)).as("판매 재개").isFalse();
+
+        assertThat(worker.jobsOf(connection.getId())).allSatisfy(job ->
+                assertThat(job.getStatus()).isEqualTo(SyncJobStatus.SUCCESS));
+    }
+
+    @Test
+    @DisplayName("요금만 바꾼 일괄 편집은 채널의 판매 중지를 건드리지 않는다 — 작업지시-25 B")
+    void 요금만_바꾸면_판매_중지는_그대로다() throws Exception {
+        Fixture f = given("channex-요금만");
+        connectChannex(f);
+        LocalDate day = LocalDate.of(2027, 3, 4);
+        판매중지(f, day, true);
+        channex.reset();
+        channex.replyAll(Reply.ok(Responses.TASK_ACCEPTED));
+
+        bulkEdit.edit(f.propertyId(), new BulkEdit.Request(
+                List.of(f.unitId()), day, day, Set.of(),
+                new BulkEdit.PriceChange.Fixed(BigDecimal.valueOf(150)), null, null, null, false));
+        drainRelay();
+        buffer.flushAll();
+        worker.drainAll(5);
+
+        List<ChannexStubServer.Received> sent = channex.received("/api/v1/restrictions");
+        assertThat(sent).hasSize(1);
+        JsonNode value = json.readTree(sent.get(0).body()).path("values").get(0);
+        assertThat(value.get("rate").asText()).isEqualTo("150.00");
+        assertThat(value.has("stop_sell")).as("판매 중지를 싣지 않는다 — 풀지도 걸지도 않는다").isFalse();
+        assertThat(channex.received("/api/v1/availability")).isEmpty();
+        assertThat(jdbc.queryForObject("SELECT stop_sell FROM inventory_ledger WHERE unit_id = ? AND stay_date = ?",
+                Boolean.class, f.unitId(), day)).as("원장도 그대로").isTrue();
+    }
+
+    @Test
     @DisplayName("초과 예약이 남은 날의 재고는 0 으로 나간다. overbooked 를 더해 보내지 않는다 — 9.2 B")
     void 초과분은_채널로_흘리지_않는다() throws Exception {
         Fixture f = given("channex-초과");
@@ -404,6 +450,31 @@ class ChannexAriTest extends SyncTestBase {
     }
 
     // --- 픽스처 ---------------------------------------------------------------------
+
+    /** 컨트롤러가 부르는 그 서비스로 하루 판매 중지(또는 재개) → 릴레이 → 버퍼 → 워커. */
+    private void 판매중지(Fixture f, LocalDate day, boolean stopSell) {
+        bulkEdit.edit(f.propertyId(), new BulkEdit.Request(
+                List.of(f.unitId()), day, day, Set.of(), null, null, null, stopSell, false));
+        drainRelay();
+        buffer.flushAll();
+        worker.drainAll(5);
+    }
+
+    /** 그날을 덮는 마지막 /restrictions 값의 stop_sell. 없으면 실패한다. */
+    private boolean 마지막_stop_sell(LocalDate day) throws Exception {
+        List<ChannexStubServer.Received> sent = channex.received("/api/v1/restrictions");
+        assertThat(sent).as("판매 중지가 /restrictions 로 나갔다").isNotEmpty();
+        for (int i = sent.size() - 1; i >= 0; i--) {
+            for (JsonNode value : json.readTree(sent.get(i).body()).path("values")) {
+                if (!LocalDate.parse(value.get("date_from").asText()).isAfter(day)
+                        && !LocalDate.parse(value.get("date_to").asText()).isBefore(day)
+                        && value.has("stop_sell")) {
+                    return value.get("stop_sell").asBoolean();
+                }
+            }
+        }
+        throw new AssertionError(day + " 를 덮는 stop_sell 이 없다");
+    }
 
     private static ChannelCredentials credentials() {
         return new ChannelCredentials(-1L, "BOOKING_COM", Map.of(

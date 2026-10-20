@@ -49,6 +49,19 @@ const FIELD_LABELS: Record<string, string> = {
   stopSell: '판매 중지',
 };
 
+/** 판매 중지 셋. 요청의 `stopSell` 값 그대로다 — null 은 바꾸지 않음. */
+const STOP_SELL_CHOICES = [
+  { value: null, label: '바꾸지 않음', testId: 'stop-sell-keep' },
+  { value: true, label: '판매 중지', testId: 'stop-sell-on' },
+  { value: false, label: '판매 재개', testId: 'stop-sell-off' },
+] as const;
+
+/** 미리보기 문구의 항목 하나. 판매 중지는 무엇으로 바뀌는지까지 적는다. */
+function fieldLabel(field: string, stopSell: boolean | null): string {
+  if (field === 'stopSell' && stopSell === false) return '판매 재개';
+  return FIELD_LABELS[field] ?? field;
+}
+
 /**
  * 한 번에 바꿀 수 있는 최대 일수. 서버에는 상한이 없다(작업지시-23 8.1) — 1년 치를 한 번에 고치되
  * 실수로 몇 년을 바꾸지 않게 화면에서 막는다.
@@ -110,9 +123,9 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
   const [minStay, setMinStay] = useState('');
   const [stopSell, setStopSell] = useState<boolean | null>(null);
   // 결과와 함께 그 요청의 기간을 둔다. 화면 밖 날짜를 바꾸는 것이라 눈으로 확인할 길이 이 문구뿐이다.
-  const [preview, setPreview] = useState<(BulkEditResult & { from: string; to: string }) | null>(
-    null,
-  );
+  const [preview, setPreview] = useState<
+    (BulkEditResult & { from: string; to: string; stopSell: boolean | null }) | null
+  >(null);
   const [error, setError] = useState<string | null>(null);
 
   // 다시 끌면 그 범위로 돌아간다.
@@ -153,6 +166,7 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
       ...(await bulkEdit(propertyId, input(dryRun))),
       from,
       to,
+      stopSell,
     }),
     onMutate: () => setError(null),
     onSuccess: (result) => {
@@ -306,15 +320,31 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
         />
       </label>
 
-      <label className="mt-3 flex items-center gap-2 text-xs text-body">
-        <input
-          type="checkbox"
-          checked={stopSell === true}
-          onChange={(e) => setStopSell(e.target.checked ? true : null)}
-          data-testid="stop-sell-input"
-        />
-        판매 중지
-      </label>
+      {/* 셋 중 고른다(작업지시-25). 체크박스는 풀면 "바꾸지 않음"이라 판매 재개를 보낼 길이 없었다. */}
+      <fieldset className="mt-3">
+        <legend className="text-xs text-muted">판매 중지</legend>
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          {STOP_SELL_CHOICES.map((choice) => (
+            <label key={choice.testId} className="flex items-center gap-1">
+              <input
+                type="radio"
+                name="stopSell"
+                checked={stopSell === choice.value}
+                onChange={() => setStopSell(choice.value)}
+                data-testid={choice.testId}
+              />
+              {choice.label}
+            </label>
+          ))}
+        </div>
+        {stopSell !== null && (
+          <p className="mt-1 text-[11px] text-muted" data-testid="stop-sell-hint">
+            {stopSell
+              ? '고른 날짜를 연결된 채널에서 닫습니다.'
+              : '판매 중지를 풉니다. 예약된 날은 그대로 닫혀 있습니다.'}
+          </p>
+        )}
+      </fieldset>
 
       {/*
         적용 채널은 두지 않았다. 채널 전파가 P3 라 지금 고른 채널로 나갈 곳이 없다.
@@ -356,7 +386,7 @@ function EditPanel({ data, rect, propertyId, calendarKey }: Props & { rect: Sele
         >
           {preview.dryRun ? '바뀔 것: ' : '바꿨습니다: '}
           {`${preview.from} ~ ${preview.to} · 판매 단위 ${preview.unitCount}개 · ${preview.cellCount}칸 · `}
-          {preview.changed.map((field) => FIELD_LABELS[field] ?? field).join(', ')}
+          {preview.changed.map((field) => fieldLabel(field, preview.stopSell)).join(', ')}
         </p>
       )}
 
