@@ -86,6 +86,8 @@ export const reservationSummarySchema = z.object({
   checkIn: z.string(),
   checkOut: z.string(),
   nights: z.number(),
+  // 예약 입력(작업지시-28) 뒤 금액을 보인다. 미상이면 키가 빠진다.
+  totalAmount: z.number().nullish(),
 });
 export type ReservationSummary = z.infer<typeof reservationSummarySchema>;
 

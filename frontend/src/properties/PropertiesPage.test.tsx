@@ -95,6 +95,32 @@ describe('숙소·판매 단위 화면', () => {
     expect(screen.queryByTestId('properties-empty')).not.toBeInTheDocument();
   });
 
+  it('숙소마다 예약 위젯 주소·열기·복사가 있고, 판매 단위가 없으면 그 사실을 적는다 — 작업지시-28 A', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url === '/api/properties') return Promise.resolve(json([숙소, { ...숙소, id: 9, name: '빈 숙소' }]));
+      if (url === '/api/properties/7/units') return Promise.resolve(json([판매단위]));
+      if (url === '/api/properties/9/units') return Promise.resolve(json([]));
+      return Promise.reject(new Error('예상 밖 요청 ' + url));
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<PropertiesPage />, { wrapper });
+
+    const 숙소칸 = await screen.findByRole('region', { name: '숙소 홍대 지니하우스' });
+    const 주소 = `${window.location.origin}/widget/7`;
+    expect(within(숙소칸).getByTestId('widget-url')).toHaveTextContent(주소);
+    expect(within(숙소칸).getByTestId('widget-open')).toHaveAttribute('href', 주소);
+    expect(within(숙소칸).getByTestId('widget-open')).toHaveAttribute('target', '_blank');
+
+    await userEvent.click(within(숙소칸).getByTestId('widget-copy'));
+    expect(writeText).toHaveBeenCalledWith(주소);
+    expect(await within(숙소칸).findByText('복사했습니다.')).toBeInTheDocument();
+    expect(within(숙소칸).queryByTestId('widget-empty')).not.toBeInTheDocument();
+
+    const 빈숙소 = await screen.findByRole('region', { name: '숙소 빈 숙소' });
+    expect(await within(빈숙소).findByTestId('widget-empty')).toHaveTextContent('판매 단위가 없어');
+  });
+
   it('수량을 팔린 날 아래로 줄이면 서버가 준 막는 날짜를 그대로 보여 준다', async () => {
     fetchMock.mockImplementation((url: string, init?: RequestInit) => {
       if (url === '/api/units/3/capacity' && init?.method === 'PATCH') {

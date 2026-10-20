@@ -15,7 +15,7 @@ import {
   type UnitKind,
 } from '@/api/properties';
 import type { PropertySummary } from '@/api/schemas';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 /**
@@ -206,8 +206,67 @@ function PropertyCard({ property }: { property: PropertySummary }) {
         </div>
       )}
 
+      <WidgetLink propertyId={property.id} />
       <UnitList propertyId={property.id} />
     </section>
+  );
+}
+
+/**
+ * 숙소의 직접예약 위젯 주소(작업지시-28 A). 앱 어디에도 링크가 없어 새 계정은 자기 위젯을 찾을 수 없었다.
+ *
+ * 주소는 지금 열려 있는 앱의 출처다 — 배포는 `https://staysync.kr`, 로컬은 개발 서버. 새 설정을 두지 않았다.
+ */
+function WidgetLink({ propertyId }: { propertyId: number }) {
+  // 판매 단위 목록과 같은 조회다(react-query 가 하나로 합친다).
+  const units = useQuery({ queryKey: ['units', propertyId], queryFn: () => fetchUnits(propertyId) });
+  const [copy, setCopy] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const url = `${window.location.origin}/widget/${propertyId}`;
+
+  const copyUrl = () => {
+    // 클립보드는 https·localhost 에서만 열린다. 막히면 주소를 직접 고르게 둔다.
+    void (navigator.clipboard?.writeText(url) ?? Promise.reject(new Error('no clipboard')))
+      .then(() => setCopy('copied'))
+      .catch(() => setCopy('failed'));
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 border-t border-rule pt-3" data-testid="widget-link">
+      <h3 className="text-xs font-semibold text-muted">예약 위젯</h3>
+      <p className="text-xs text-muted">손님이 직접 날짜를 고르고 결제하는 주소입니다.</p>
+      <p className="break-all text-xs text-ink tabular-nums" data-testid="widget-url">
+        {url}
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonVariants({ size: 'sm' })}
+          data-testid="widget-open"
+        >
+          열기
+        </a>
+        <Button size="sm" type="button" onClick={copyUrl} data-testid="widget-copy">
+          주소 복사
+        </Button>
+        {copy === 'copied' && (
+          <span role="status" className="text-xs text-muted">
+            복사했습니다.
+          </span>
+        )}
+        {copy === 'failed' && (
+          <span role="status" className="text-xs text-warn">
+            복사하지 못했습니다. 위 주소를 직접 고르세요.
+          </span>
+        )}
+      </div>
+      {units.data?.length === 0 && (
+        <p className="text-xs text-warn" data-testid="widget-empty">
+          판매 단위가 없어 위젯에 팔 것이 없습니다. 아래에서 판매 단위를 넣으면 위젯에 나옵니다.
+        </p>
+      )}
+    </div>
   );
 }
 

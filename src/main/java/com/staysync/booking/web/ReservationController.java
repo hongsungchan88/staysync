@@ -10,6 +10,7 @@ import com.staysync.property.OwnedResources;
 import com.staysync.property.UnitCatalog;
 import com.staysync.shared.security.AuthenticatedUser;
 import jakarta.validation.Valid;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -39,6 +40,7 @@ class ReservationController {
     private final GuestRepository guestRepo;
     private final OwnedResources owned;
     private final UnitCatalog unitCatalog;
+    private final PublicBookingService rates;
 
     ReservationController(BookingService bookingService,
                           GuestRegistrar guestRegistrar,
@@ -46,7 +48,8 @@ class ReservationController {
                           ReservationNightRepository nightRepo,
                           GuestRepository guestRepo,
                           OwnedResources owned,
-                          UnitCatalog unitCatalog) {
+                          UnitCatalog unitCatalog,
+                          PublicBookingService rates) {
         this.bookingService = bookingService;
         this.guestRegistrar = guestRegistrar;
         this.reservationRepo = reservationRepo;
@@ -54,6 +57,7 @@ class ReservationController {
         this.guestRepo = guestRepo;
         this.owned = owned;
         this.unitCatalog = unitCatalog;
+        this.rates = rates;
     }
 
     @GetMapping
@@ -87,6 +91,10 @@ class ReservationController {
     ResponseEntity<ReservationSummary> create(@Valid @RequestBody CreateReservationRequest request) {
         Long orgId = orgId();
         requireOwnedUnit(request.propertyId(), request.unitId(), orgId);
+        StayPeriod period = new StayPeriod(request.checkIn(), request.checkOut());
+        // 위젯과 같은 요금표 규칙(작업지시-28 B) — 최소 숙박을 보고, 금액을 비우면 요금표 합계를 쓴다. 사람이 적은 금액이 있으면 그 값.
+        BigDecimal quoted = rates.quoteForManual(request.propertyId(), request.unitId(), period);
+        BigDecimal amount = request.totalAmount() == null ? quoted : request.totalAmount();
 
         Long guestId = null;
         if (request.guestName() != null && !request.guestName().isBlank()) {
@@ -96,8 +104,8 @@ class ReservationController {
 
         Reservation created = bookingService.registerManual(
                 request.propertyId(), request.unitId(),
-                new StayPeriod(request.checkIn(), request.checkOut()),
-                request.totalAmount(),
+                period,
+                amount,
                 request.adults(),
                 request.children() == null ? 0 : request.children(),
                 guestId);
