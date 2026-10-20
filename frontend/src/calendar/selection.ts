@@ -42,8 +42,9 @@ export function cellAt(
   pointer: PointerPosition,
   rowOffsets: number[],
   totalDays: number,
+  leftW: number = LEFT_W,
 ): Cell {
-  const x = pointer.offsetX + pointer.scrollLeft - LEFT_W;
+  const x = pointer.offsetX + pointer.scrollLeft - leftW;
   const dateIndex = clamp(Math.floor(x / DAY_W), 0, totalDays - 1);
 
   const y = pointer.offsetY + pointer.scrollTop - HEAD_H;

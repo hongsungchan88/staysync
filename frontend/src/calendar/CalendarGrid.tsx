@@ -17,6 +17,7 @@ import {
   HEAD_H,
   LANE_H,
   LEFT_W,
+  NARROW_LEFT_W,
   TEXT_H,
   layoutGrid,
   type PlacedBar,
@@ -34,6 +35,7 @@ import {
 import { MOVABLE_STATUSES, isMovable, type MoveRequest } from './useReservationMove';
 import { dayOfMonth, isWeekend, weekdayLabel } from '@/lib/dates';
 import { cn } from '@/lib/utils';
+import { useNarrow } from '@/lib/useNarrow';
 
 /**
  * 캘린더 그리드.
@@ -66,6 +68,9 @@ const DRAG_START_PX = 4;
 
 export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  // 휴대폰 폭에서는 판매 단위 칸을 좁혀 날짜가 보이게 한다(작업지시-29). 좌표 계산·막대 위치가 같은 값을 쓴다.
+  const narrow = useNarrow();
+  const leftW = narrow ? NARROW_LEFT_W : LEFT_W;
   const dates = useMemo(() => data.units[0]?.days.map((day) => day.date) ?? [], [data]);
   const layouts = useMemo(() => layoutGrid(data), [data]);
   const heights = useMemo(
@@ -88,10 +93,10 @@ export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
     getScrollElement: () => scrollRef.current,
     estimateSize: () => DAY_W,
     overscan: OVERSCAN,
-    paddingStart: LEFT_W,
+    paddingStart: leftW,
   });
 
-  const selection = useRangeSelection(scrollRef, heights, dates.length, onSelect);
+  const selection = useRangeSelection(scrollRef, heights, dates.length, onSelect, leftW);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: DRAG_START_PX } }),
@@ -118,8 +123,8 @@ export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
 
   // 보이는 구간의 앞뒤를 여백으로 메운다. 여백이 있어야 스크롤 막대의 길이와 위치가
   // 전체 데이터 기준으로 맞는다.
-  const padLeft = (cols[0]?.start ?? LEFT_W) - LEFT_W;
-  const padRight = colVirtualizer.getTotalSize() - (cols[cols.length - 1]?.end ?? LEFT_W);
+  const padLeft = (cols[0]?.start ?? leftW) - leftW;
+  const padRight = colVirtualizer.getTotalSize() - (cols[cols.length - 1]?.end ?? leftW);
   const padTop = (rows[0]?.start ?? HEAD_H) - HEAD_H;
   const padBottom = rowVirtualizer.getTotalSize() - (rows[rows.length - 1]?.end ?? HEAD_H);
 
@@ -127,7 +132,9 @@ export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
     <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
       <div
         ref={scrollRef}
-        className="h-full touch-none overflow-auto bg-paper select-none"
+        // 좁은 화면은 손가락으로 넘겨 봐야 한다 — touch-none 이면 터치가 전부 칸 선택이 되어 넘길 수 없다.
+        // 대신 그 폭에서는 끌어 선택이 안 되고 누르면 한 칸이 골라진다(기간은 패널에서 고친다, 작업지시-23).
+        className={cn('h-full overflow-auto bg-paper select-none', !narrow && 'touch-none')}
         data-testid="calendar-grid"
         onPointerDown={selection.onPointerDown}
         onPointerMove={selection.onPointerMove}
@@ -144,9 +151,9 @@ export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
             {/* 좌상단 모서리. 두 축 모두에 고정되므로 z 가 가장 높다. */}
             <div
               className="sticky left-0 z-30 flex shrink-0 items-center border-r border-b border-rule-strong bg-paper px-3 text-xs font-medium text-muted"
-              style={{ width: LEFT_W }}
+              style={{ width: leftW }}
             >
-              판매 단위 {data.units.length}개
+              {narrow ? `${data.units.length}개` : `판매 단위 ${data.units.length}개`}
             </div>
             <div style={{ width: padLeft }} />
             {cols.map((col) => {
@@ -184,6 +191,7 @@ export function CalendarGrid({ data, onSelect, onMove, onBarClick }: Props) {
                 height={row.size}
                 selection={selection.rect}
                 onBarClick={onBarClick}
+                leftW={leftW}
               />
             );
           })}
@@ -206,6 +214,7 @@ function useRangeSelection(
   heights: number[],
   totalDays: number,
   onSelect: (rect: SelectionRect | null) => void,
+  leftW: number,
 ) {
   const [rect, setRect] = useState<SelectionRect | null>(null);
   const anchor = useRef<Cell | null>(null);
@@ -237,9 +246,10 @@ function useRangeSelection(
       },
       rowOffsets,
       totalDays,
+      leftW,
     );
     publish(rectOf(anchor.current, head));
-  }, [publish, rowOffsets, scrollRef, totalDays]);
+  }, [publish, rowOffsets, scrollRef, totalDays, leftW]);
 
   /**
    * 가장자리에 닿아 있는 동안 화면을 민다(완료 조건 5).
@@ -299,6 +309,7 @@ function useRangeSelection(
       { ...pointer.current, scrollLeft: element.scrollLeft, scrollTop: element.scrollTop },
       rowOffsets,
       totalDays,
+      leftW,
     );
     anchor.current = start;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -369,6 +380,7 @@ function UnitRow({
   height,
   selection,
   onBarClick,
+  leftW,
 }: {
   unit: GridData['units'][number];
   unitIndex: number;
@@ -379,6 +391,7 @@ function UnitRow({
   height: number;
   selection: SelectionRect | null;
   onBarClick: (bar: ReservationBar) => void;
+  leftW: number;
 }) {
   const firstVisible = cols[0]?.index ?? 0;
   const lastVisible = cols[cols.length - 1]?.index ?? 0;
@@ -392,8 +405,8 @@ function UnitRow({
   return (
     <div className="relative flex" style={{ height }} data-testid={`row-${unit.id}`}>
       <div
-        className="sticky left-0 z-10 flex shrink-0 flex-col justify-center border-r border-b border-rule-strong bg-paper px-3"
-        style={{ width: LEFT_W }}
+        className="sticky left-0 z-10 flex shrink-0 flex-col justify-center border-r border-b border-rule-strong bg-paper px-2 md:px-3"
+        style={{ width: leftW }}
       >
         <span className="truncate text-sm text-ink">{unit.name}</span>
         <span className="text-[11px] text-muted">총 {unit.totalUnits}실</span>
@@ -417,7 +430,7 @@ function UnitRow({
         기준점이 행의 왼쪽 끝이라 좌측 목록 너비를 더해야 날짜 칸과 맞는다.
       */}
       {visibleBars.map((placed) => (
-        <Bar key={placed.bar.id} placed={placed} onClick={onBarClick} />
+        <Bar key={placed.bar.id} placed={placed} onClick={onBarClick} leftW={leftW} />
       ))}
     </div>
   );
@@ -514,7 +527,15 @@ function DayCell({
  * **옮길 수 없는 상태는 아예 잡히지 않는다.** 잡히기만 하고 놓을 때마다 거절당하면 왜 안
  * 되는지 알 수 없다. 물론 잡힌다고 옮겨지는 것도 아니다 — 재고 판정은 서버가 한다.
  */
-function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: ReservationBar) => void }) {
+function Bar({
+  placed,
+  onClick,
+  leftW,
+}: {
+  placed: PlacedBar;
+  onClick: (bar: ReservationBar) => void;
+  leftW: number;
+}) {
   const { bar, lane, startIndex, endIndex } = placed;
   const movable = isMovable(bar);
   // 살아 있는데 못 끄는 막대는 채널 예약이다. 왜 안 끌리는지 툴팁으로 알린다.
@@ -540,7 +561,7 @@ function Bar({ placed, onClick }: { placed: PlacedBar; onClick: (bar: Reservatio
         isDragging && 'z-40 cursor-grabbing opacity-80 shadow-lg',
       )}
       style={{
-        left: LEFT_W + startIndex * DAY_W + 3,
+        left: leftW + startIndex * DAY_W + 3,
         width: (endIndex - startIndex) * DAY_W - 6,
         top: TEXT_H + lane * LANE_H + 2,
         height: LANE_H - 4,

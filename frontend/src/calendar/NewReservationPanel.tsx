@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { createReservation } from '@/api/reservations';
 import { ApiError } from '@/api/client';
@@ -35,6 +35,15 @@ export function NewReservationPanel({ data, propertyId, calendarKey, onClose }: 
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [created, setCreated] = useState<ReservationSummary | null>(null);
+
+  // 좁은 화면의 아래 판처럼 Esc 로 접는다(작업지시-29).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const unitName = data.units.find((unit) => unit.id === unitId)?.name ?? '';
   const problem =
