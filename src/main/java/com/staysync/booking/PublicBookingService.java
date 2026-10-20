@@ -187,6 +187,26 @@ public class PublicBookingService {
                 held.getHoldExpiresAt());
     }
 
+    /**
+     * 호스트가 화면에서 입력하는 예약(작업지시-28 B)의 요금표 규칙 — 최소 숙박을 보고 요금표 합계를 돌려준다.
+     *
+     * <p>위젯과 같은 계산이다(같은 {@link #nightsOf}·{@link #quote}). 재고·판매 중지는 여기서 보지 않는다 — 원장이
+     * 락 안에서 막고 그 문구가 그대로 나간다. 지난 날짜는 막지 않는다(전화·현장 예약을 나중에 적는다).
+     */
+    @Transactional(readOnly = true)
+    public BigDecimal quoteForManual(Long propertyId, Long unitId, StayPeriod period) {
+        List<PublicDay> nights = nightsOf(propertyId, unitId, period);
+        short minStay = nights.get(0).minStay();
+        if (nights.size() < minStay) {
+            throw new MinimumStayException(minStay, nights.size());
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        for (PublicDay night : nights) {
+            total = total.add(night.price());
+        }
+        return total;
+    }
+
     // --- 안쪽 -----------------------------------------------------------------
 
     /**

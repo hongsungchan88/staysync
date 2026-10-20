@@ -33,12 +33,18 @@ final class ReservationDtos {
             @NotNull Long unitId,
             @NotNull LocalDate checkIn,
             @NotNull LocalDate checkOut,
-            @NotNull @DecimalMin("0") BigDecimal totalAmount,
+            @DecimalMin("0") BigDecimal totalAmount,
             @NotNull @Min(1) @Max(99) Short adults,
             @Min(0) @Max(99) Short children,
             @Size(max = 120) String guestName,
             @Size(max = 40) String guestPhone,
             @Email @Size(max = 255) String guestEmail) {
+
+        /** 체크아웃이 체크인보다 뒤여야 한다. 없으면 {@code StayPeriod} 의 예외가 500 으로 나갔다(검토-02). */
+        @jakarta.validation.constraints.AssertTrue(message = "체크아웃은 체크인보다 뒤여야 합니다.")
+        boolean isStayOrdered() {
+            return checkIn == null || checkOut == null || checkOut.isAfter(checkIn);
+        }
     }
 
     /** 날짜와 인원 변경. 넘기지 않은 값은 그대로 둔다. */

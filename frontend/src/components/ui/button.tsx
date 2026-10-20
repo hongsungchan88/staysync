@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
  * 때문이다. Radix 프리미티브는 쓰는 컴포넌트가 생길 때 그때 들인다.
  * 쓰지 않는 의존을 미리 넣지 않는다는 규칙이 여기에도 적용된다.
  */
-const buttonVariants = cva(
+export const buttonVariants = cva(
   'inline-flex items-center justify-center rounded-md text-sm font-medium transition ' +
     'disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-2 ' +
     'focus-visible:outline-offset-2 focus-visible:outline-clay',

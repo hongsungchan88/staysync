@@ -1,6 +1,28 @@
 import { apiRequest } from './client';
 import { reservationSummarySchema, type ReservationSummary } from './schemas';
 
+export interface NewReservationInput {
+  propertyId: number;
+  unitId: number;
+  checkIn: string;
+  checkOut: string;
+  /** 비우면(null) 서버가 요금표로 계산한다 — 위젯과 같은 계산(작업지시-28 B). */
+  totalAmount: number | null;
+  adults: number;
+  children: number;
+  guestName: string;
+  guestPhone?: string;
+}
+
+/**
+ * 화면에서 예약을 입력한다(작업지시-28 B). 기존 `POST /api/reservations` 이고 채널은 직접예약(`DIRECT`)이다.
+ * 재고·최소 숙박 판정은 서버가 하고, 거절 문구가 그대로 화면에 뜬다.
+ */
+export async function createReservation(input: NewReservationInput): Promise<ReservationSummary> {
+  const body = await apiRequest<unknown>('/api/reservations', { method: 'POST', body: input });
+  return reservationSummarySchema.parse(body);
+}
+
 /**
  * 예약 날짜를 옮긴다.
  *
